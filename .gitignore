@@ -24,3 +24,6 @@ logfile
 # Uploads (generati runtime)
 uploads/*
 !uploads/.gitkeep
+
+# Documentazione interna progetto
+Progetto/

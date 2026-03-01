@@ -17,6 +17,11 @@ from fastapi.staticfiles import StaticFiles
 # Routers
 from app.routers.auth import router as auth_router
 from app.routers.parcella import router as parcella_router
+from app.routers.raccolta import router as raccolta_router
+from app.routers.lotto import router as lotto_router
+from app.routers.confezionamento import router as confezionamento_router
+from app.routers.contenitore import router as contenitore_router
+from app.routers.cliente import router as cliente_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -52,6 +57,11 @@ app.add_middleware(
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router.router, prefix="/api")
 app.include_router(parcella_router, prefix="/api")
+app.include_router(raccolta_router, prefix="/api")
+app.include_router(lotto_router, prefix="/api")
+app.include_router(confezionamento_router, prefix="/api")
+app.include_router(contenitore_router, prefix="/api")
+app.include_router(cliente_router, prefix="/api")
 
 
 # ------------------------------------------------------------------------------

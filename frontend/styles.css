@@ -64,8 +64,9 @@ a:hover { color: var(--accent-hover); }
   margin-bottom: 0.5rem;
 }
 
-.login-logo-icon {
-  font-size: 3rem;
+.login-logo-img {
+  width: 140px;
+  height: auto;
   margin-bottom: 0.5rem;
 }
 
@@ -180,13 +181,14 @@ a:hover { color: var(--accent-hover); }
 }
 
 /* ---- Sidebar ---- */
-.sidebar-logo-icon {
-  font-size: 2.5rem;
-  margin-bottom: 0.3rem;
+.sidebar-logo-img {
+  width: 90px;
+  height: auto;
+  margin-bottom: 0.5rem;
 }
 
 .sidebar-app-name {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--accent-light);
   letter-spacing: 0.08em;
@@ -274,6 +276,13 @@ a:hover { color: var(--accent-hover); }
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--accent-light);
+}
+
+.stat-sub {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: -2px;
 }
 
 .stat-label {
@@ -403,6 +412,231 @@ a:hover { color: var(--accent-hover); }
   font-weight: 600;
 }
 
+/* ---- Badges Lotto ---- */
+.badge-stato-disponibile {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #86efac;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-stato-in_vendita {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-stato-esaurito {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ---- Produzione Tabs ---- */
+.produzione-tabs {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.produzione-tabs .nav-link {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.produzione-tabs .nav-link:hover {
+  color: var(--text-primary);
+}
+
+.produzione-tabs .nav-link.active {
+  color: var(--accent-hover);
+  border-bottom: 2px solid var(--accent-hover);
+}
+
+/* ---- Raccolta Parcelle Selezione ---- */
+.raccolta-parcella-row {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.raccolta-parcella-row:last-child {
+  border-bottom: none;
+}
+
+/* ---- Badge Contenitore Confezionamento ---- */
+.badge-contenitore {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ---- Contenitori Card Grid ---- */
+.ct-card {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.ct-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.ct-card-inattivo {
+  opacity: 0.55;
+}
+
+.ct-card-img-wrap {
+  height: 140px;
+  background: var(--card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ct-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ct-card-placeholder {
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.ct-card-body {
+  padding: 0.75rem;
+}
+
+.ct-card-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-light);
+  margin-bottom: 0.3rem;
+}
+
+.ct-card-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+
+.ct-card-cap {
+  font-size: 0.85rem;
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+.ct-card-code {
+  font-size: 0.72rem;
+}
+
+.ct-card-actions {
+  display: flex;
+  gap: 0.3rem;
+}
+
+/* ---- Contenitore Form Foto Preview ---- */
+.ct-foto-preview-box {
+  width: 180px;
+  height: 180px;
+  border: 2px dashed var(--border-light);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--card-bg);
+}
+
+.ct-foto-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+/* ---- Badge Tipo Cliente ---- */
+.badge-tipo-privato {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.badge-tipo-azienda {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ---- Conf Lotto Selezione ---- */
+.conf-lotto-row {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.conf-lotto-row:last-child {
+  border-bottom: none;
+}
+
+/* ---- Badge Resa ---- */
+.badge-resa {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fde68a;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ---- Btn outline accent ---- */
+.btn-outline-accent {
+  border: 1px solid var(--accent);
+  color: var(--accent-light);
+  background: transparent;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.btn-outline-accent:hover {
+  background: var(--accent);
+  color: white;
+}
+
 /* =============================================
    HOME PAGE
    ============================================= */
@@ -418,6 +652,14 @@ a:hover { color: var(--accent-hover); }
   -webkit-text-fill-color: transparent;
   background-clip: text;
   letter-spacing: 0.06em;
+}
+
+.home-acronym {
+  color: var(--accent-light);
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
 }
 
 .home-subtitle {
@@ -437,8 +679,9 @@ a:hover { color: var(--accent-hover); }
 }
 
 /* Logo animato */
-.home-logo-icon {
-  font-size: 3rem;
+.home-logo-img {
+  width: 160px;
+  height: auto;
   animation: logoFadeIn 2s ease-out, logoFloat 4s ease-in-out 2s infinite;
 }
 

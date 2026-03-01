@@ -16,9 +16,9 @@
     <!-- SIDEBAR -->
     <aside id="app-sidebar" class="bg-black text-light p-3 d-flex flex-column" style="width:260px;">
       <div class="text-center mb-4">
-        <div class="sidebar-logo-icon">🌿</div>
+        <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.0.0</div>
+        <div class="app-version">v1.1.0</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -30,8 +30,16 @@
           <i class="fa-solid fa-seedling me-2"></i> Gestione Parcelle
         </button>
 
-        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
-          <i class="fa-solid fa-oil-can me-2"></i> Produzione (prossimamente)
+        <button id="menu-produzione" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-oil-can me-2"></i> Produzione
+        </button>
+
+        <button id="menu-contenitori" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-bottle-water me-2"></i> Contenitori
+        </button>
+
+        <button id="menu-clienti" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-address-book me-2"></i> Clienti
         </button>
 
         <button class="btn btn-dark text-start sidebar-link disabled" type="button">
@@ -354,6 +362,965 @@
     </div>
   </template>
 
+
+  <!-- TEMPLATE: PRODUZIONE (tabs Raccolte / Lotti / Confezionamento) -->
+  <template id="template-produzione">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Produzione Olio</h2>
+        <div class="module-subtitle">Raccolte, lotti e confezionamento</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs produzione-tabs mb-4">
+      <li class="nav-item">
+        <button class="nav-link active" id="tab-raccolte" type="button">
+          <i class="fa-solid fa-hands-holding me-1"></i> Raccolte
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-lotti" type="button">
+          <i class="fa-solid fa-bottle-droplet me-1"></i> Lotti Olio
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-confezionamento" type="button">
+          <i class="fa-solid fa-wine-bottle me-1"></i> Confezionamento
+        </button>
+      </li>
+    </ul>
+
+    <div id="produzione-content"></div>
+  </template>
+
+  <!-- TEMPLATE: RACCOLTE LISTA -->
+  <template id="template-raccolte-lista">
+    <div class="d-flex justify-content-end mb-3">
+      <button class="btn btn-accent" id="btn-nuova-raccolta">
+        <i class="fa-solid fa-plus me-1"></i> Nuova Raccolta
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-raccolte">0</div>
+          <div class="stat-label">Raccolte</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-kg-olive">0</div>
+          <div class="stat-label">Kg Olive</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-media-kg">0</div>
+          <div class="stat-label">Media Kg</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-costo-raccolte">0</div>
+          <div class="stat-label">Costo Totale</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label small">Anno Campagna</label>
+          <select class="form-select form-select-sm" id="filtro-raccolte-anno">
+            <option value="">Tutti</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label small">Parcella</label>
+          <select class="form-select form-select-sm" id="filtro-raccolte-parcella">
+            <option value="">Tutte</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-raccolte">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Data</th>
+              <th>Parcelle</th>
+              <th>Kg Olive</th>
+              <th>Metodo</th>
+              <th>Maturazione</th>
+              <th>Costo</th>
+              <th>Lotto</th>
+              <th>Resa</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="raccolte-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: RACCOLTA FORM -->
+  <template id="template-raccolta-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-raccolte">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna alle raccolte
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-raccolta-titolo">Nuova Raccolta</h3>
+
+    <form id="raccolta-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Raccolta</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="r-codice" required placeholder="R2026-001" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Data Raccolta *</label>
+                <input type="date" class="form-control form-control-sm" id="r-data" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Anno Campagna *</label>
+                <input type="number" class="form-control form-control-sm" id="r-anno" required value="2026" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Kg Olive Totali *</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="r-kg-totali" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Metodo Raccolta *</label>
+                <select class="form-select form-select-sm" id="r-metodo" required>
+                  <option value="">Seleziona...</option>
+                  <option value="manuale">Manuale</option>
+                  <option value="meccanico">Meccanico</option>
+                  <option value="misto">Misto</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Maturazione *</label>
+                <select class="form-select form-select-sm" id="r-maturazione" required>
+                  <option value="">Seleziona...</option>
+                  <option value="verde">Verde</option>
+                  <option value="invaiato">Invaiato</option>
+                  <option value="maturo">Maturo</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="r-note" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Parcelle Raccolte</h5>
+            <div id="raccolta-parcelle-container"></div>
+          </div>
+
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Costi Raccolta</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">N. Operai</label>
+                <input type="number" class="form-control form-control-sm" id="r-num-operai" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Ore Lavoro</label>
+                <input type="number" step="0.5" class="form-control form-control-sm" id="r-ore-lavoro" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Costo Manodopera (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="r-costo-manodopera" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Costo Noleggio (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="r-costo-noleggio" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Costo Totale Raccolta (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="r-costo-totale" />
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-raccolta">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: LOTTI LISTA -->
+  <template id="template-lotti-lista">
+    <div class="d-flex justify-content-end mb-3">
+      <button class="btn btn-accent" id="btn-nuovo-lotto">
+        <i class="fa-solid fa-plus me-1"></i> Nuovo Lotto
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-lotti">0</div>
+          <div class="stat-label">Lotti</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-kg-olive-lotti">0</div>
+          <div class="stat-label">Kg Olive</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-litri">0</div>
+          <div class="stat-label">Litri Olio</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-kg-olio">0</div>
+          <div class="stat-label">Kg Olio</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-resa">0%</div>
+          <div class="stat-label">Resa Media</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-costo-lotti">0</div>
+          <div class="stat-label">Costo Molitura</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label small">Anno</label>
+          <select class="form-select form-select-sm" id="filtro-lotti-anno">
+            <option value="">Tutti</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Tipo Olio</label>
+          <select class="form-select form-select-sm" id="filtro-lotti-tipo">
+            <option value="">Tutti</option>
+            <option value="evo">EVO</option>
+            <option value="vergine">Vergine</option>
+            <option value="lampante">Lampante</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Stato</label>
+          <select class="form-select form-select-sm" id="filtro-lotti-stato">
+            <option value="">Tutti</option>
+            <option value="disponibile">Disponibile</option>
+            <option value="in_vendita">In vendita</option>
+            <option value="esaurito">Esaurito</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-lotti">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice Lotto</th>
+              <th>Data Molitura</th>
+              <th>Raccolta</th>
+              <th>Kg Olive</th>
+              <th>Litri Olio</th>
+              <th>Kg Olio</th>
+              <th>Resa %</th>
+              <th>Tipo</th>
+              <th>Stato</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="lotti-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: LOTTO FORM -->
+  <template id="template-lotto-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-lotti">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna ai lotti
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-lotto-titolo">Nuovo Lotto Olio</h3>
+
+    <form id="lotto-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Molitura</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice Lotto *</label>
+                <input type="text" class="form-control form-control-sm" id="l-codice" required placeholder="L2026-001" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Raccolta *</label>
+                <select class="form-select form-select-sm" id="l-raccolta" required>
+                  <option value="">Seleziona raccolta...</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Anno Campagna *</label>
+                <input type="number" class="form-control form-control-sm" id="l-anno" required value="2026" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Data Molitura *</label>
+                <input type="date" class="form-control form-control-sm" id="l-data" required />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Frantoio *</label>
+                <input type="text" class="form-control form-control-sm" id="l-frantoio" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Kg Olive *</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-kg" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Litri Olio *</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-litri" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Kg Olio</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-kg-olio" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tipo Olio *</label>
+                <select class="form-select form-select-sm" id="l-tipo" required>
+                  <option value="">Seleziona...</option>
+                  <option value="evo">EVO</option>
+                  <option value="vergine">Vergine</option>
+                  <option value="lampante">Lampante</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Certificazione</label>
+                <select class="form-select form-select-sm" id="l-certificazione">
+                  <option value="">Nessuna</option>
+                  <option value="DOP">DOP</option>
+                  <option value="IGP">IGP</option>
+                  <option value="Bio">Bio</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Analisi Chimiche</h5>
+            <div class="row g-3">
+              <div class="col-4">
+                <label class="form-label">Acidita' (%)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-acidita" />
+              </div>
+              <div class="col-4">
+                <label class="form-label">Perossidi</label>
+                <input type="number" step="0.1" class="form-control form-control-sm" id="l-perossidi" />
+              </div>
+              <div class="col-4">
+                <label class="form-label">Polifenoli</label>
+                <input type="number" class="form-control form-control-sm" id="l-polifenoli" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Costi Molitura</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Costo Frantoio (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-costo-frantoio" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Costo Trasporto (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-costo-trasporto" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Costo Totale (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="l-costo-totale" />
+              </div>
+            </div>
+          </div>
+
+          <div class="card p-3 mb-3">
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Stato</label>
+                <select class="form-select form-select-sm" id="l-stato">
+                  <option value="disponibile">Disponibile</option>
+                  <option value="in_vendita">In vendita</option>
+                  <option value="esaurito">Esaurito</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="l-note" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-lotto">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: CONFEZIONAMENTI LISTA -->
+  <template id="template-confezionamenti-lista">
+    <div class="d-flex justify-content-end mb-3">
+      <button class="btn btn-accent" id="btn-nuovo-conf">
+        <i class="fa-solid fa-plus me-1"></i> Nuovo Confezionamento
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-conf-totale">0</div>
+          <div class="stat-label">Confezionamenti</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-conf-unita">0</div>
+          <div class="stat-label">Unita' Prodotte</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-conf-litri">0</div>
+          <div class="stat-label">Litri Confezionati</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-conf-costo">0</div>
+          <div class="stat-label">Costo Totale</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label small">Anno</label>
+          <select class="form-select form-select-sm" id="filtro-conf-anno">
+            <option value="">Tutti</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small">Contenitore</label>
+          <select class="form-select form-select-sm" id="filtro-conf-formato">
+            <option value="">Tutti</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-conf">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Data</th>
+              <th>Formato</th>
+              <th>Unita'</th>
+              <th>Litri Tot.</th>
+              <th>Lotti</th>
+              <th>Costo</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="conf-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: CONFEZIONAMENTO FORM -->
+  <template id="template-confezionamento-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-conf">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna ai confezionamenti
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-conf-titolo">Nuovo Confezionamento</h3>
+
+    <form id="conf-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Confezionamento</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="cf-codice" required placeholder="CF2026-001" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Data *</label>
+                <input type="date" class="form-control form-control-sm" id="cf-data" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Anno Campagna *</label>
+                <input type="number" class="form-control form-control-sm" id="cf-anno" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Contenitore *</label>
+                <select class="form-select form-select-sm" id="cf-formato" required>
+                  <option value="">Seleziona...</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">N. Unita' *</label>
+                <input type="number" class="form-control form-control-sm" id="cf-num-unita" required min="1" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Litri Totali</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="cf-litri-totali" readonly />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Costo Totale (&euro;)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="cf-costo" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="cf-note" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Lotti Olio Utilizzati</h5>
+            <div id="conf-lotti-container"></div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-conf">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+
+  <!-- TEMPLATE: CONTENITORI LISTA -->
+  <template id="template-contenitori">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Gestione Contenitori</h2>
+        <div class="module-subtitle">Tipologie di contenitori per il confezionamento</div>
+      </div>
+      <button class="btn btn-accent" id="btn-nuovo-contenitore">
+        <i class="fa-solid fa-plus me-1"></i> Nuovo Contenitore
+      </button>
+    </div>
+
+    <div class="row g-3" id="contenitori-grid"></div>
+  </template>
+
+  <!-- TEMPLATE: CONTENITORE FORM -->
+  <template id="template-contenitore-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-contenitori">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna ai contenitori
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-contenitore-titolo">Nuovo Contenitore</h3>
+
+    <form id="contenitore-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Contenitore</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="ct-codice" required placeholder="bottiglia_100" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Descrizione *</label>
+                <input type="text" class="form-control form-control-sm" id="ct-descrizione" required placeholder="Bottiglia 1L" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Capacita' (litri) *</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="ct-capacita" required min="0.01" />
+              </div>
+              <div class="col-6 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="ct-attivo" checked />
+                  <label class="form-check-label" for="ct-attivo">Attivo</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Foto Contenitore</h5>
+            <div class="text-center mb-3">
+              <div id="ct-foto-preview" class="ct-foto-preview-box">
+                <i class="fa-solid fa-image fa-3x text-secondary"></i>
+                <div class="small text-secondary mt-2">Nessuna foto</div>
+              </div>
+            </div>
+            <input type="file" class="form-control form-control-sm" id="ct-foto-input" accept="image/*" />
+            <div class="form-text">JPG, PNG, WebP o GIF. Max 5MB.</div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-contenitore">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: CLIENTI LISTA -->
+  <template id="template-clienti">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Gestione Clienti</h2>
+        <div class="module-subtitle">Anagrafica clienti per fatturazione e vendite</div>
+      </div>
+      <button class="btn btn-accent" id="btn-nuovo-cliente">
+        <i class="fa-solid fa-plus me-1"></i> Nuovo Cliente
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-clienti-totale">0</div>
+          <div class="stat-label">Totale Clienti</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-clienti-attivi">0</div>
+          <div class="stat-label">Attivi</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-clienti-privati">0</div>
+          <div class="stat-label">Privati</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-clienti-aziende">0</div>
+          <div class="stat-label">Aziende</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <input type="text" class="form-control form-control-sm" id="filtro-clienti-q" placeholder="Cerca nome, codice, email, citta'..." />
+        </div>
+        <div class="col-md-3">
+          <select class="form-select form-select-sm" id="filtro-clienti-tipo">
+            <option value="">Tutti i tipi</option>
+            <option value="privato">Privato</option>
+            <option value="azienda">Azienda</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="filtro-clienti-tutti" />
+            <label class="form-check-label small" for="filtro-clienti-tutti">Mostra inattivi</label>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-clienti">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Tipo</th>
+              <th>Denominazione</th>
+              <th>Citta'</th>
+              <th>Telefono</th>
+              <th>Email</th>
+              <th>Sconto</th>
+              <th>Stato</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="clienti-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: CLIENTE FORM -->
+  <template id="template-cliente-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-clienti">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna ai clienti
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-cliente-titolo">Nuovo Cliente</h3>
+
+    <form id="cliente-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <!-- Dati principali -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Dati Principali</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="cli-codice" required placeholder="CL-001" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tipo Cliente *</label>
+                <select class="form-select form-select-sm" id="cli-tipo" required>
+                  <option value="">Seleziona...</option>
+                  <option value="privato">Privato</option>
+                  <option value="azienda">Azienda</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sezione privato -->
+          <div class="card p-3 mb-3" id="cli-sezione-privato" style="display:none;">
+            <h5 class="card-section-title mb-3">Anagrafica Privato</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Nome</label>
+                <input type="text" class="form-control form-control-sm" id="cli-nome" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Cognome</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cognome" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Codice Fiscale</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cf" maxlength="16" style="text-transform:uppercase" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Sezione azienda -->
+          <div class="card p-3 mb-3" id="cli-sezione-azienda" style="display:none;">
+            <h5 class="card-section-title mb-3">Anagrafica Azienda</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Ragione Sociale</label>
+                <input type="text" class="form-control form-control-sm" id="cli-ragione" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Partita IVA</label>
+                <input type="text" class="form-control form-control-sm" id="cli-piva" maxlength="11" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Codice SDI</label>
+                <input type="text" class="form-control form-control-sm" id="cli-sdi" maxlength="7" value="0000000" style="text-transform:uppercase" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">PEC</label>
+                <input type="email" class="form-control form-control-sm" id="cli-pec" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Referente Nome</label>
+                <input type="text" class="form-control form-control-sm" id="cli-ref-nome" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Referente Telefono</label>
+                <input type="text" class="form-control form-control-sm" id="cli-ref-tel" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Contatti -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Contatti</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control form-control-sm" id="cli-email" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Telefono</label>
+                <input type="text" class="form-control form-control-sm" id="cli-telefono" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <!-- Indirizzo fatturazione -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Indirizzo Fatturazione</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Indirizzo</label>
+                <input type="text" class="form-control form-control-sm" id="cli-indirizzo" />
+              </div>
+              <div class="col-4">
+                <label class="form-label">CAP</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cap" maxlength="5" />
+              </div>
+              <div class="col-5">
+                <label class="form-label">Citta'</label>
+                <input type="text" class="form-control form-control-sm" id="cli-citta" />
+              </div>
+              <div class="col-3">
+                <label class="form-label">Prov.</label>
+                <input type="text" class="form-control form-control-sm" id="cli-provincia" maxlength="2" style="text-transform:uppercase" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Indirizzo consegna -->
+          <div class="card p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="card-section-title mb-0">Indirizzo Consegna</h5>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-copia-indirizzo">
+                <i class="fa-solid fa-copy me-1"></i> Copia da fatturazione
+              </button>
+            </div>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Indirizzo</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cons-indirizzo" />
+              </div>
+              <div class="col-4">
+                <label class="form-label">CAP</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cons-cap" maxlength="5" />
+              </div>
+              <div class="col-5">
+                <label class="form-label">Citta'</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cons-citta" />
+              </div>
+              <div class="col-3">
+                <label class="form-label">Prov.</label>
+                <input type="text" class="form-control form-control-sm" id="cli-cons-provincia" maxlength="2" style="text-transform:uppercase" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Commerciale -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Dati Commerciali</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Sconto Default (%)</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="cli-sconto" min="0" max="100" />
+              </div>
+              <div class="col-6 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="cli-attivo" checked />
+                  <label class="form-check-label" for="cli-attivo">Attivo</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="cli-note" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-cliente">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="app.js"></script>
