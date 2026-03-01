@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Ambiente
+.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Log
+logfile
+*.log
+
+# Uploads (generati runtime)
+uploads/*
+!uploads/.gitkeep

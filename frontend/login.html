@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <title>GIAMS - Login</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">🌿</div>
+      <div class="login-logo-title">GIAMS</div>
+    </div>
+    <div class="login-subtitle">
+      Green Integrated Agricultural Management System
+    </div>
+
+    <form id="login-form">
+      <div class="login-form-group">
+        <label for="username">Utente</label>
+        <input type="text" id="username" required />
+      </div>
+
+      <div class="login-form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required />
+      </div>
+
+      <button type="submit" class="login-btn" id="login-btn">Accedi</button>
+
+      <p id="login-error" class="login-error" style="display:none;">
+        Credenziali non valide.
+      </p>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = "/api";
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("login-form");
+      const errorBox = document.getElementById("login-error");
+      const loginBtn = document.getElementById("login-btn");
+      const loginCard = document.querySelector(".login-card");
+
+      function setLoading(loading) {
+        if (loading) {
+          loginBtn.classList.add("loading");
+          loginBtn.innerHTML = '<span class="spinner"></span>Accesso in corso...';
+        } else {
+          loginBtn.classList.remove("loading");
+          loginBtn.textContent = "Accedi";
+        }
+      }
+
+      function shakeCard() {
+        loginCard.classList.remove("shake");
+        void loginCard.offsetWidth;
+        loginCard.classList.add("shake");
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorBox.style.display = "none";
+        setLoading(true);
+
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+
+        try {
+          const res = await fetch(`${API_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+          });
+
+          if (!res.ok) {
+            setLoading(false);
+            errorBox.textContent = "Credenziali non valide.";
+            errorBox.style.display = "block";
+            shakeCard();
+            return;
+          }
+
+          const data = await res.json();
+
+          localStorage.setItem("giams_token", data.access_token);
+          localStorage.setItem("giams_token_type", data.token_type || "bearer");
+          if (data.username) localStorage.setItem("giams_user", data.username);
+
+          window.location.href = "index.html";
+        } catch (err) {
+          setLoading(false);
+          errorBox.textContent = "Errore di connessione al server.";
+          errorBox.style.display = "block";
+          shakeCard();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

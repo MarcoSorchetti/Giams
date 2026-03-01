@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GIAMS — Gestione Agricola</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <div class="app-shell d-flex">
+
+    <!-- SIDEBAR -->
+    <aside id="app-sidebar" class="bg-black text-light p-3 d-flex flex-column" style="width:260px;">
+      <div class="text-center mb-4">
+        <div class="sidebar-logo-icon">🌿</div>
+        <div class="sidebar-app-name">GIAMS</div>
+        <div class="app-version">v1.0.0</div>
+      </div>
+
+      <nav class="nav flex-column gap-2">
+        <button id="menu-home" class="btn btn-dark text-start sidebar-link active" type="button">
+          <i class="fa-solid fa-house me-2"></i> Home
+        </button>
+
+        <button id="menu-parcelle" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-seedling me-2"></i> Gestione Parcelle
+        </button>
+
+        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
+          <i class="fa-solid fa-oil-can me-2"></i> Produzione (prossimamente)
+        </button>
+
+        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
+          <i class="fa-solid fa-warehouse me-2"></i> Magazzino (prossimamente)
+        </button>
+
+        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
+          <i class="fa-solid fa-cart-shopping me-2"></i> Vendite (prossimamente)
+        </button>
+
+        <button id="menu-utenti" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-user-gear me-2"></i> Gestione Utenti
+        </button>
+      </nav>
+
+      <div class="mt-auto pt-3">
+        <hr class="border-secondary mb-3" />
+        <div class="d-flex align-items-center small text-secondary mb-3" id="user-box">
+          <div class="me-2"><i class="fa-solid fa-circle-user fa-lg"></i></div>
+          <div class="d-flex flex-column">
+            <span class="text-uppercase" style="font-size: 0.7rem;">Utente</span>
+            <span id="current-username" class="fw-semibold">–</span>
+          </div>
+        </div>
+        <button id="menu-logout" class="btn btn-outline-danger w-100" type="button">
+          <i class="fa-solid fa-right-from-bracket me-2"></i> Esci
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content" class="flex-grow-1 p-4 overflow-auto"></main>
+
+  </div>
+
+
+  <!-- ========================================= -->
+  <!-- TEMPLATES -->
+  <!-- ========================================= -->
+
+  <!-- TEMPLATE: PARCELLE LISTA -->
+  <template id="template-parcelle">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Gestione Parcelle</h2>
+        <div class="module-subtitle">Terreni e oliveti · Ricerca avanzata</div>
+      </div>
+      <button class="btn btn-accent" id="btn-nuova-parcella">
+        <i class="fa-solid fa-plus me-1"></i> Nuova Parcella
+      </button>
+    </div>
+
+    <!-- Statistiche rapide -->
+    <div class="row g-3 mb-4" id="parcelle-stats-row">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-parcelle">0</div>
+          <div class="stat-label">Parcelle</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-ettari">0</div>
+          <div class="stat-label">Ettari</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-piante">0</div>
+          <div class="stat-label">Piante</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-produttive">0</div>
+          <div class="stat-label">Produttive</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtri -->
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+          <input type="text" class="form-control form-control-sm" id="filtro-q" placeholder="Cerca nome o codice..." />
+        </div>
+        <div class="col-md-3">
+          <select class="form-select form-select-sm" id="filtro-varieta">
+            <option value="">Tutte le varieta'</option>
+            <option value="Canino">Canino</option>
+            <option value="Leccino">Leccino</option>
+            <option value="Frantoio">Frantoio</option>
+            <option value="Moraiolo">Moraiolo</option>
+            <option value="Pendolino">Pendolino</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select form-select-sm" id="filtro-stato">
+            <option value="">Tutti gli stati</option>
+            <option value="produttivo">Produttivo</option>
+            <option value="giovane">Giovane</option>
+            <option value="riposo">In riposo</option>
+            <option value="dismesso">Dismesso</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-parcelle">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella -->
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Nome</th>
+              <th>Ettari</th>
+              <th>Varieta'</th>
+              <th>Piante</th>
+              <th>Anno</th>
+              <th>Stato</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="parcelle-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: PARCELLA FORM -->
+  <template id="template-parcella-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-lista">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna alla lista
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-parcella-titolo">Nuova Parcella</h3>
+
+    <form id="parcella-form">
+      <div class="row g-4">
+        <!-- Colonna sinistra: dati principali -->
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Parcella</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="p-codice" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Nome *</label>
+                <input type="text" class="form-control form-control-sm" id="p-nome" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Superficie (ettari) *</label>
+                <input type="number" step="0.01" class="form-control form-control-sm" id="p-superficie" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">N. Piante *</label>
+                <input type="number" class="form-control form-control-sm" id="p-num-piante" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Varieta' Principale *</label>
+                <select class="form-select form-select-sm" id="p-varieta-principale" required>
+                  <option value="">Seleziona...</option>
+                  <option value="Canino">Canino</option>
+                  <option value="Leccino">Leccino</option>
+                  <option value="Frantoio">Frantoio</option>
+                  <option value="Moraiolo">Moraiolo</option>
+                  <option value="Pendolino">Pendolino</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Varieta' Secondaria</label>
+                <select class="form-select form-select-sm" id="p-varieta-secondaria">
+                  <option value="">Nessuna</option>
+                  <option value="Canino">Canino</option>
+                  <option value="Leccino">Leccino</option>
+                  <option value="Frantoio">Frantoio</option>
+                  <option value="Moraiolo">Moraiolo</option>
+                  <option value="Pendolino">Pendolino</option>
+                  <option value="Altro">Altro</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Anno Impianto</label>
+                <input type="number" class="form-control form-control-sm" id="p-anno-impianto" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Stato</label>
+                <select class="form-select form-select-sm" id="p-stato">
+                  <option value="produttivo">Produttivo</option>
+                  <option value="giovane">Giovane</option>
+                  <option value="riposo">In riposo</option>
+                  <option value="dismesso">Dismesso</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colonna destra: terreno -->
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Caratteristiche Terreno</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Sistema Irrigazione</label>
+                <select class="form-select form-select-sm" id="p-irrigazione">
+                  <option value="">Nessuno</option>
+                  <option value="goccia">A goccia</option>
+                  <option value="aspersione">Aspersione</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tipo Terreno</label>
+                <select class="form-select form-select-sm" id="p-tipo-terreno">
+                  <option value="">Non specificato</option>
+                  <option value="argilloso">Argilloso</option>
+                  <option value="sabbioso">Sabbioso</option>
+                  <option value="misto">Misto</option>
+                  <option value="calcareo">Calcareo</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Esposizione</label>
+                <select class="form-select form-select-sm" id="p-esposizione">
+                  <option value="">Non specificata</option>
+                  <option value="nord">Nord</option>
+                  <option value="sud">Sud</option>
+                  <option value="est">Est</option>
+                  <option value="ovest">Ovest</option>
+                  <option value="pianura">Pianura</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Altitudine (m)</label>
+                <input type="number" class="form-control form-control-sm" id="p-altitudine" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="p-note" rows="3"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-form">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: UTENTI -->
+  <template id="template-utenti">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Gestione Utenti</h2>
+        <div class="module-subtitle">Amministrazione accessi piattaforma</div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-8">
+        <div class="card p-0">
+          <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="utenti-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-4">
+        <div class="card p-3">
+          <h5 class="card-section-title mb-3" id="form-utente-titolo">Nuovo Utente</h5>
+          <form id="utente-form">
+            <div class="mb-3">
+              <label class="form-label">Username *</label>
+              <input type="text" class="form-control form-control-sm" id="u-username" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password *</label>
+              <input type="password" class="form-control form-control-sm" id="u-password" required minlength="8" />
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="u-attivo" checked />
+              <label class="form-check-label" for="u-attivo">Attivo</label>
+            </div>
+            <button type="submit" class="btn btn-accent w-100">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary w-100 mt-2" id="btn-reset-utente">
+              Annulla
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </template>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
