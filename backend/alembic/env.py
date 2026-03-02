@@ -18,6 +18,7 @@ from app.models.lotto_sql import LottoOlio    # noqa: F401
 from app.models.confezionamento_sql import Confezionamento, ConfezionamentoLotto  # noqa: F401
 from app.models.contenitore_sql import Contenitore  # noqa: F401
 from app.models.cliente_sql import Cliente  # noqa: F401
+from app.models.fornitore_sql import Fornitore  # noqa: F401
 
 config = context.config
 

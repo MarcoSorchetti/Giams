@@ -108,6 +108,13 @@ async function renderHome() {
           </div>
         </div>
         <div class="col-6 col-md-4">
+          <div class="quick-card" id="quick-fornitori">
+            <div class="quick-card-icon"><i class="fa-solid fa-truck-field"></i></div>
+            <div class="quick-card-title">Fornitori</div>
+            <div class="quick-card-desc">Anagrafica e pagamenti</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4">
           <div class="quick-card" id="quick-utenti">
             <div class="quick-card-icon"><i class="fa-solid fa-user-gear"></i></div>
             <div class="quick-card-title">Gestione Utenti</div>
@@ -133,6 +140,10 @@ async function renderHome() {
   document.getElementById("quick-clienti")?.addEventListener("click", () => {
     setActiveMenu("menu-clienti");
     renderClienti();
+  });
+  document.getElementById("quick-fornitori")?.addEventListener("click", () => {
+    setActiveMenu("menu-fornitori");
+    renderFornitori();
   });
   document.getElementById("quick-utenti")?.addEventListener("click", () => {
     setActiveMenu("menu-utenti");
@@ -698,9 +709,31 @@ async function renderRaccoltaForm(id) {
   if (id) {
     document.getElementById("form-raccolta-titolo").textContent = "Modifica Raccolta";
     await popolaFormRaccolta(id);
+  } else {
+    // Auto-genera codice per la nuova raccolta
+    const anno = document.getElementById("r-anno").value;
+    if (anno) await aggiornaCodicRaccolta(anno);
   }
 
+  // Aggiorna codice quando cambia l'anno
+  document.getElementById("r-anno")?.addEventListener("change", async () => {
+    if (!raccoltaInModifica) {
+      const anno = document.getElementById("r-anno").value;
+      if (anno) await aggiornaCodicRaccolta(anno);
+    }
+  });
+
   initRaccoltaFormUI();
+}
+
+async function aggiornaCodicRaccolta(anno) {
+  try {
+    const res = await fetch(`${API_URL}/raccolte/next-codice?anno=${anno}`);
+    const data = await res.json();
+    document.getElementById("r-codice").value = data.codice;
+  } catch (err) {
+    console.error("Errore generazione codice raccolta:", err);
+  }
 }
 
 async function renderParcelleSelezione() {
@@ -979,7 +1012,18 @@ async function renderLottoForm(id) {
   if (id) {
     document.getElementById("form-lotto-titolo").textContent = "Modifica Lotto Olio";
     await popolaFormLotto(id);
+  } else {
+    const anno = document.getElementById("l-anno").value;
+    if (anno) await aggiornaCodiceLotto(anno);
   }
+
+  // Aggiorna codice quando cambia l'anno
+  document.getElementById("l-anno")?.addEventListener("change", async () => {
+    if (!lottoInModifica) {
+      const anno = document.getElementById("l-anno").value;
+      if (anno) await aggiornaCodiceLotto(anno);
+    }
+  });
 
   initLottoFormUI();
 }
@@ -1003,11 +1047,31 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
     const r = await res.json();
     document.getElementById("l-kg").value = r.kg_olive_totali || "";
     document.getElementById("l-anno").value = r.anno_campagna || "2026";
+    // Auto-genera codice con anno della raccolta
+    await aggiornaCodiceLotto(r.anno_campagna || 2026);
   } catch (err) {
     console.error("Errore precompilazione:", err);
   }
 
+  // Aggiorna codice quando cambia l'anno
+  document.getElementById("l-anno")?.addEventListener("change", async () => {
+    if (!lottoInModifica) {
+      const anno = document.getElementById("l-anno").value;
+      if (anno) await aggiornaCodiceLotto(anno);
+    }
+  });
+
   initLottoFormUI();
+}
+
+async function aggiornaCodiceLotto(anno) {
+  try {
+    const res = await fetch(`${API_URL}/lotti/next-codice?anno=${anno}`);
+    const data = await res.json();
+    document.getElementById("l-codice").value = data.codice;
+  } catch (err) {
+    console.error("Errore generazione codice lotto:", err);
+  }
 }
 
 async function popolaSelectRaccolte() {
@@ -1972,6 +2036,243 @@ function eliminaCliente(id, nome) {
 }
 
 // =============================================
+// FORNITORI
+// =============================================
+
+let fornitoriLista = [];
+let fornitoreInModifica = null;
+
+const CATEGORIA_LABELS = {
+  agricoltura: "Agricoltura",
+  materiali: "Materiali",
+  servizi: "Servizi",
+  trasporti: "Trasporti",
+  manutenzione: "Manutenzione",
+  altro: "Altro",
+};
+
+async function renderFornitori() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-fornitori");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  caricaFornitoriStats();
+  caricaFornitori();
+
+  document.getElementById("btn-nuovo-fornitore").addEventListener("click", () => {
+    fornitoreInModifica = null;
+    renderFornitoreForm();
+  });
+
+  document.getElementById("btn-filtra-fornitori").addEventListener("click", caricaFornitori);
+
+  document.getElementById("filtro-fornitori-q").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); caricaFornitori(); }
+  });
+}
+
+async function caricaFornitoriStats() {
+  try {
+    const res = await fetch(`${API_URL}/fornitori/stats`);
+    const data = await res.json();
+    document.getElementById("stat-fornitori-totale").textContent = data.totale;
+    document.getElementById("stat-fornitori-attivi").textContent = data.attivi;
+    document.getElementById("stat-fornitori-privati").textContent = data.privati;
+    document.getElementById("stat-fornitori-aziende").textContent = data.aziende;
+  } catch (err) {
+    console.error("Errore caricamento stats fornitori:", err);
+  }
+}
+
+async function caricaFornitori() {
+  const q = document.getElementById("filtro-fornitori-q")?.value || "";
+  const tipo = document.getElementById("filtro-fornitori-tipo")?.value || "";
+  const categoria = document.getElementById("filtro-fornitori-categoria")?.value || "";
+  const tutti = document.getElementById("filtro-fornitori-tutti")?.checked || false;
+
+  let url = `${API_URL}/fornitori/?tutti=${tutti}`;
+  if (q) url += `&q=${encodeURIComponent(q)}`;
+  if (tipo) url += `&tipo=${tipo}`;
+  if (categoria) url += `&categoria=${categoria}`;
+
+  try {
+    const res = await fetch(url);
+    fornitoriLista = await res.json();
+    renderTabellaFornitori();
+  } catch (err) {
+    console.error("Errore caricamento fornitori:", err);
+  }
+}
+
+function renderTabellaFornitori() {
+  const tbody = document.getElementById("fornitori-tbody");
+  if (!tbody) return;
+
+  if (fornitoriLista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nessun fornitore trovato</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = fornitoriLista.map(f => {
+    const tipoBadge = f.tipo_fornitore === "azienda"
+      ? `<span class="badge badge-tipo-azienda">Azienda</span>`
+      : `<span class="badge badge-tipo-privato">Privato</span>`;
+    const catLabel = f.categoria_merceologica ? (CATEGORIA_LABELS[f.categoria_merceologica] || f.categoria_merceologica) : "-";
+    const statoBadge = f.attivo
+      ? `<span class="badge bg-success">Attivo</span>`
+      : `<span class="badge bg-secondary">Inattivo</span>`;
+
+    return `<tr>
+      <td>${f.codice}</td>
+      <td>${tipoBadge}</td>
+      <td>${f.denominazione || "-"}</td>
+      <td>${catLabel}</td>
+      <td>${f.citta || "-"}</td>
+      <td>${f.telefono || "-"}</td>
+      <td>${statoBadge}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-light me-1" onclick="editFornitore(${f.id})"><i class="fa-solid fa-pen-to-square"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="eliminaFornitore(${f.id}, '${(f.denominazione || f.codice).replace(/'/g, "\\'")}')"><i class="fa-solid fa-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+async function editFornitore(id) {
+  try {
+    const res = await fetch(`${API_URL}/fornitori/${id}`);
+    fornitoreInModifica = await res.json();
+    renderFornitoreForm();
+  } catch (err) {
+    console.error("Errore caricamento fornitore:", err);
+  }
+}
+
+function renderFornitoreForm() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-fornitore-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  const tipoSelect = document.getElementById("forn-tipo");
+  tipoSelect.addEventListener("change", toggleSezioniForn);
+
+  document.getElementById("btn-torna-fornitori").addEventListener("click", renderFornitori);
+  document.getElementById("btn-annulla-fornitore").addEventListener("click", renderFornitori);
+  document.getElementById("fornitore-form").addEventListener("submit", salvaFornitore);
+
+  if (fornitoreInModifica) {
+    document.getElementById("form-fornitore-titolo").textContent = "Modifica Fornitore";
+    popolaFormFornitore(fornitoreInModifica);
+  }
+}
+
+function toggleSezioniForn() {
+  const tipo = document.getElementById("forn-tipo").value;
+  document.getElementById("forn-sezione-privato").style.display = tipo === "privato" ? "block" : "none";
+  document.getElementById("forn-sezione-azienda").style.display = tipo === "azienda" ? "block" : "none";
+}
+
+function popolaFormFornitore(f) {
+  document.getElementById("forn-codice").value = f.codice || "";
+  document.getElementById("forn-tipo").value = f.tipo_fornitore || "";
+  toggleSezioniForn();
+
+  document.getElementById("forn-nome").value = f.nome || "";
+  document.getElementById("forn-cognome").value = f.cognome || "";
+  document.getElementById("forn-cf").value = f.codice_fiscale || "";
+
+  document.getElementById("forn-ragione").value = f.ragione_sociale || "";
+  document.getElementById("forn-piva").value = f.partita_iva || "";
+  document.getElementById("forn-sdi").value = f.codice_sdi || "";
+  document.getElementById("forn-pec").value = f.pec || "";
+  document.getElementById("forn-ref-nome").value = f.referente_nome || "";
+  document.getElementById("forn-ref-tel").value = f.referente_telefono || "";
+
+  document.getElementById("forn-email").value = f.email || "";
+  document.getElementById("forn-telefono").value = f.telefono || "";
+
+  document.getElementById("forn-indirizzo").value = f.indirizzo || "";
+  document.getElementById("forn-cap").value = f.cap || "";
+  document.getElementById("forn-citta").value = f.citta || "";
+  document.getElementById("forn-provincia").value = f.provincia || "";
+
+  document.getElementById("forn-iban").value = f.iban || "";
+  document.getElementById("forn-banca").value = f.banca || "";
+
+  document.getElementById("forn-categoria").value = f.categoria_merceologica || "";
+  document.getElementById("forn-pagamento").value = f.condizioni_pagamento || "";
+  document.getElementById("forn-attivo").checked = f.attivo;
+  document.getElementById("forn-note").value = f.note || "";
+}
+
+async function salvaFornitore(e) {
+  e.preventDefault();
+
+  const body = {
+    codice: document.getElementById("forn-codice").value.trim(),
+    tipo_fornitore: document.getElementById("forn-tipo").value,
+    nome: document.getElementById("forn-nome").value.trim() || null,
+    cognome: document.getElementById("forn-cognome").value.trim() || null,
+    codice_fiscale: document.getElementById("forn-cf").value.trim() || null,
+    ragione_sociale: document.getElementById("forn-ragione").value.trim() || null,
+    partita_iva: document.getElementById("forn-piva").value.trim() || null,
+    codice_sdi: document.getElementById("forn-sdi").value.trim() || null,
+    pec: document.getElementById("forn-pec").value.trim() || null,
+    referente_nome: document.getElementById("forn-ref-nome").value.trim() || null,
+    referente_telefono: document.getElementById("forn-ref-tel").value.trim() || null,
+    email: document.getElementById("forn-email").value.trim() || null,
+    telefono: document.getElementById("forn-telefono").value.trim() || null,
+    indirizzo: document.getElementById("forn-indirizzo").value.trim() || null,
+    cap: document.getElementById("forn-cap").value.trim() || null,
+    citta: document.getElementById("forn-citta").value.trim() || null,
+    provincia: document.getElementById("forn-provincia").value.trim() || null,
+    iban: document.getElementById("forn-iban").value.trim() || null,
+    banca: document.getElementById("forn-banca").value.trim() || null,
+    categoria_merceologica: document.getElementById("forn-categoria").value || null,
+    condizioni_pagamento: document.getElementById("forn-pagamento").value || null,
+    attivo: document.getElementById("forn-attivo").checked,
+    note: document.getElementById("forn-note").value.trim() || null,
+  };
+
+  const isEdit = !!fornitoreInModifica;
+  const url = isEdit ? `${API_URL}/fornitori/${fornitoreInModifica.id}` : `${API_URL}/fornitori/`;
+  const method = isEdit ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore nel salvataggio.");
+      return;
+    }
+
+    renderFornitori();
+  } catch (err) {
+    console.error("Errore salvataggio fornitore:", err);
+    alert("Errore di connessione.");
+  }
+}
+
+function eliminaFornitore(id, nome) {
+  mostraConferma(`Eliminare il fornitore "${nome}"?`, async () => {
+    try {
+      await fetch(`${API_URL}/fornitori/${id}`, { method: "DELETE" });
+      caricaFornitoriStats();
+      caricaFornitori();
+    } catch (err) {
+      console.error("Errore eliminazione fornitore:", err);
+    }
+  });
+}
+
+// =============================================
 // INIT
 // =============================================
 
@@ -2009,6 +2310,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-clienti")?.addEventListener("click", () => {
     setActiveMenu("menu-clienti");
     renderClienti();
+  });
+
+  document.getElementById("menu-fornitori")?.addEventListener("click", () => {
+    setActiveMenu("menu-fornitori");
+    renderFornitori();
   });
 
   document.getElementById("menu-utenti")?.addEventListener("click", () => {

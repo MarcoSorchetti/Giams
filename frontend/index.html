@@ -42,6 +42,10 @@
           <i class="fa-solid fa-address-book me-2"></i> Clienti
         </button>
 
+        <button id="menu-fornitori" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-truck-field me-2"></i> Fornitori
+        </button>
+
         <button class="btn btn-dark text-start sidebar-link disabled" type="button">
           <i class="fa-solid fa-warehouse me-2"></i> Magazzino (prossimamente)
         </button>
@@ -491,8 +495,8 @@
             <h5 class="card-section-title mb-3">Dati Raccolta</h5>
             <div class="row g-3">
               <div class="col-6">
-                <label class="form-label">Codice *</label>
-                <input type="text" class="form-control form-control-sm" id="r-codice" required placeholder="R2026-001" />
+                <label class="form-label">Codice</label>
+                <input type="text" class="form-control form-control-sm" id="r-codice" readonly placeholder="Generato automaticamente" />
               </div>
               <div class="col-6">
                 <label class="form-label">Data Raccolta *</label>
@@ -698,8 +702,8 @@
             <h5 class="card-section-title mb-3">Dati Molitura</h5>
             <div class="row g-3">
               <div class="col-6">
-                <label class="form-label">Codice Lotto *</label>
-                <input type="text" class="form-control form-control-sm" id="l-codice" required placeholder="L2026-001" />
+                <label class="form-label">Codice Lotto</label>
+                <input type="text" class="form-control form-control-sm" id="l-codice" readonly placeholder="Generato automaticamente" />
               </div>
               <div class="col-6">
                 <label class="form-label">Raccolta *</label>
@@ -1314,6 +1318,293 @@
               <i class="fa-solid fa-floppy-disk me-1"></i> Salva
             </button>
             <button type="button" class="btn btn-outline-secondary" id="btn-annulla-cliente">
+              Annulla
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: FORNITORI LISTA -->
+  <template id="template-fornitori">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Gestione Fornitori</h2>
+        <div class="module-subtitle">Anagrafica fornitori e dati bancari</div>
+      </div>
+      <button class="btn btn-accent" id="btn-nuovo-fornitore">
+        <i class="fa-solid fa-plus me-1"></i> Nuovo Fornitore
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-fornitori-totale">0</div>
+          <div class="stat-label">Totale Fornitori</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-fornitori-attivi">0</div>
+          <div class="stat-label">Attivi</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-fornitori-privati">0</div>
+          <div class="stat-label">Privati</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-fornitori-aziende">0</div>
+          <div class="stat-label">Aziende</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <input type="text" class="form-control form-control-sm" id="filtro-fornitori-q" placeholder="Cerca nome, codice, email, citta'..." />
+        </div>
+        <div class="col-md-2">
+          <select class="form-select form-select-sm" id="filtro-fornitori-tipo">
+            <option value="">Tutti i tipi</option>
+            <option value="privato">Privato</option>
+            <option value="azienda">Azienda</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select form-select-sm" id="filtro-fornitori-categoria">
+            <option value="">Tutte le categorie</option>
+            <option value="agricoltura">Agricoltura</option>
+            <option value="materiali">Materiali</option>
+            <option value="servizi">Servizi</option>
+            <option value="trasporti">Trasporti</option>
+            <option value="manutenzione">Manutenzione</option>
+            <option value="altro">Altro</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="filtro-fornitori-tutti" />
+            <label class="form-check-label small" for="filtro-fornitori-tutti">Mostra inattivi</label>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-fornitori">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Tipo</th>
+              <th>Denominazione</th>
+              <th>Categoria</th>
+              <th>Citta'</th>
+              <th>Telefono</th>
+              <th>Stato</th>
+              <th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="fornitori-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: FORNITORE FORM -->
+  <template id="template-fornitore-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-fornitori">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna ai fornitori
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="form-fornitore-titolo">Nuovo Fornitore</h3>
+
+    <form id="fornitore-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <!-- Dati principali -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Dati Principali</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice *</label>
+                <input type="text" class="form-control form-control-sm" id="forn-codice" required placeholder="FOR-001" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tipo Fornitore *</label>
+                <select class="form-select form-select-sm" id="forn-tipo" required>
+                  <option value="">Seleziona...</option>
+                  <option value="privato">Privato</option>
+                  <option value="azienda">Azienda</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sezione privato -->
+          <div class="card p-3 mb-3" id="forn-sezione-privato" style="display:none;">
+            <h5 class="card-section-title mb-3">Anagrafica Privato</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Nome</label>
+                <input type="text" class="form-control form-control-sm" id="forn-nome" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Cognome</label>
+                <input type="text" class="form-control form-control-sm" id="forn-cognome" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Codice Fiscale</label>
+                <input type="text" class="form-control form-control-sm" id="forn-cf" maxlength="16" style="text-transform:uppercase" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Sezione azienda -->
+          <div class="card p-3 mb-3" id="forn-sezione-azienda" style="display:none;">
+            <h5 class="card-section-title mb-3">Anagrafica Azienda</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Ragione Sociale</label>
+                <input type="text" class="form-control form-control-sm" id="forn-ragione" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Partita IVA</label>
+                <input type="text" class="form-control form-control-sm" id="forn-piva" maxlength="11" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Codice SDI</label>
+                <input type="text" class="form-control form-control-sm" id="forn-sdi" maxlength="7" value="0000000" style="text-transform:uppercase" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">PEC</label>
+                <input type="email" class="form-control form-control-sm" id="forn-pec" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Referente Nome</label>
+                <input type="text" class="form-control form-control-sm" id="forn-ref-nome" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Referente Telefono</label>
+                <input type="text" class="form-control form-control-sm" id="forn-ref-tel" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Contatti -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Contatti</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control form-control-sm" id="forn-email" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Telefono</label>
+                <input type="text" class="form-control form-control-sm" id="forn-telefono" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <!-- Indirizzo sede -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Indirizzo Sede</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Indirizzo</label>
+                <input type="text" class="form-control form-control-sm" id="forn-indirizzo" />
+              </div>
+              <div class="col-4">
+                <label class="form-label">CAP</label>
+                <input type="text" class="form-control form-control-sm" id="forn-cap" maxlength="5" />
+              </div>
+              <div class="col-5">
+                <label class="form-label">Citta'</label>
+                <input type="text" class="form-control form-control-sm" id="forn-citta" />
+              </div>
+              <div class="col-3">
+                <label class="form-label">Prov.</label>
+                <input type="text" class="form-control form-control-sm" id="forn-provincia" maxlength="2" style="text-transform:uppercase" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Dati bancari -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Dati Bancari</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">IBAN</label>
+                <input type="text" class="form-control form-control-sm" id="forn-iban" maxlength="34" style="text-transform:uppercase" placeholder="IT00A0000000000000000000000" />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Banca</label>
+                <input type="text" class="form-control form-control-sm" id="forn-banca" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Classificazione -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Classificazione</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Categoria Merceologica</label>
+                <select class="form-select form-select-sm" id="forn-categoria">
+                  <option value="">Nessuna</option>
+                  <option value="agricoltura">Agricoltura</option>
+                  <option value="materiali">Materiali</option>
+                  <option value="servizi">Servizi</option>
+                  <option value="trasporti">Trasporti</option>
+                  <option value="manutenzione">Manutenzione</option>
+                  <option value="altro">Altro</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Condizioni Pagamento</label>
+                <select class="form-select form-select-sm" id="forn-pagamento">
+                  <option value="">Nessuna</option>
+                  <option value="anticipato">Anticipato</option>
+                  <option value="30gg">30 giorni</option>
+                  <option value="60gg">60 giorni</option>
+                  <option value="90gg">90 giorni</option>
+                  <option value="rimessa_diretta">Rimessa diretta</option>
+                </select>
+              </div>
+              <div class="col-6 d-flex align-items-end">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="forn-attivo" checked />
+                  <label class="form-check-label" for="forn-attivo">Attivo</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Note</label>
+                <textarea class="form-control form-control-sm" id="forn-note" rows="2"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-annulla-fornitore">
               Annulla
             </button>
           </div>

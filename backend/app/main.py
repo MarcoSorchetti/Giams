@@ -22,6 +22,7 @@ from app.routers.lotto import router as lotto_router
 from app.routers.confezionamento import router as confezionamento_router
 from app.routers.contenitore import router as contenitore_router
 from app.routers.cliente import router as cliente_router
+from app.routers.fornitore import router as fornitore_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -62,6 +63,7 @@ app.include_router(lotto_router, prefix="/api")
 app.include_router(confezionamento_router, prefix="/api")
 app.include_router(contenitore_router, prefix="/api")
 app.include_router(cliente_router, prefix="/api")
+app.include_router(fornitore_router, prefix="/api")
 
 
 # ------------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 
 class LottoBase(BaseModel):
-    codice_lotto: str = Field(..., max_length=30)
+    codice_lotto: Optional[str] = Field(None, max_length=30)
     raccolta_id: int
     anno_campagna: int
     data_molitura: date

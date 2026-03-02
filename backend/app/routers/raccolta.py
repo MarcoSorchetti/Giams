@@ -16,6 +16,26 @@ from app.models.raccolta import (
 router = APIRouter(prefix="/raccolte", tags=["raccolte"])
 
 
+def _next_codice_raccolta(anno: int, db: Session) -> str:
+    """Genera il prossimo codice raccolta: R/001/2025, R/002/2025, ..."""
+    prefix = f"R/"
+    suffix = f"/{anno}"
+    last = (
+        db.query(Raccolta)
+        .filter(Raccolta.codice.like(f"R/%/{anno}"))
+        .order_by(Raccolta.codice.desc())
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.codice.split("/")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"{prefix}{num:03d}{suffix}"
+
+
 def _build_raccolta_out(raccolta, db):
     """Costruisce RaccoltaOut con dettagli parcelle, flag lotto e resa."""
     dettagli = (
@@ -57,6 +77,12 @@ def _build_raccolta_out(raccolta, db):
         created_at=raccolta.created_at,
         updated_at=raccolta.updated_at,
     )
+
+
+@router.get("/next-codice")
+def next_codice_raccolta(anno: int = Query(...), db: Session = Depends(get_db)):
+    """Restituisce il prossimo codice raccolta per l'anno indicato."""
+    return {"codice": _next_codice_raccolta(anno, db)}
 
 
 @router.get("/stats")
@@ -123,6 +149,10 @@ def get_raccolta(raccolta_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=RaccoltaOut, status_code=status.HTTP_201_CREATED)
 def create_raccolta(data: RaccoltaCreate, db: Session = Depends(get_db)):
+    # Auto-genera codice se non fornito
+    if not data.codice or data.codice.strip() == "":
+        data.codice = _next_codice_raccolta(data.anno_campagna, db)
+
     if db.query(Raccolta).filter(Raccolta.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice raccolta gia' esistente.")
 

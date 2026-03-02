@@ -17,7 +17,7 @@ class RaccoltaParcellaOut(RaccoltaParcellaBase):
 
 
 class RaccoltaBase(BaseModel):
-    codice: str = Field(..., max_length=20)
+    codice: Optional[str] = Field(None, max_length=20)
     data_raccolta: date
     anno_campagna: int
     kg_olive_totali: float

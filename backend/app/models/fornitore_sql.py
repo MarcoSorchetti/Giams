@@ -1,0 +1,48 @@
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.sql import func
+
+from app.database import Base
+
+
+class Fornitore(Base):
+    __tablename__ = "fornitori"
+
+    id = Column(Integer, primary_key=True, index=True)
+    codice = Column(String(20), unique=True, nullable=False, index=True)
+    tipo_fornitore = Column(String(10), nullable=False)  # privato / azienda
+
+    # Anagrafica privato
+    nome = Column(String(50), nullable=True)
+    cognome = Column(String(50), nullable=True)
+    codice_fiscale = Column(String(16), nullable=True)
+
+    # Anagrafica azienda
+    ragione_sociale = Column(String(150), nullable=True)
+    partita_iva = Column(String(11), nullable=True)
+    codice_sdi = Column(String(7), nullable=True, server_default="0000000")
+    pec = Column(String(100), nullable=True)
+    referente_nome = Column(String(100), nullable=True)
+    referente_telefono = Column(String(20), nullable=True)
+
+    # Indirizzo sede
+    indirizzo = Column(String(150), nullable=True)
+    cap = Column(String(5), nullable=True)
+    citta = Column(String(100), nullable=True)
+    provincia = Column(String(2), nullable=True)
+
+    # Contatti
+    email = Column(String(100), nullable=True)
+    telefono = Column(String(20), nullable=True)
+
+    # Dati bancari
+    iban = Column(String(34), nullable=True)
+    banca = Column(String(100), nullable=True)
+
+    # Classificazione
+    categoria_merceologica = Column(String(50), nullable=True)
+    condizioni_pagamento = Column(String(100), nullable=True)
+
+    attivo = Column(Boolean, nullable=False, server_default="true")
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())

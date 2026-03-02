@@ -13,6 +13,24 @@ from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
 router = APIRouter(prefix="/lotti", tags=["lotti"])
 
 
+def _next_codice_lotto(anno: int, db: Session) -> str:
+    """Genera il prossimo codice lotto: O/001/2025, O/002/2025, ..."""
+    last = (
+        db.query(LottoOlio)
+        .filter(LottoOlio.codice_lotto.like(f"O/%/{anno}"))
+        .order_by(LottoOlio.codice_lotto.desc())
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.codice_lotto.split("/")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"O/{num:03d}/{anno}"
+
+
 def _build_lotto_out(lotto, db):
     """Costruisce LottoOut con codice raccolta."""
     raccolta = db.query(Raccolta).filter(Raccolta.id == lotto.raccolta_id).first()
@@ -41,6 +59,12 @@ def _build_lotto_out(lotto, db):
         created_at=lotto.created_at,
         updated_at=lotto.updated_at,
     )
+
+
+@router.get("/next-codice")
+def next_codice_lotto(anno: int = Query(...), db: Session = Depends(get_db)):
+    """Restituisce il prossimo codice lotto per l'anno indicato."""
+    return {"codice": _next_codice_lotto(anno, db)}
 
 
 @router.get("/stats")
@@ -121,6 +145,10 @@ def get_lotto(lotto_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=LottoOut, status_code=status.HTTP_201_CREATED)
 def create_lotto(data: LottoCreate, db: Session = Depends(get_db)):
+    # Auto-genera codice se non fornito
+    if not data.codice_lotto or data.codice_lotto.strip() == "":
+        data.codice_lotto = _next_codice_lotto(data.anno_campagna, db)
+
     if db.query(LottoOlio).filter(LottoOlio.codice_lotto == data.codice_lotto).first():
         raise HTTPException(status_code=400, detail="Codice lotto gia' esistente.")
 
