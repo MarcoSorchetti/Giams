@@ -122,6 +122,13 @@ async function renderHome() {
           </div>
         </div>
         <div class="col-6 col-md-4">
+          <div class="quick-card" id="quick-magazzino">
+            <div class="quick-card-icon"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="quick-card-title">Magazzino</div>
+            <div class="quick-card-desc">Giacenze e movimenti</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4">
           <div class="quick-card" id="quick-utenti">
             <div class="quick-card-icon"><i class="fa-solid fa-user-gear"></i></div>
             <div class="quick-card-title">Gestione Utenti</div>
@@ -155,6 +162,10 @@ async function renderHome() {
   document.getElementById("quick-costi")?.addEventListener("click", () => {
     setActiveMenu("menu-costi");
     renderCosti();
+  });
+  document.getElementById("quick-magazzino")?.addEventListener("click", () => {
+    setActiveMenu("menu-magazzino");
+    renderMagazzino();
   });
   document.getElementById("quick-utenti")?.addEventListener("click", () => {
     setActiveMenu("menu-utenti");
@@ -3020,6 +3031,502 @@ async function salvaCategoria(e) {
 }
 
 // =============================================
+// MAGAZZINO — Stato
+// =============================================
+
+let movimentiLista = [];
+let movimentoInModifica = null;
+let giacenzeLista = [];
+let magazzinoTabAttiva = "giacenze";
+
+const TIPO_MOV_LABELS = {
+  carico: "Carico",
+  scarico: "Scarico",
+};
+const TIPO_MOV_BADGE = {
+  carico: "bg-success",
+  scarico: "bg-danger",
+};
+const CAUSALE_MOV_LABELS = {
+  produzione: "Produzione",
+  omaggio: "Omaggio / Degustazione",
+  pubblicita: "Pubblicita'",
+  scarto: "Scarto / Rottura",
+  vendita: "Vendita",
+};
+
+
+// =============================================
+// MAGAZZINO — Lista
+// =============================================
+
+async function renderMagazzino() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-magazzino");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  // Tab switching
+  document.getElementById("mag-tab-giacenze")?.addEventListener("click", () => {
+    magazzinoTabAttiva = "giacenze";
+    aggiornaTabMagazzino();
+  });
+  document.getElementById("mag-tab-movimenti")?.addEventListener("click", () => {
+    magazzinoTabAttiva = "movimenti";
+    aggiornaTabMagazzino();
+  });
+
+  // Filtri
+  document.getElementById("filtro-mag-anno")?.addEventListener("change", () => {
+    caricaMagStats();
+    if (magazzinoTabAttiva === "giacenze") caricaGiacenze();
+    else caricaMovimenti();
+  });
+  document.getElementById("filtro-mag-tipo")?.addEventListener("change", caricaMovimenti);
+  document.getElementById("filtro-mag-causale")?.addEventListener("change", caricaMovimenti);
+
+  // Bottoni
+  document.getElementById("btn-nuovo-carico")?.addEventListener("click", () => renderMovimentoForm(null, "carico"));
+  document.getElementById("btn-nuovo-scarico")?.addEventListener("click", () => renderMovimentoForm(null, "scarico"));
+  document.getElementById("btn-sincronizza-mag")?.addEventListener("click", sincronizzaMagazzino);
+
+  // Popola filtro anni
+  try {
+    const res = await fetch(`${API_URL}/magazzino/anni`);
+    const anni = await res.json();
+    const sel = document.getElementById("filtro-mag-anno");
+    if (sel) {
+      anni.forEach(a => {
+        const opt = document.createElement("option");
+        opt.value = a;
+        opt.textContent = a;
+        sel.appendChild(opt);
+      });
+    }
+  } catch (e) { /* nessun anno ancora */ }
+
+  caricaMagStats();
+  aggiornaTabMagazzino();
+}
+
+function aggiornaTabMagazzino() {
+  const tabG = document.getElementById("mag-tab-giacenze");
+  const tabM = document.getElementById("mag-tab-movimenti");
+  const contentG = document.getElementById("mag-content-giacenze");
+  const contentM = document.getElementById("mag-content-movimenti");
+  const filtroTipo = document.getElementById("filtro-mag-tipo-wrap");
+  const filtroCausale = document.getElementById("filtro-mag-causale-wrap");
+
+  if (magazzinoTabAttiva === "giacenze") {
+    tabG?.classList.add("active");
+    tabM?.classList.remove("active");
+    if (contentG) contentG.style.display = "";
+    if (contentM) contentM.style.display = "none";
+    if (filtroTipo) filtroTipo.style.display = "none";
+    if (filtroCausale) filtroCausale.style.display = "none";
+    caricaGiacenze();
+  } else {
+    tabG?.classList.remove("active");
+    tabM?.classList.add("active");
+    if (contentG) contentG.style.display = "none";
+    if (contentM) contentM.style.display = "";
+    if (filtroTipo) filtroTipo.style.display = "";
+    if (filtroCausale) filtroCausale.style.display = "";
+    caricaMovimenti();
+  }
+}
+
+async function caricaMagStats() {
+  try {
+    const anno = document.getElementById("filtro-mag-anno")?.value || "";
+    const qs = anno ? `?anno=${anno}` : "";
+    const [resStats, resGiac] = await Promise.all([
+      fetch(`${API_URL}/magazzino/stats${qs}`),
+      fetch(`${API_URL}/magazzino/giacenze${qs}`),
+    ]);
+    const s = await resStats.json();
+    const giacenze = await resGiac.json();
+    document.getElementById("stat-mag-movimenti").textContent = s.totale_movimenti || 0;
+    document.getElementById("stat-mag-carichi").textContent = s.totale_carichi || 0;
+    document.getElementById("stat-mag-scarichi").textContent = s.totale_scarichi || 0;
+    document.getElementById("stat-mag-giacenza").textContent = s.giacenza_totale_unita || 0;
+    // Calcola litri totali in giacenza
+    const litriTotali = giacenze.reduce((sum, g) => sum + (g.giacenza_litri || 0), 0);
+    document.getElementById("stat-mag-giacenza-litri").textContent = `${litriTotali.toFixed(1)} L`;
+  } catch (e) {
+    console.error("Errore caricamento stats magazzino", e);
+  }
+}
+
+
+// =============================================
+// MAGAZZINO — Giacenze
+// =============================================
+
+async function caricaGiacenze() {
+  try {
+    const anno = document.getElementById("filtro-mag-anno")?.value || "";
+    const qs = anno ? `?anno=${anno}` : "";
+    const res = await fetch(`${API_URL}/magazzino/giacenze${qs}`);
+    giacenzeLista = await res.json();
+    renderTabellaGiacenze();
+  } catch (e) {
+    console.error("Errore caricamento giacenze", e);
+  }
+}
+
+function renderTabellaGiacenze() {
+  const tbody = document.getElementById("giacenze-tbody");
+  if (!tbody) return;
+
+  if (giacenzeLista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4">Nessuna giacenza registrata</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = giacenzeLista.map(g => {
+    const cls = g.giacenza_unita > 0 ? "text-success" : (g.giacenza_unita === 0 ? "text-secondary" : "text-danger");
+    return `<tr>
+      <td>${g.confezionamento_codice || ""}</td>
+      <td>${g.contenitore_descrizione || "—"}</td>
+      <td class="text-end">${g.capacita_litri} L</td>
+      <td class="text-end text-success">${g.totale_carichi}</td>
+      <td class="text-end text-danger">${g.totale_scarichi}</td>
+      <td class="text-end fw-bold ${cls}">${g.giacenza_unita}</td>
+      <td class="text-end">${g.giacenza_litri} L</td>
+    </tr>`;
+  }).join("");
+}
+
+
+// =============================================
+// MAGAZZINO — Movimenti
+// =============================================
+
+async function caricaMovimenti() {
+  try {
+    const anno = document.getElementById("filtro-mag-anno")?.value || "";
+    const tipo = document.getElementById("filtro-mag-tipo")?.value || "";
+    const causale = document.getElementById("filtro-mag-causale")?.value || "";
+
+    let qs = [];
+    if (anno) qs.push(`anno=${anno}`);
+    if (tipo) qs.push(`tipo=${tipo}`);
+    if (causale) qs.push(`causale=${causale}`);
+    const qstr = qs.length > 0 ? `?${qs.join("&")}` : "";
+
+    const res = await fetch(`${API_URL}/magazzino/${qstr}`);
+    movimentiLista = await res.json();
+    renderTabellaMovimenti();
+  } catch (e) {
+    console.error("Errore caricamento movimenti", e);
+  }
+}
+
+function renderTabellaMovimenti() {
+  const tbody = document.getElementById("movimenti-tbody");
+  if (!tbody) return;
+
+  if (movimentiLista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-secondary py-4">Nessun movimento registrato</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = movimentiLista.map(m => {
+    const badgeCls = TIPO_MOV_BADGE[m.tipo_movimento] || "bg-secondary";
+    const tipoLabel = TIPO_MOV_LABELS[m.tipo_movimento] || m.tipo_movimento;
+    const causaleLabel = CAUSALE_MOV_LABELS[m.causale] || m.causale;
+    const isVendita = m.causale === "vendita";
+    const clienteNote = m.cliente_denominazione || m.note || "—";
+
+    return `<tr>
+      <td>${m.codice}</td>
+      <td>${m.data_movimento || ""}</td>
+      <td class="text-center"><span class="badge ${badgeCls}">${tipoLabel}</span></td>
+      <td>${causaleLabel}</td>
+      <td>${m.confezionamento_codice || ""} <span class="text-secondary small">${m.confezionamento_formato || ""}</span></td>
+      <td class="text-end fw-bold">${m.quantita}</td>
+      <td class="small">${clienteNote}</td>
+      <td class="text-center">
+        ${isVendita ? '<span class="text-secondary small">da vendita</span>' : `
+          <button class="btn btn-sm btn-outline-light me-1" onclick="editMovimento(${m.id})">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminaMovimento(${m.id}, '${m.codice}')">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        `}
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+
+// =============================================
+// MAGAZZINO — Form Movimento
+// =============================================
+
+async function renderMovimentoForm(id, tipoDefault) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-magazzino-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  // Bottone indietro
+  document.getElementById("btn-torna-magazzino")?.addEventListener("click", renderMagazzino);
+
+  // Init flatpickr
+  initFlatpickr(main);
+
+  // Popola select confezionamenti
+  await popolaSelectConfezionamenti();
+
+  // Popola select clienti
+  await popolaSelectClientiMov();
+
+  // Anno default
+  const annoEl = document.getElementById("mov-anno");
+  if (annoEl && !id) annoEl.value = new Date().getFullYear();
+
+  // Tipo default
+  const tipoEl = document.getElementById("mov-tipo");
+  if (tipoEl && tipoDefault && !id) {
+    tipoEl.value = tipoDefault;
+    aggiornaCausaliPerTipo(tipoDefault);
+  }
+
+  // Aggiorna causali quando cambia tipo
+  tipoEl?.addEventListener("change", () => aggiornaCausaliPerTipo(tipoEl.value));
+
+  // Mostra giacenza quando cambia confezionamento
+  document.getElementById("mov-confezionamento")?.addEventListener("change", aggiornaGiacenzaInfo);
+
+  // Aggiorna codice quando cambia anno
+  annoEl?.addEventListener("change", async () => {
+    if (!id) await aggiornaCodiceMovimento(annoEl.value);
+  });
+
+  // Auto-genera codice
+  if (!id && annoEl?.value) {
+    await aggiornaCodiceMovimento(annoEl.value);
+  }
+
+  // Se modifica, popola
+  if (id) {
+    movimentoInModifica = id;
+    document.getElementById("mag-form-title").textContent = "Modifica Movimento";
+    document.getElementById("btn-elimina-movimento").style.display = "";
+    document.getElementById("btn-elimina-movimento").addEventListener("click", () => eliminaMovimento(id));
+    await popolaFormMovimento(id);
+  } else {
+    movimentoInModifica = null;
+  }
+
+  // Submit
+  document.getElementById("form-movimento")?.addEventListener("submit", salvaMovimento);
+}
+
+function aggiornaCausaliPerTipo(tipo) {
+  const causaleEl = document.getElementById("mov-causale");
+  if (!causaleEl) return;
+
+  causaleEl.innerHTML = "";
+
+  if (tipo === "carico") {
+    causaleEl.innerHTML = '<option value="produzione">Produzione</option>';
+  } else {
+    causaleEl.innerHTML = `
+      <option value="omaggio">Omaggio / Degustazione</option>
+      <option value="pubblicita">Pubblicita</option>
+      <option value="scarto">Scarto / Rottura</option>
+    `;
+  }
+}
+
+async function aggiornaCodiceMovimento(anno) {
+  try {
+    const res = await fetch(`${API_URL}/magazzino/next-codice?anno=${anno}`);
+    const data = await res.json();
+    const el = document.getElementById("mov-codice");
+    if (el) el.value = data.codice;
+  } catch (e) {
+    console.error("Errore generazione codice movimento", e);
+  }
+}
+
+async function popolaSelectConfezionamenti() {
+  try {
+    const res = await fetch(`${API_URL}/confezionamenti/`);
+    const lista = await res.json();
+    const sel = document.getElementById("mov-confezionamento");
+    if (!sel) return;
+    lista.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = `${c.codice} — ${c.formato} (${c.num_unita} x ${c.capacita_litri}L)`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error("Errore caricamento confezionamenti", e);
+  }
+}
+
+async function popolaSelectClientiMov() {
+  try {
+    const res = await fetch(`${API_URL}/clienti/`);
+    const lista = await res.json();
+    const sel = document.getElementById("mov-cliente");
+    if (!sel) return;
+    lista.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      const nome = c.tipo_cliente === "azienda"
+        ? (c.ragione_sociale || "")
+        : `${c.nome || ""} ${c.cognome || ""}`.trim();
+      opt.textContent = `${c.codice} — ${nome}`;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.error("Errore caricamento clienti", e);
+  }
+}
+
+async function aggiornaGiacenzaInfo() {
+  const confId = document.getElementById("mov-confezionamento")?.value;
+  const infoEl = document.getElementById("mov-giacenza-info");
+  if (!confId || !infoEl) {
+    if (infoEl) infoEl.textContent = "";
+    return;
+  }
+  try {
+    const res = await fetch(`${API_URL}/magazzino/giacenze`);
+    const giacenze = await res.json();
+    const g = giacenze.find(x => x.confezionamento_id === parseInt(confId));
+    if (g) {
+      infoEl.innerHTML = `Giacenza attuale: <strong class="text-info">${g.giacenza_unita} unita</strong> (${g.giacenza_litri} L)`;
+    } else {
+      infoEl.textContent = "Giacenza: 0 unita (nessun movimento registrato)";
+    }
+  } catch (e) {
+    infoEl.textContent = "";
+  }
+}
+
+async function popolaFormMovimento(id) {
+  try {
+    const res = await fetch(`${API_URL}/magazzino/${id}`);
+    const m = await res.json();
+
+    document.getElementById("mov-id").value = m.id;
+    document.getElementById("mov-codice").value = m.codice || "";
+    document.getElementById("mov-anno").value = m.anno_campagna || "";
+    document.getElementById("mov-tipo").value = m.tipo_movimento || "carico";
+    aggiornaCausaliPerTipo(m.tipo_movimento);
+    document.getElementById("mov-causale").value = m.causale || "";
+    document.getElementById("mov-quantita").value = m.quantita || "";
+    document.getElementById("mov-confezionamento").value = m.confezionamento_id || "";
+    document.getElementById("mov-cliente").value = m.cliente_id || "";
+    document.getElementById("mov-riferimento").value = m.riferimento_documento || "";
+    document.getElementById("mov-note").value = m.note || "";
+
+    // Data
+    const dataInput = document.getElementById("mov-data");
+    if (dataInput && dataInput._flatpickr && m.data_movimento) {
+      dataInput._flatpickr.setDate(m.data_movimento, true);
+    } else if (dataInput) {
+      dataInput.value = m.data_movimento || "";
+    }
+
+    aggiornaGiacenzaInfo();
+  } catch (e) {
+    console.error("Errore caricamento movimento", e);
+  }
+}
+
+async function salvaMovimento(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("mov-id")?.value;
+  const data = {
+    confezionamento_id: parseInt(document.getElementById("mov-confezionamento").value),
+    tipo_movimento: document.getElementById("mov-tipo").value,
+    causale: document.getElementById("mov-causale").value,
+    quantita: parseInt(document.getElementById("mov-quantita").value),
+    data_movimento: document.getElementById("mov-data").value,
+    anno_campagna: parseInt(document.getElementById("mov-anno").value),
+    cliente_id: document.getElementById("mov-cliente").value ? parseInt(document.getElementById("mov-cliente").value) : null,
+    riferimento_documento: document.getElementById("mov-riferimento").value || null,
+    note: document.getElementById("mov-note").value || null,
+  };
+
+  if (!id) {
+    data.codice = document.getElementById("mov-codice").value || "";
+  }
+
+  const url = id ? `${API_URL}/magazzino/${id}` : `${API_URL}/magazzino/`;
+  const method = id ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore salvataggio");
+      return;
+    }
+    renderMagazzino();
+  } catch (e) {
+    console.error("Errore salvataggio movimento", e);
+    alert("Errore di rete");
+  }
+}
+
+function editMovimento(id) {
+  renderMovimentoForm(id);
+}
+
+async function sincronizzaMagazzino() {
+  const anno = document.getElementById("filtro-mag-anno")?.value || "";
+  const qs = anno ? `?anno=${anno}` : "";
+  try {
+    const res = await fetch(`${API_URL}/magazzino/sincronizza${qs}`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || "Errore sincronizzazione");
+      return;
+    }
+    alert(data.messaggio || `${data.sincronizzati} confezionamenti sincronizzati.`);
+    caricaMagStats();
+    if (magazzinoTabAttiva === "giacenze") caricaGiacenze();
+    else caricaMovimenti();
+  } catch (e) {
+    console.error("Errore sincronizzazione magazzino", e);
+    alert("Errore di rete");
+  }
+}
+
+function eliminaMovimento(id, codice) {
+  const msg = codice ? `Eliminare il movimento ${codice}?` : "Eliminare questo movimento?";
+  mostraConferma(msg, async () => {
+    try {
+      const res = await fetch(`${API_URL}/magazzino/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore eliminazione");
+        return;
+      }
+      renderMagazzino();
+    } catch (e) {
+      console.error("Errore eliminazione movimento", e);
+    }
+  });
+}
+
+
+// =============================================
 // INIT
 // =============================================
 
@@ -3067,6 +3574,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-costi")?.addEventListener("click", () => {
     setActiveMenu("menu-costi");
     renderCosti();
+  });
+
+  document.getElementById("menu-magazzino")?.addEventListener("click", () => {
+    setActiveMenu("menu-magazzino");
+    renderMagazzino();
   });
 
   document.getElementById("menu-utenti")?.addEventListener("click", () => {

@@ -25,6 +25,7 @@ from app.routers.cliente import router as cliente_router
 from app.routers.fornitore import router as fornitore_router
 from app.routers.categoria_costo import router as categoria_costo_router
 from app.routers.costo import router as costo_router
+from app.routers.magazzino import router as magazzino_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -68,6 +69,7 @@ app.include_router(cliente_router, prefix="/api")
 app.include_router(fornitore_router, prefix="/api")
 app.include_router(categoria_costo_router, prefix="/api")
 app.include_router(costo_router, prefix="/api")
+app.include_router(magazzino_router, prefix="/api")
 
 
 # ------------------------------------------------------------------------------

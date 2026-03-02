@@ -54,8 +54,8 @@
           <i class="fa-solid fa-file-invoice-dollar me-2"></i> Costi
         </button>
 
-        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
-          <i class="fa-solid fa-warehouse me-2"></i> Magazzino (prossimamente)
+        <button id="menu-magazzino" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-warehouse me-2"></i> Magazzino
         </button>
 
         <button class="btn btn-dark text-start sidebar-link disabled" type="button">
@@ -2058,6 +2058,245 @@
         </table>
       </div>
     </div>
+  </template>
+
+  <!-- ═══════════════════ TEMPLATE: MAGAZZINO ═══════════════════ -->
+  <template id="template-magazzino">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Magazzino</h2>
+        <div class="module-subtitle">Giacenze, carichi e scarichi prodotti confezionati</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" id="btn-sincronizza-mag">
+          <i class="fa-solid fa-rotate me-1"></i> Sincronizza da Produzione
+        </button>
+        <button class="btn btn-success" id="btn-nuovo-carico">
+          <i class="fa-solid fa-arrow-down me-1"></i> Carico
+        </button>
+        <button class="btn btn-accent" id="btn-nuovo-scarico">
+          <i class="fa-solid fa-arrow-up me-1"></i> Scarico
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" id="magazzino-tabs">
+      <li class="nav-item">
+        <button class="nav-link active" id="mag-tab-giacenze" type="button">
+          <i class="fa-solid fa-boxes-stacked me-1"></i> Giacenze
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="mag-tab-movimenti" type="button">
+          <i class="fa-solid fa-arrows-up-down me-1"></i> Movimenti
+        </button>
+      </li>
+    </ul>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-mag-movimenti">0</div>
+          <div class="stat-label">Movimenti</div>
+        </div>
+      </div>
+      <div class="col-6 col-md">
+        <div class="stat-card">
+          <div class="stat-value text-success" id="stat-mag-carichi">0</div>
+          <div class="stat-label">Tot. Carichi</div>
+        </div>
+      </div>
+      <div class="col-6 col-md">
+        <div class="stat-card">
+          <div class="stat-value text-danger" id="stat-mag-scarichi">0</div>
+          <div class="stat-label">Tot. Scarichi</div>
+        </div>
+      </div>
+      <div class="col-6 col-md">
+        <div class="stat-card">
+          <div class="stat-value text-info" id="stat-mag-giacenza">0</div>
+          <div class="stat-label">Giacenza (unita)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md">
+        <div class="stat-card">
+          <div class="stat-value text-warning" id="stat-mag-giacenza-litri">0 L</div>
+          <div class="stat-label">Giacenza (litri)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtri -->
+    <div class="card p-3 mb-3">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-3">
+          <select class="form-select form-select-sm" id="filtro-mag-anno">
+            <option value="">Tutti gli anni</option>
+          </select>
+        </div>
+        <div class="col-md-3" id="filtro-mag-tipo-wrap">
+          <select class="form-select form-select-sm" id="filtro-mag-tipo">
+            <option value="">Tutti i tipi</option>
+            <option value="carico">Carichi</option>
+            <option value="scarico">Scarichi</option>
+          </select>
+        </div>
+        <div class="col-md-3" id="filtro-mag-causale-wrap">
+          <select class="form-select form-select-sm" id="filtro-mag-causale">
+            <option value="">Tutte le causali</option>
+            <option value="produzione">Produzione</option>
+            <option value="omaggio">Omaggio</option>
+            <option value="pubblicita">Pubblicita</option>
+            <option value="scarto">Scarto</option>
+            <option value="vendita">Vendita</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella Giacenze -->
+    <div id="mag-content-giacenze">
+      <div class="card p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Confezionamento</th>
+                <th>Contenitore</th>
+                <th class="text-end">Capacita</th>
+                <th class="text-end">Carichi</th>
+                <th class="text-end">Scarichi</th>
+                <th class="text-end fw-bold">Giacenza</th>
+                <th class="text-end">Litri disp.</th>
+              </tr>
+            </thead>
+            <tbody id="giacenze-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella Movimenti -->
+    <div id="mag-content-movimenti" style="display:none;">
+      <div class="card p-0">
+        <div class="table-responsive">
+          <table class="table table-dark table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Codice</th>
+                <th>Data</th>
+                <th class="text-center">Tipo</th>
+                <th>Causale</th>
+                <th>Confezionamento</th>
+                <th class="text-end">Qta</th>
+                <th>Cliente / Note</th>
+                <th class="text-center">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="movimenti-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ═══════════════════ TEMPLATE: MAGAZZINO FORM (MOVIMENTO) ═══════════════════ -->
+  <template id="template-magazzino-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-magazzino">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna al magazzino
+      </button>
+    </div>
+
+    <h3 class="module-title mb-3" id="mag-form-title">Nuovo Movimento</h3>
+
+    <form id="form-movimento">
+      <input type="hidden" id="mov-id" />
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Dati Movimento</h5>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="form-label">Codice</label>
+                <input type="text" class="form-control form-control-sm" id="mov-codice" readonly placeholder="Generato automaticamente" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Anno campagna *</label>
+                <input type="number" class="form-control form-control-sm" id="mov-anno" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tipo *</label>
+                <select class="form-select form-select-sm" id="mov-tipo" required>
+                  <option value="carico">Carico</option>
+                  <option value="scarico">Scarico</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Causale *</label>
+                <select class="form-select form-select-sm" id="mov-causale" required>
+                  <option value="produzione">Produzione</option>
+                  <option value="omaggio">Omaggio / Degustazione</option>
+                  <option value="pubblicita">Pubblicita</option>
+                  <option value="scarto">Scarto / Rottura</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Data *</label>
+                <input type="text" class="form-control form-control-sm flatpickr-date" id="mov-data" required />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Quantita (unita) *</label>
+                <input type="number" class="form-control form-control-sm" id="mov-quantita" min="1" required />
+              </div>
+            </div>
+          </div>
+
+          <!-- Note -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Note</h5>
+            <textarea class="form-control form-control-sm" id="mov-note" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <!-- Prodotto -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Prodotto Confezionato *</h5>
+            <select class="form-select form-select-sm" id="mov-confezionamento" required>
+              <option value="">— Seleziona confezionamento —</option>
+            </select>
+            <div class="mt-2 small text-secondary" id="mov-giacenza-info"></div>
+          </div>
+
+          <!-- Cliente (opzionale) -->
+          <div class="card p-3 mb-3" id="mov-cliente-section">
+            <h5 class="card-section-title mb-3">Cliente (opzionale)</h5>
+            <select class="form-select form-select-sm" id="mov-cliente">
+              <option value="">— Nessun cliente —</option>
+            </select>
+          </div>
+
+          <!-- Riferimento -->
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Riferimento Documento</h5>
+            <input type="text" class="form-control form-control-sm" id="mov-riferimento" maxlength="100" placeholder="N. DDT, fattura, ecc." />
+          </div>
+
+          <!-- Azioni -->
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-accent flex-grow-1">
+              <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+            </button>
+            <button type="button" class="btn btn-outline-danger" id="btn-elimina-movimento" style="display:none;">
+              <i class="fa-solid fa-trash me-1"></i> Elimina
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

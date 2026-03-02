@@ -8,10 +8,12 @@ from app.database import get_db
 from app.models.confezionamento_sql import Confezionamento, ConfezionamentoLotto
 from app.models.contenitore_sql import Contenitore
 from app.models.lotto_sql import LottoOlio
+from app.models.movimento_magazzino_sql import MovimentoMagazzino
 from app.models.confezionamento import (
     ConfezionamentoCreate, ConfezionamentoUpdate, ConfezionamentoOut,
     ConfezionamentoLottoOut,
 )
+from app.routers.magazzino import _next_codice_movimento
 
 
 router = APIRouter(prefix="/confezionamenti", tags=["confezionamenti"])
@@ -164,6 +166,21 @@ def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(ge
 
     db.commit()
     db.refresh(c)
+
+    # --- Carico automatico in magazzino ---
+    mov = MovimentoMagazzino(
+        codice=_next_codice_movimento(c.anno_campagna, db),
+        confezionamento_id=c.id,
+        tipo_movimento="carico",
+        causale="produzione",
+        quantita=c.num_unita,
+        data_movimento=c.data_confezionamento,
+        anno_campagna=c.anno_campagna,
+        note=f"Carico automatico da imbottigliamento {c.codice}",
+    )
+    db.add(mov)
+    db.commit()
+
     return _build_conf_out(c, db)
 
 
