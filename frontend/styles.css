@@ -278,6 +278,18 @@ a:hover { color: var(--accent-hover); }
   color: var(--accent-light);
 }
 
+.stat-value.stat-value-sm {
+  font-size: 1.15rem;
+}
+
+.costo-doc-viewer {
+  width: 100%;
+  height: 500px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: #1a1a1a;
+}
+
 .stat-sub {
   font-size: 0.85rem;
   font-weight: 600;
@@ -786,3 +798,38 @@ a:hover { color: var(--accent-hover); }
 .modal-confirm-box h5 { margin-bottom: 1rem; }
 
 .modal-confirm-box .btn { min-width: 100px; }
+
+
+/* =============================================
+   Utility
+   ============================================= */
+
+.text-accent { color: var(--accent-light) !important; }
+
+
+/* =============================================
+   Flatpickr Dark Theme Override
+   ============================================= */
+
+.flatpickr-calendar {
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+
+.flatpickr-calendar .flatpickr-day.selected,
+.flatpickr-calendar .flatpickr-day.selected:hover {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
+.flatpickr-calendar .flatpickr-day:hover {
+  background: var(--bg-card-hover) !important;
+}
+
+.flatpickr-calendar .flatpickr-day.today {
+  border-color: var(--accent-light) !important;
+}
+
+input.flatpickr-date + .form-control {
+  cursor: pointer;
+}

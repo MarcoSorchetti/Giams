@@ -115,6 +115,13 @@ async function renderHome() {
           </div>
         </div>
         <div class="col-6 col-md-4">
+          <div class="quick-card" id="quick-costi">
+            <div class="quick-card-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+            <div class="quick-card-title">Costi</div>
+            <div class="quick-card-desc">Gestione spese e fatture</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4">
           <div class="quick-card" id="quick-utenti">
             <div class="quick-card-icon"><i class="fa-solid fa-user-gear"></i></div>
             <div class="quick-card-title">Gestione Utenti</div>
@@ -144,6 +151,10 @@ async function renderHome() {
   document.getElementById("quick-fornitori")?.addEventListener("click", () => {
     setActiveMenu("menu-fornitori");
     renderFornitori();
+  });
+  document.getElementById("quick-costi")?.addEventListener("click", () => {
+    setActiveMenu("menu-costi");
+    renderCosti();
   });
   document.getElementById("quick-utenti")?.addEventListener("click", () => {
     setActiveMenu("menu-utenti");
@@ -706,6 +717,9 @@ async function renderRaccoltaForm(id) {
 
   await renderParcelleSelezione();
 
+  initRaccoltaFormUI();
+  initFlatpickr();
+
   if (id) {
     document.getElementById("form-raccolta-titolo").textContent = "Modifica Raccolta";
     await popolaFormRaccolta(id);
@@ -722,8 +736,6 @@ async function renderRaccoltaForm(id) {
       if (anno) await aggiornaCodicRaccolta(anno);
     }
   });
-
-  initRaccoltaFormUI();
 }
 
 async function aggiornaCodicRaccolta(anno) {
@@ -789,7 +801,9 @@ async function popolaFormRaccolta(id) {
     const r = await res.json();
 
     document.getElementById("r-codice").value = r.codice || "";
-    document.getElementById("r-data").value = r.data_raccolta || "";
+    const rDataEl = document.getElementById("r-data");
+    if (rDataEl._flatpickr) rDataEl._flatpickr.setDate(r.data_raccolta);
+    else rDataEl.value = r.data_raccolta || "";
     document.getElementById("r-anno").value = r.anno_campagna || "";
     document.getElementById("r-kg-totali").value = r.kg_olive_totali || "";
     document.getElementById("r-metodo").value = r.metodo_raccolta || "";
@@ -1009,6 +1023,9 @@ async function renderLottoForm(id) {
 
   await popolaSelectRaccolte();
 
+  initLottoFormUI();
+  initFlatpickr();
+
   if (id) {
     document.getElementById("form-lotto-titolo").textContent = "Modifica Lotto Olio";
     await popolaFormLotto(id);
@@ -1024,8 +1041,6 @@ async function renderLottoForm(id) {
       if (anno) await aggiornaCodiceLotto(anno);
     }
   });
-
-  initLottoFormUI();
 }
 
 async function renderLottoFormDaRaccolta(raccoltaId) {
@@ -1037,6 +1052,9 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
   lottoInModifica = null;
 
   await popolaSelectRaccolte();
+
+  initLottoFormUI();
+  initFlatpickr();
 
   // Pre-seleziona la raccolta e precompila i kg
   const selRaccolta = document.getElementById("l-raccolta");
@@ -1060,8 +1078,6 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
       if (anno) await aggiornaCodiceLotto(anno);
     }
   });
-
-  initLottoFormUI();
 }
 
 async function aggiornaCodiceLotto(anno) {
@@ -1133,7 +1149,9 @@ async function popolaFormLotto(id) {
     }
 
     document.getElementById("l-anno").value = l.anno_campagna || "";
-    document.getElementById("l-data").value = l.data_molitura || "";
+    const lDataEl = document.getElementById("l-data");
+    if (lDataEl._flatpickr) lDataEl._flatpickr.setDate(l.data_molitura);
+    else lDataEl.value = l.data_molitura || "";
     document.getElementById("l-frantoio").value = l.frantoio || "";
     document.getElementById("l-kg").value = l.kg_olive || "";
     document.getElementById("l-litri").value = l.litri_olio || "";
@@ -1382,13 +1400,13 @@ async function renderConfezionamentoForm(id) {
   popolaContenitoriSelect();
   await renderLottiSelezione();
   initConfFormCalcolo();
+  initConfFormUI();
+  initFlatpickr();
 
   if (id) {
     document.getElementById("form-conf-titolo").textContent = "Modifica Confezionamento";
     await popolaFormConf(id);
   }
-
-  initConfFormUI();
 }
 
 function popolaContenitoriSelect() {
@@ -1475,7 +1493,9 @@ async function popolaFormConf(id) {
     const c = await res.json();
 
     document.getElementById("cf-codice").value = c.codice || "";
-    document.getElementById("cf-data").value = c.data_confezionamento || "";
+    const cfDataEl = document.getElementById("cf-data");
+    if (cfDataEl._flatpickr) cfDataEl._flatpickr.setDate(c.data_confezionamento);
+    else cfDataEl.value = c.data_confezionamento || "";
     document.getElementById("cf-anno").value = c.anno_campagna || "";
     document.getElementById("cf-formato").value = c.contenitore_id || "";
     document.getElementById("cf-num-unita").value = c.num_unita || "";
@@ -2165,6 +2185,12 @@ function renderFornitoreForm() {
   if (fornitoreInModifica) {
     document.getElementById("form-fornitore-titolo").textContent = "Modifica Fornitore";
     popolaFormFornitore(fornitoreInModifica);
+  } else {
+    // Carica prossimo codice automatico
+    fetch(`${API_URL}/fornitori/next-codice`)
+      .then(r => r.json())
+      .then(d => { document.getElementById("forn-codice").value = d.codice; })
+      .catch(() => {});
   }
 }
 
@@ -2211,7 +2237,7 @@ async function salvaFornitore(e) {
   e.preventDefault();
 
   const body = {
-    codice: document.getElementById("forn-codice").value.trim(),
+    codice: document.getElementById("forn-codice").value.trim() || null,
     tipo_fornitore: document.getElementById("forn-tipo").value,
     nome: document.getElementById("forn-nome").value.trim() || null,
     cognome: document.getElementById("forn-cognome").value.trim() || null,
@@ -2273,6 +2299,727 @@ function eliminaFornitore(id, nome) {
 }
 
 // =============================================
+// FLATPICKR — Inizializzazione globale
+// =============================================
+
+function initFlatpickr(container) {
+  const els = (container || document).querySelectorAll(".flatpickr-date");
+  els.forEach(el => {
+    if (el._flatpickr) return;
+    flatpickr(el, {
+      locale: "it",
+      dateFormat: "Y-m-d",
+      altInput: true,
+      altFormat: "d/m/Y",
+      allowInput: true,
+      theme: "dark",
+    });
+  });
+}
+
+// =============================================
+// COSTI — Stato
+// =============================================
+
+let costiLista = [];
+let costoInModifica = null;
+let categorieCostoLista = [];
+
+const STATO_PAGAMENTO_LABELS = {
+  pagato: "Pagato",
+  da_pagare: "Da pagare",
+  parziale: "Parziale",
+};
+
+const STATO_PAGAMENTO_BADGE = {
+  pagato: "bg-success",
+  da_pagare: "bg-danger",
+  parziale: "bg-warning text-dark",
+};
+
+const TIPO_DOC_LABELS = {
+  fattura: "Fattura",
+  ricevuta: "Ricevuta",
+  nota_credito: "Nota credito",
+  scontrino: "Scontrino",
+};
+
+const MODALITA_PAG_LABELS = {
+  bonifico: "Bonifico",
+  contanti: "Contanti",
+  carta: "Carta",
+  assegno: "Assegno",
+  riba: "Ri.Ba",
+};
+
+// =============================================
+// COSTI — Lista
+// =============================================
+
+async function renderCosti() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-costi");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  document.getElementById("btn-nuovo-costo")?.addEventListener("click", () => renderCostoForm());
+  document.getElementById("btn-gestisci-categorie")?.addEventListener("click", () => renderCategorieCosto());
+
+  // Filtri
+  document.getElementById("filtro-costi-anno")?.addEventListener("change", () => caricaCosti());
+  document.getElementById("filtro-costi-tipo")?.addEventListener("change", () => {
+    aggiornaFiltroCategorie();
+    caricaCosti();
+  });
+  document.getElementById("filtro-costi-categoria")?.addEventListener("change", () => caricaCosti());
+  document.getElementById("filtro-costi-stato")?.addEventListener("change", () => caricaCosti());
+  document.getElementById("filtro-costi-fornitore")?.addEventListener("change", () => caricaCosti());
+
+  await caricaCategorieCosto();
+  await popolaFiltroCosti();
+  await caricaCostiStats();
+  await caricaCosti();
+}
+
+async function caricaCategorieCosto() {
+  try {
+    const res = await fetch(`${API_URL}/categorie-costo/`);
+    categorieCostoLista = await res.json();
+  } catch (err) {
+    console.error("Errore caricamento categorie:", err);
+  }
+}
+
+async function popolaFiltroCosti() {
+  // Anni
+  try {
+    const res = await fetch(`${API_URL}/costi/anni`);
+    const anni = await res.json();
+    const selAnno = document.getElementById("filtro-costi-anno");
+    if (selAnno) {
+      anni.forEach(a => {
+        const opt = document.createElement("option");
+        opt.value = a;
+        opt.textContent = a;
+        selAnno.appendChild(opt);
+      });
+    }
+  } catch (err) { /* ignore */ }
+
+  // Categorie
+  aggiornaFiltroCategorie();
+
+  // Fornitori
+  try {
+    const res = await fetch(`${API_URL}/fornitori/?tutti=false`);
+    const fornitori = await res.json();
+    const selForn = document.getElementById("filtro-costi-fornitore");
+    if (selForn) {
+      fornitori.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = f.denominazione || f.codice;
+        selForn.appendChild(opt);
+      });
+    }
+  } catch (err) { /* ignore */ }
+}
+
+function aggiornaFiltroCategorie() {
+  const tipoFiltro = document.getElementById("filtro-costi-tipo")?.value || "";
+  const selCat = document.getElementById("filtro-costi-categoria");
+  if (!selCat) return;
+  selCat.innerHTML = '<option value="">Tutte le categorie</option>';
+  const filtered = tipoFiltro ? categorieCostoLista.filter(c => c.tipo_costo === tipoFiltro) : categorieCostoLista;
+  filtered.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.nome;
+    selCat.appendChild(opt);
+  });
+}
+
+async function caricaCostiStats() {
+  try {
+    const anno = document.getElementById("filtro-costi-anno")?.value || "";
+    const url = anno ? `${API_URL}/costi/stats?anno=${anno}` : `${API_URL}/costi/stats`;
+    const res = await fetch(url);
+    const s = await res.json();
+
+    const fmt = (v) => "\u20AC " + Number(v).toLocaleString("it-IT", {minimumFractionDigits:2});
+
+    document.getElementById("stat-costi-count").textContent = s.totale_count;
+    document.getElementById("stat-costi-totale").textContent = fmt(s.totale_importo);
+    document.getElementById("stat-costi-pagati").textContent = fmt(s.totale_pagati);
+    document.getElementById("stat-costi-da-pagare").textContent = fmt(s.totale_da_pagare);
+    document.getElementById("stat-costi-campagna").textContent = fmt(s.totale_campagna);
+    document.getElementById("stat-costi-strutturale").textContent = fmt(s.totale_strutturale);
+  } catch (err) {
+    console.error("Errore stats costi:", err);
+  }
+}
+
+async function caricaCosti() {
+  try {
+    const params = new URLSearchParams();
+    const anno = document.getElementById("filtro-costi-anno")?.value;
+    const tipo = document.getElementById("filtro-costi-tipo")?.value;
+    const cat = document.getElementById("filtro-costi-categoria")?.value;
+    const stato = document.getElementById("filtro-costi-stato")?.value;
+    const forn = document.getElementById("filtro-costi-fornitore")?.value;
+
+    if (anno) params.set("anno", anno);
+    if (tipo) params.set("tipo", tipo);
+    if (cat) params.set("categoria_id", cat);
+    if (stato) params.set("stato", stato);
+    if (forn) params.set("fornitore_id", forn);
+
+    const res = await fetch(`${API_URL}/costi/?${params.toString()}`);
+    costiLista = await res.json();
+    renderTabellaCosti();
+  } catch (err) {
+    console.error("Errore caricamento costi:", err);
+  }
+}
+
+function renderTabellaCosti() {
+  const tbody = document.getElementById("costi-tbody");
+  if (!tbody) return;
+
+  if (costiLista.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nessun costo trovato</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = costiLista.map(c => `
+    <tr>
+      <td><code>${c.codice || "—"}</code></td>
+      <td>${c.data_fattura || "—"}</td>
+      <td>
+        <span class="badge ${c.categoria_tipo === "campagna" ? "bg-info text-dark" : "bg-secondary"}">${c.categoria_tipo || ""}</span>
+        ${c.categoria_nome || "—"}
+      </td>
+      <td>${c.descrizione || "—"} ${c.documento ? '<i class="fa-solid fa-paperclip text-secondary ms-1" title="Documento allegato"></i>' : ""}</td>
+      <td>${c.fornitore_denominazione || "—"}</td>
+      <td class="text-end fw-bold">&euro; ${Number(c.importo_totale).toLocaleString("it-IT", {minimumFractionDigits:2})}</td>
+      <td class="text-center">
+        <span class="badge ${STATO_PAGAMENTO_BADGE[c.stato_pagamento] || "bg-secondary"}">
+          ${STATO_PAGAMENTO_LABELS[c.stato_pagamento] || c.stato_pagamento}
+        </span>
+      </td>
+      <td class="text-center">
+        <button class="btn-action btn-action-edit" onclick="editCosto(${c.id})" title="Modifica">
+          <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function editCosto(id) {
+  try {
+    const res = await fetch(`${API_URL}/costi/${id}`);
+    costoInModifica = await res.json();
+    renderCostoForm();
+  } catch (err) {
+    console.error("Errore caricamento costo:", err);
+  }
+}
+
+// =============================================
+// COSTI — Form
+// =============================================
+
+function _mostraCostoDocPreview(tipo, url, filename) {
+  // Aggiorna info file
+  const icon = document.getElementById("costo-doc-icon");
+  const fnEl = document.getElementById("costo-doc-filename");
+  const hint = document.getElementById("costo-doc-hint");
+  if (tipo === "pdf") {
+    icon.className = "fa-solid fa-file-pdf fa-2x";
+    icon.style.color = "#e74c3c";
+  } else {
+    icon.className = "fa-solid fa-file-image fa-2x";
+    icon.style.color = "#3498db";
+  }
+  fnEl.textContent = filename || "Documento";
+  hint.textContent = "File caricato";
+
+  // Mostra viewer, nascondi placeholder
+  document.getElementById("costo-doc-viewer").style.display = "";
+  document.getElementById("costo-doc-placeholder").style.display = "none";
+
+  const iframe = document.getElementById("costo-doc-iframe");
+  const img = document.getElementById("costo-doc-img");
+  if (tipo === "pdf") {
+    iframe.src = url;
+    iframe.style.display = "";
+    img.style.display = "none";
+  } else {
+    img.src = url;
+    img.style.display = "";
+    iframe.style.display = "none";
+  }
+
+  // Mostra pulsanti
+  const btnApri = document.getElementById("btn-apri-doc");
+  btnApri.href = url;
+  btnApri.style.display = "";
+  document.getElementById("btn-rimuovi-doc").style.display = "";
+
+  // Badge verde nel tab
+  document.getElementById("costo-doc-badge").style.display = "";
+}
+
+function _resetCostoDocViewer() {
+  document.getElementById("costo-doc-icon").className = "fa-solid fa-file-circle-plus fa-2x text-secondary";
+  document.getElementById("costo-doc-icon").style.color = "";
+  document.getElementById("costo-doc-filename").textContent = "Nessun documento allegato";
+  document.getElementById("costo-doc-hint").textContent = "Carica un file JPG, PNG o PDF";
+  document.getElementById("costo-doc-viewer").style.display = "none";
+  document.getElementById("costo-doc-placeholder").style.display = "";
+  document.getElementById("costo-doc-iframe").src = "";
+  document.getElementById("costo-doc-iframe").style.display = "none";
+  document.getElementById("costo-doc-img").src = "";
+  document.getElementById("costo-doc-img").style.display = "none";
+  document.getElementById("btn-apri-doc").style.display = "none";
+  document.getElementById("btn-rimuovi-doc").style.display = "none";
+  document.getElementById("costo-doc-badge").style.display = "none";
+}
+
+async function renderCostoForm() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-costo-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  document.getElementById("btn-torna-costi")?.addEventListener("click", () => {
+    costoInModifica = null;
+    renderCosti();
+  });
+
+  // Radio tipo -> filtra categorie + mostra/nascondi ammortamento
+  document.querySelectorAll('input[name="costo-tipo"]').forEach(r => {
+    r.addEventListener("change", () => {
+      aggiornaSelectCategorieCosto();
+      toggleAmmortamento();
+    });
+  });
+
+  // Calcolo IVA
+  document.getElementById("costo-imponibile")?.addEventListener("input", calcolaImportiCosto);
+  document.getElementById("costo-iva")?.addEventListener("change", calcolaImportiCosto);
+
+  // Calcolo quota ammortamento
+  document.getElementById("costo-anni-ammortamento")?.addEventListener("change", calcolaQuotaAmmortamento);
+
+  // Form submit
+  document.getElementById("form-costo")?.addEventListener("submit", salvaCosto);
+
+  // Carica categorie e fornitori per i dropdown
+  await caricaCategorieCosto();
+  await popolaSelectFornitoriCosto();
+
+  // Anno default
+  if (!costoInModifica) {
+    document.getElementById("costo-anno").value = new Date().getFullYear();
+  }
+
+  aggiornaSelectCategorieCosto();
+
+  // Init flatpickr sui campi data (PRIMA di popolare il form)
+  initFlatpickr();
+
+  // Popola form se modifica
+  if (costoInModifica) {
+    popolaFormCosto(costoInModifica);
+  }
+
+  // Tab switch: Dati Fattura <-> Documento
+  document.getElementById("costo-tab-dati")?.addEventListener("click", () => {
+    document.getElementById("costo-tab-dati").classList.add("active");
+    document.getElementById("costo-tab-doc").classList.remove("active");
+    document.getElementById("costo-content-dati").style.display = "";
+    document.getElementById("costo-content-doc").style.display = "none";
+  });
+  document.getElementById("costo-tab-doc")?.addEventListener("click", () => {
+    document.getElementById("costo-tab-doc").classList.add("active");
+    document.getElementById("costo-tab-dati").classList.remove("active");
+    document.getElementById("costo-content-doc").style.display = "";
+    document.getElementById("costo-content-dati").style.display = "none";
+  });
+
+  // Preview documento su selezione file
+  document.getElementById("costo-doc-input")?.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    _mostraCostoDocPreview(file.type === "application/pdf" ? "pdf" : "image", URL.createObjectURL(file), file.name);
+  });
+
+  // Rimuovi documento allegato
+  document.getElementById("btn-rimuovi-doc")?.addEventListener("click", async () => {
+    const costoId = document.getElementById("costo-id")?.value;
+    if (!costoId) return;
+    try {
+      const res = await fetch(`${API_URL}/costi/${costoId}/documento`, { method: "DELETE" });
+      if (res.ok) {
+        _resetCostoDocViewer();
+        document.getElementById("costo-doc-input").value = "";
+      }
+    } catch (err) {
+      console.error("Errore rimozione documento:", err);
+    }
+  });
+
+  // Auto-codice
+  aggiornaCodiciCosto();
+  document.getElementById("costo-anno")?.addEventListener("change", aggiornaCodiciCosto);
+}
+
+function aggiornaSelectCategorieCosto() {
+  const tipo = document.querySelector('input[name="costo-tipo"]:checked')?.value || "campagna";
+  const sel = document.getElementById("costo-categoria");
+  if (!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = "";
+  const filtered = categorieCostoLista.filter(c => c.tipo_costo === tipo && c.attiva !== false);
+  filtered.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.nome;
+    sel.appendChild(opt);
+  });
+  // Ripristina selezione se possibile
+  if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
+    sel.value = currentVal;
+  }
+}
+
+function toggleAmmortamento() {
+  const tipo = document.querySelector('input[name="costo-tipo"]:checked')?.value;
+  const section = document.getElementById("costo-ammortamento-section");
+  if (section) {
+    section.style.display = tipo === "strutturale" ? "block" : "none";
+  }
+  if (tipo !== "strutturale") {
+    const sel = document.getElementById("costo-anni-ammortamento");
+    if (sel) sel.value = "0";
+    const quota = document.getElementById("costo-quota-annua");
+    if (quota) quota.value = "";
+  }
+}
+
+async function popolaSelectFornitoriCosto() {
+  try {
+    const res = await fetch(`${API_URL}/fornitori/?tutti=false`);
+    const fornitori = await res.json();
+    const sel = document.getElementById("costo-fornitore");
+    if (!sel) return;
+    fornitori.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = f.denominazione || f.codice;
+      sel.appendChild(opt);
+    });
+  } catch (err) { /* ignore */ }
+}
+
+function calcolaImportiCosto() {
+  const imponibile = parseFloat(document.getElementById("costo-imponibile")?.value) || 0;
+  const ivaPct = parseFloat(document.getElementById("costo-iva")?.value) || 0;
+  const importoIva = Math.round(imponibile * ivaPct / 100 * 100) / 100;
+  const totale = Math.round((imponibile + importoIva) * 100) / 100;
+
+  document.getElementById("costo-importo-iva").value = importoIva.toFixed(2);
+  document.getElementById("costo-importo-totale").value = totale.toFixed(2);
+
+  calcolaQuotaAmmortamento();
+}
+
+function calcolaQuotaAmmortamento() {
+  const anni = parseInt(document.getElementById("costo-anni-ammortamento")?.value) || 0;
+  const totale = parseFloat(document.getElementById("costo-importo-totale")?.value) || 0;
+  const quota = anni > 0 ? (totale / anni).toFixed(2) : "";
+  document.getElementById("costo-quota-annua").value = quota;
+}
+
+async function aggiornaCodiciCosto() {
+  const anno = document.getElementById("costo-anno")?.value;
+  if (!anno || costoInModifica) return;
+  try {
+    const res = await fetch(`${API_URL}/costi/next-codice?anno=${anno}`);
+    const data = await res.json();
+    document.getElementById("costo-codice").value = data.codice;
+  } catch (err) { /* ignore */ }
+}
+
+function popolaFormCosto(c) {
+  document.getElementById("costo-form-title").textContent = "Modifica Costo";
+  document.getElementById("costo-id").value = c.id;
+  document.getElementById("costo-codice").value = c.codice || "";
+  document.getElementById("costo-anno").value = c.anno_campagna;
+  document.getElementById("costo-descrizione").value = c.descrizione || "";
+
+  // Tipo radio
+  if (c.categoria_tipo === "strutturale") {
+    document.getElementById("costo-tipo-strutturale").checked = true;
+  } else {
+    document.getElementById("costo-tipo-campagna").checked = true;
+  }
+  aggiornaSelectCategorieCosto();
+  document.getElementById("costo-categoria").value = c.categoria_id;
+  toggleAmmortamento();
+
+  // Fornitore
+  if (c.fornitore_id) {
+    document.getElementById("costo-fornitore").value = c.fornitore_id;
+  }
+
+  // Fattura
+  document.getElementById("costo-data-fattura")._flatpickr?.setDate(c.data_fattura);
+  document.getElementById("costo-numero-fattura").value = c.numero_fattura || "";
+  document.getElementById("costo-tipo-documento").value = c.tipo_documento || "fattura";
+
+  // Importi
+  document.getElementById("costo-imponibile").value = c.imponibile;
+  document.getElementById("costo-iva").value = c.iva_percentuale;
+  calcolaImportiCosto();
+
+  // Pagamento
+  document.getElementById("costo-stato-pagamento").value = c.stato_pagamento || "da_pagare";
+  if (c.data_pagamento) {
+    document.getElementById("costo-data-pagamento")._flatpickr?.setDate(c.data_pagamento);
+  }
+  document.getElementById("costo-modalita-pagamento").value = c.modalita_pagamento || "";
+  document.getElementById("costo-riferimento-pagamento").value = c.riferimento_pagamento || "";
+
+  // Ammortamento
+  document.getElementById("costo-anni-ammortamento").value = c.anni_ammortamento || 0;
+  calcolaQuotaAmmortamento();
+
+  // Note
+  document.getElementById("costo-note").value = c.note || "";
+
+  // Documento allegato
+  if (c.documento) {
+    const isImage = /\.(jpe?g|png|webp)$/i.test(c.documento);
+    const url = `/uploads/${c.documento}`;
+    const filename = c.documento.split("/").pop();
+    _mostraCostoDocPreview(isImage ? "image" : "pdf", url, filename);
+  }
+
+  // Bottone elimina
+  document.getElementById("btn-elimina-costo").style.display = "inline-block";
+  document.getElementById("btn-elimina-costo").addEventListener("click", () => eliminaCosto(c.id));
+}
+
+async function salvaCosto(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("costo-id")?.value;
+  const tipo = document.querySelector('input[name="costo-tipo"]:checked')?.value;
+
+  const payload = {
+    categoria_id: parseInt(document.getElementById("costo-categoria").value),
+    anno_campagna: parseInt(document.getElementById("costo-anno").value),
+    descrizione: document.getElementById("costo-descrizione").value.trim(),
+    fornitore_id: document.getElementById("costo-fornitore").value ? parseInt(document.getElementById("costo-fornitore").value) : null,
+    data_fattura: document.getElementById("costo-data-fattura").value,
+    numero_fattura: document.getElementById("costo-numero-fattura").value.trim() || null,
+    tipo_documento: document.getElementById("costo-tipo-documento").value,
+    imponibile: parseFloat(document.getElementById("costo-imponibile").value),
+    iva_percentuale: parseFloat(document.getElementById("costo-iva").value),
+    stato_pagamento: document.getElementById("costo-stato-pagamento").value,
+    data_pagamento: document.getElementById("costo-data-pagamento").value || null,
+    modalita_pagamento: document.getElementById("costo-modalita-pagamento").value || null,
+    riferimento_pagamento: document.getElementById("costo-riferimento-pagamento").value.trim() || null,
+    anni_ammortamento: tipo === "strutturale" ? parseInt(document.getElementById("costo-anni-ammortamento").value) : 0,
+    note: document.getElementById("costo-note").value.trim() || null,
+  };
+
+  try {
+    const method = id ? "PUT" : "POST";
+    const url = id ? `${API_URL}/costi/${id}` : `${API_URL}/costi/`;
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore nel salvataggio.");
+      return;
+    }
+
+    const saved = await res.json();
+
+    // Upload documento se selezionato
+    const docInput = document.getElementById("costo-doc-input");
+    if (docInput?.files.length > 0) {
+      const formData = new FormData();
+      formData.append("file", docInput.files[0]);
+      await fetch(`${API_URL}/costi/${saved.id}/documento`, {
+        method: "POST",
+        body: formData,
+      });
+    }
+
+    costoInModifica = null;
+    renderCosti();
+  } catch (err) {
+    console.error("Errore salvataggio costo:", err);
+    alert("Errore di rete.");
+  }
+}
+
+function eliminaCosto(id) {
+  mostraConferma("Eliminare questo costo?", async () => {
+    try {
+      await fetch(`${API_URL}/costi/${id}`, { method: "DELETE" });
+      costoInModifica = null;
+      renderCosti();
+    } catch (err) {
+      console.error("Errore eliminazione costo:", err);
+    }
+  });
+}
+
+// =============================================
+// CATEGORIE COSTO — Gestione
+// =============================================
+
+async function renderCategorieCosto() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-categorie-costo");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  document.getElementById("btn-torna-costi-da-cat")?.addEventListener("click", () => renderCosti());
+  document.getElementById("btn-nuova-categoria")?.addEventListener("click", () => mostraFormCategoria());
+  document.getElementById("btn-annulla-cat")?.addEventListener("click", () => nascondiFormCategoria());
+  document.getElementById("form-categoria")?.addEventListener("submit", salvaCategoria);
+
+  await caricaCategorieCosto();
+  renderTabellaCategorie();
+}
+
+function mostraFormCategoria(cat) {
+  const wrapper = document.getElementById("cat-form-wrapper");
+  wrapper.style.display = "block";
+  if (cat) {
+    document.getElementById("cat-id").value = cat.id;
+    document.getElementById("cat-codice").value = cat.codice;
+    document.getElementById("cat-nome").value = cat.nome;
+    document.getElementById("cat-tipo").value = cat.tipo_costo;
+  } else {
+    document.getElementById("cat-id").value = "";
+    document.getElementById("cat-codice").value = "";
+    document.getElementById("cat-nome").value = "";
+    document.getElementById("cat-tipo").value = "campagna";
+  }
+}
+
+function nascondiFormCategoria() {
+  document.getElementById("cat-form-wrapper").style.display = "none";
+}
+
+function renderTabellaCategorie() {
+  const tbody = document.getElementById("categorie-tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = categorieCostoLista.map(c => `
+    <tr>
+      <td><code>${c.codice}</code></td>
+      <td>${c.nome}</td>
+      <td><span class="badge ${c.tipo_costo === "campagna" ? "bg-info text-dark" : "bg-secondary"}">${c.tipo_costo}</span></td>
+      <td class="text-center">
+        <span class="badge ${c.attiva ? "bg-success" : "bg-danger"}">${c.attiva ? "Si" : "No"}</span>
+      </td>
+      <td class="text-center">
+        <button class="btn btn-sm btn-outline-light me-1" onclick="editCategoriaCosto(${c.id})">
+          <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+        <button class="btn btn-sm ${c.attiva ? "btn-outline-warning" : "btn-outline-success"}" onclick="toggleCategoriaCosto(${c.id}, ${!c.attiva})">
+          <i class="fa-solid ${c.attiva ? "fa-eye-slash" : "fa-eye"}"></i>
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="eliminaCategoriaCosto(${c.id})">
+          <i class="fa-solid fa-trash"></i>
+        </button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function editCategoriaCosto(id) {
+  const cat = categorieCostoLista.find(c => c.id === id);
+  if (cat) mostraFormCategoria(cat);
+}
+
+async function toggleCategoriaCosto(id, nuovoStato) {
+  try {
+    await fetch(`${API_URL}/categorie-costo/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attiva: nuovoStato }),
+    });
+    await caricaCategorieCosto();
+    renderTabellaCategorie();
+  } catch (err) {
+    console.error("Errore toggle categoria:", err);
+  }
+}
+
+async function eliminaCategoriaCosto(id) {
+  mostraConferma("Eliminare questa categoria?", async () => {
+    try {
+      const res = await fetch(`${API_URL}/categorie-costo/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore eliminazione.");
+        return;
+      }
+      await caricaCategorieCosto();
+      renderTabellaCategorie();
+    } catch (err) {
+      console.error("Errore eliminazione categoria:", err);
+    }
+  });
+}
+
+async function salvaCategoria(e) {
+  e.preventDefault();
+  const id = document.getElementById("cat-id")?.value;
+  const payload = {
+    codice: document.getElementById("cat-codice").value.trim().toUpperCase(),
+    nome: document.getElementById("cat-nome").value.trim(),
+    tipo_costo: document.getElementById("cat-tipo").value,
+  };
+
+  try {
+    const method = id ? "PUT" : "POST";
+    const url = id ? `${API_URL}/categorie-costo/${id}` : `${API_URL}/categorie-costo/`;
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore salvataggio.");
+      return;
+    }
+
+    nascondiFormCategoria();
+    await caricaCategorieCosto();
+    renderTabellaCategorie();
+  } catch (err) {
+    console.error("Errore salvataggio categoria:", err);
+  }
+}
+
+// =============================================
 // INIT
 // =============================================
 
@@ -2315,6 +3062,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-fornitori")?.addEventListener("click", () => {
     setActiveMenu("menu-fornitori");
     renderFornitori();
+  });
+
+  document.getElementById("menu-costi")?.addEventListener("click", () => {
+    setActiveMenu("menu-costi");
+    renderCosti();
   });
 
   document.getElementById("menu-utenti")?.addEventListener("click", () => {

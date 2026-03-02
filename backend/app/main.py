@@ -23,6 +23,8 @@ from app.routers.confezionamento import router as confezionamento_router
 from app.routers.contenitore import router as contenitore_router
 from app.routers.cliente import router as cliente_router
 from app.routers.fornitore import router as fornitore_router
+from app.routers.categoria_costo import router as categoria_costo_router
+from app.routers.costo import router as costo_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -64,12 +66,23 @@ app.include_router(confezionamento_router, prefix="/api")
 app.include_router(contenitore_router, prefix="/api")
 app.include_router(cliente_router, prefix="/api")
 app.include_router(fornitore_router, prefix="/api")
+app.include_router(categoria_costo_router, prefix="/api")
+app.include_router(costo_router, prefix="/api")
 
 
 # ------------------------------------------------------------------------------
 # Bootstrap Database (DEV ONLY)
 # ------------------------------------------------------------------------------
 Base.metadata.create_all(bind=engine)
+
+# Seed categorie costo
+from app.database import SessionLocal
+from app.routers.categoria_costo import seed_categorie
+_db = SessionLocal()
+try:
+    seed_categorie(_db)
+finally:
+    _db.close()
 
 
 # ------------------------------------------------------------------------------

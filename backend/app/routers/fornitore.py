@@ -12,6 +12,23 @@ from app.models.fornitore import FornitoreCreate, FornitoreUpdate, FornitoreOut
 router = APIRouter(prefix="/fornitori", tags=["fornitori"])
 
 
+def _next_codice_fornitore(db: Session) -> str:
+    """Genera il prossimo codice fornitore: 0001, 0002, ..."""
+    last = (
+        db.query(Fornitore)
+        .order_by(Fornitore.codice.desc())
+        .first()
+    )
+    if last and last.codice:
+        try:
+            num = int(last.codice) + 1
+        except ValueError:
+            num = 1
+    else:
+        num = 1
+    return f"{num:04d}"
+
+
 def _to_out(f: Fornitore) -> FornitoreOut:
     if f.tipo_fornitore == "azienda":
         denominazione = f.ragione_sociale or ""
@@ -48,6 +65,11 @@ def _to_out(f: Fornitore) -> FornitoreOut:
         created_at=f.created_at,
         updated_at=f.updated_at,
     )
+
+
+@router.get("/next-codice")
+def next_codice_fornitore(db: Session = Depends(get_db)):
+    return {"codice": _next_codice_fornitore(db)}
 
 
 @router.get("/stats")
@@ -111,6 +133,10 @@ def get_fornitore(fornitore_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=FornitoreOut, status_code=status.HTTP_201_CREATED)
 def create_fornitore(data: FornitoreCreate, db: Session = Depends(get_db)):
+    # Auto-genera codice
+    if not data.codice or data.codice.strip() == "":
+        data.codice = _next_codice_fornitore(db)
+
     if db.query(Fornitore).filter(Fornitore.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice fornitore gia' esistente.")
 

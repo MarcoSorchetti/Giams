@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class FornitoreBase(BaseModel):
-    codice: str = Field(..., max_length=20)
+    codice: Optional[str] = Field(None, max_length=20)
     tipo_fornitore: str = Field(..., max_length=10)
 
     # Anagrafica privato
