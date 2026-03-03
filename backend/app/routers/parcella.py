@@ -47,6 +47,7 @@ def parcelle_stats(db: Session = Depends(get_db)):
 @router.get("/")
 def list_parcelle(
     q: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     varieta: Optional[str] = Query(None),
     stato: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -61,6 +62,15 @@ def list_parcelle(
             or_(
                 Parcella.nome.ilike(like),
                 Parcella.codice.ilike(like),
+            )
+        )
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Parcella.codice.ilike(term),
+                Parcella.nome.ilike(term),
+                Parcella.localita.ilike(term),
             )
         )
     if varieta:

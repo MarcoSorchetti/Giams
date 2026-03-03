@@ -8,7 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.database import get_db
 
@@ -284,12 +284,22 @@ def list_costi(
     categoria_id: Optional[int] = Query(None),
     stato: Optional[str] = Query(None),
     fornitore_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Costo)
 
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Costo.codice.ilike(term),
+                Costo.descrizione.ilike(term),
+                Costo.numero_fattura.ilike(term),
+            )
+        )
     if anno:
         query = query.filter(Costo.anno_campagna == anno)
     if categoria_id:

@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.database import get_db
 from app.models.confezionamento_sql import Confezionamento, ConfezionamentoLotto
@@ -118,11 +118,20 @@ def list_confezionamenti(
     anno: Optional[int] = Query(None),
     formato: Optional[str] = Query(None),
     contenitore_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Confezionamento)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Confezionamento.codice.ilike(term),
+                Confezionamento.formato.ilike(term),
+            )
+        )
     if anno:
         query = query.filter(Confezionamento.anno_campagna == anno)
     if formato:

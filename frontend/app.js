@@ -24,6 +24,15 @@ let venditeLista = [];
 let venditaInModifica = null;
 let venditeConfezionamentiCache = [];
 
+// ---- Dashboard ----
+let dashboardCharts = [];
+
+// ---- Utilita' ----
+function debounceSearch(fn, delay = 400) {
+  let timer;
+  return () => { clearTimeout(timer); timer = setTimeout(fn, delay); };
+}
+
 // ---- Paginazione & CSV ----
 function renderPaginazione(containerId, infoId, pagina, totalePages, totale, callback) {
   const container = document.getElementById(containerId);
@@ -138,6 +147,9 @@ function setActiveMenu(id) {
   document.querySelectorAll(".sidebar-link").forEach(b => b.classList.remove("active"));
   const el = document.getElementById(id);
   if (el) el.classList.add("active");
+  // Cleanup grafici dashboard quando si naviga via
+  dashboardCharts.forEach(c => c.destroy());
+  dashboardCharts = [];
 }
 
 // =============================================
@@ -261,6 +273,378 @@ async function renderHome() {
     setActiveMenu("menu-utenti");
     renderUtenti();
   });
+}
+
+// =============================================
+// DASHBOARD ANALITICA
+// =============================================
+
+const CHART_COLORS = {
+  verde: "rgba(77, 124, 15, 0.85)",
+  verdeChiaro: "rgba(134, 239, 172, 0.85)",
+  arancio: "rgba(251, 146, 60, 0.85)",
+  rosso: "rgba(248, 113, 113, 0.85)",
+  blu: "rgba(96, 165, 250, 0.85)",
+  giallo: "rgba(250, 204, 21, 0.85)",
+  viola: "rgba(192, 132, 252, 0.85)",
+  grigio: "rgba(156, 163, 175, 0.5)",
+};
+
+const CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: "#d1d5db", font: { size: 11 } } },
+  },
+  scales: {
+    x: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(75,85,99,0.3)" } },
+    y: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(75,85,99,0.3)" } },
+  },
+};
+
+function fmtNum(v, decimals = 0) {
+  if (v == null) return "0";
+  return Number(v).toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+async function renderDashboard() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-dashboard");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  // Tab switching
+  document.getElementById("dash-tabs")?.querySelectorAll(".dash-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".dash-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".dash-tab-content").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      const panel = document.getElementById(`dash-panel-${tab.dataset.tab}`);
+      if (panel) panel.classList.add("active");
+    });
+  });
+
+  // Popola selettore anni
+  try {
+    const resAnni = await apiFetch(`${API_URL}/lotti/anni`);
+    const anni = await resAnni.json();
+    const sel = document.getElementById("dashboard-anno");
+    if (anni.length === 0) {
+      sel.innerHTML = '<option value="">Nessun dato</option>';
+      return;
+    }
+    sel.innerHTML = anni.map(a => `<option value="${a}">${a}</option>`).join("");
+
+    // Carica dati con l'anno piu' recente selezionato per top-clienti/giacenza
+    await loadDashboardData(anni);
+
+    sel.addEventListener("change", async () => {
+      const anno = parseInt(sel.value);
+      await loadDashboardFilteredSections(anno);
+    });
+  } catch (e) {
+    console.error("Errore caricamento dashboard:", e);
+    main.innerHTML = '<div class="p-4 text-danger">Errore caricamento dashboard.</div>';
+  }
+}
+
+async function loadDashboardData(anni) {
+  // Fetch dati per TUTTI gli anni in parallelo (sezioni 1-4)
+  const promises = anni.map(async (anno) => {
+    const [lottiRes, costiCampRes, venditeRes, costiRes] = await Promise.all([
+      apiFetch(`${API_URL}/lotti/stats?anno=${anno}`),
+      apiFetch(`${API_URL}/costi/stats/campagna?anno=${anno}`),
+      apiFetch(`${API_URL}/vendite/stats?anno=${anno}`),
+      apiFetch(`${API_URL}/costi/stats?anno=${anno}`),
+    ]);
+    return {
+      anno,
+      lotti: await lottiRes.json(),
+      costiCamp: await costiCampRes.json(),
+      vendite: await venditeRes.json(),
+      costi: await costiRes.json(),
+    };
+  });
+
+  const allData = await Promise.all(promises);
+  // Ordina per anno crescente
+  allData.sort((a, b) => a.anno - b.anno);
+
+  renderDashProduzione(allData);
+  renderDashRese(allData);
+  renderDashCostoLitro(allData);
+  renderDashFatturatoCosti(allData);
+
+  // Sezioni filtrate per anno (anno piu' recente)
+  const annoCorrente = anni[0]; // gia' ordinati DESC dal backend
+  await loadDashboardFilteredSections(annoCorrente);
+}
+
+async function loadDashboardFilteredSections(anno) {
+  await Promise.all([
+    renderDashTopClienti(anno),
+    renderDashGiacenza(),
+  ]);
+}
+
+// ---- Sezione 1: Andamento Produzione ----
+function renderDashProduzione(allData) {
+  const tbody = document.querySelector("#dash-table-produzione tbody");
+  tbody.innerHTML = allData.map(d => `
+    <tr>
+      <td>${d.anno}</td>
+      <td class="text-end">${fmtNum(d.lotti.totale_kg_olive)}</td>
+      <td class="text-end">${fmtNum(d.lotti.totale_kg_olio)}</td>
+      <td class="text-end">${fmtNum(d.lotti.totale_litri)}</td>
+    </tr>
+  `).join("");
+
+  const ctx = document.getElementById("chart-produzione");
+  const chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: allData.map(d => String(d.anno)),
+      datasets: [
+        { label: "KG Olive", data: allData.map(d => d.lotti.totale_kg_olive), backgroundColor: CHART_COLORS.verde },
+        { label: "KG Olio", data: allData.map(d => d.lotti.totale_kg_olio), backgroundColor: CHART_COLORS.arancio },
+        { label: "Litri Olio", data: allData.map(d => d.lotti.totale_litri), backgroundColor: CHART_COLORS.blu },
+      ],
+    },
+    options: { ...CHART_DEFAULTS },
+  });
+  dashboardCharts.push(chart);
+}
+
+// ---- Sezione 2: Rese ----
+function renderDashRese(allData) {
+  const tbody = document.querySelector("#dash-table-rese tbody");
+  tbody.innerHTML = allData.map(d => {
+    const resaKg = d.lotti.totale_kg_olive > 0 ? (d.lotti.totale_kg_olio / d.lotti.totale_kg_olive * 100) : 0;
+    const resaLt = d.lotti.totale_kg_olive > 0 ? (d.lotti.totale_litri / d.lotti.totale_kg_olive * 100) : 0;
+    return `<tr>
+      <td>${d.anno}</td>
+      <td class="text-end">${fmtNum(resaKg, 1)}%</td>
+      <td class="text-end">${fmtNum(resaLt, 1)}%</td>
+    </tr>`;
+  }).join("");
+
+  const ctx = document.getElementById("chart-rese");
+  const chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: allData.map(d => String(d.anno)),
+      datasets: [
+        {
+          label: "Resa KG→KG (%)",
+          data: allData.map(d => d.lotti.totale_kg_olive > 0 ? +(d.lotti.totale_kg_olio / d.lotti.totale_kg_olive * 100).toFixed(1) : 0),
+          borderColor: CHART_COLORS.verde,
+          backgroundColor: "rgba(77, 124, 15, 0.2)",
+          fill: true, tension: 0.3,
+        },
+        {
+          label: "Resa KG→LT (%)",
+          data: allData.map(d => d.lotti.totale_kg_olive > 0 ? +(d.lotti.totale_litri / d.lotti.totale_kg_olive * 100).toFixed(1) : 0),
+          borderColor: CHART_COLORS.blu,
+          backgroundColor: "rgba(96, 165, 250, 0.2)",
+          fill: true, tension: 0.3,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true, ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => v + "%" } },
+      },
+    },
+  });
+  dashboardCharts.push(chart);
+}
+
+// ---- Sezione 3: Costo al Litro vs Prezzo Vendita ----
+function renderDashCostoLitro(allData) {
+  const tbody = document.querySelector("#dash-table-costo-litro tbody");
+  tbody.innerHTML = allData.map(d => {
+    const litriProd = d.lotti.totale_litri || 0;
+    const costoCamp = d.costiCamp.costo_totale_campagna || 0;
+    const costoLt = litriProd > 0 ? costoCamp / litriProd : 0;
+    const litriVend = d.vendite.litri_venduti || 0;
+    const prezzoLt = litriVend > 0 ? d.vendite.fatturato / litriVend : 0;
+    const margineLt = prezzoLt - costoLt;
+    const cls = margineLt >= 0 ? "margine-positivo" : "margine-negativo";
+    return `<tr>
+      <td>${d.anno}</td>
+      <td class="text-end">${fmtEuro(costoCamp)}</td>
+      <td class="text-end">${fmtNum(litriProd)}</td>
+      <td class="text-end">${fmtEuro(costoLt)}</td>
+      <td class="text-end">${fmtEuro(prezzoLt)}</td>
+      <td class="text-end ${cls}">${fmtEuro(margineLt)}</td>
+    </tr>`;
+  }).join("");
+
+  const ctx = document.getElementById("chart-costo-litro");
+  const chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: allData.map(d => String(d.anno)),
+      datasets: [
+        {
+          label: "Costo/Lt",
+          data: allData.map(d => {
+            const lt = d.lotti.totale_litri || 0;
+            return lt > 0 ? +((d.costiCamp.costo_totale_campagna || 0) / lt).toFixed(2) : 0;
+          }),
+          backgroundColor: CHART_COLORS.rosso,
+        },
+        {
+          label: "Prezzo Vendita/Lt",
+          data: allData.map(d => {
+            const lt = d.vendite.litri_venduti || 0;
+            return lt > 0 ? +(d.vendite.fatturato / lt).toFixed(2) : 0;
+          }),
+          backgroundColor: CHART_COLORS.verde,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true, ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => "€ " + v } },
+      },
+    },
+  });
+  dashboardCharts.push(chart);
+}
+
+// ---- Sezione 4: Fatturato vs Costi ----
+function renderDashFatturatoCosti(allData) {
+  const tbody = document.querySelector("#dash-table-fatturato tbody");
+  tbody.innerHTML = allData.map(d => {
+    const margine = d.vendite.fatturato - d.costi.totale_importo;
+    const cls = margine >= 0 ? "margine-positivo" : "margine-negativo";
+    return `<tr>
+      <td>${d.anno}</td>
+      <td class="text-end">${fmtEuro(d.vendite.fatturato)}</td>
+      <td class="text-end">${fmtEuro(d.costi.totale_importo)}</td>
+      <td class="text-end ${cls}">${fmtEuro(margine)}</td>
+      <td class="text-end">${fmtEuro(d.vendite.incassato)}</td>
+      <td class="text-end">${fmtEuro(d.vendite.da_incassare)}</td>
+    </tr>`;
+  }).join("");
+
+  const ctx = document.getElementById("chart-fatturato");
+  const chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: allData.map(d => String(d.anno)),
+      datasets: [
+        { label: "Fatturato", data: allData.map(d => d.vendite.fatturato), backgroundColor: CHART_COLORS.verde },
+        { label: "Costi", data: allData.map(d => d.costi.totale_importo), backgroundColor: CHART_COLORS.rosso },
+        {
+          label: "Margine",
+          data: allData.map(d => d.vendite.fatturato - d.costi.totale_importo),
+          type: "line",
+          borderColor: CHART_COLORS.giallo,
+          backgroundColor: "rgba(250, 204, 21, 0.2)",
+          fill: false, tension: 0.3, pointRadius: 5,
+        },
+      ],
+    },
+    options: {
+      ...CHART_DEFAULTS,
+      scales: {
+        ...CHART_DEFAULTS.scales,
+        y: { ...CHART_DEFAULTS.scales.y, ticks: { ...CHART_DEFAULTS.scales.y.ticks, callback: v => "€ " + fmtNum(v) } },
+      },
+    },
+  });
+  dashboardCharts.push(chart);
+}
+
+// ---- Sezione 5: Top Clienti ----
+async function renderDashTopClienti(anno) {
+  const tbody = document.querySelector("#dash-table-top-clienti tbody");
+  const label = document.getElementById("dash-top-clienti-anno");
+  if (label) label.textContent = `(${anno})`;
+
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/top-clienti?anno=${anno}&limit=10`);
+    const data = await res.json();
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nessun dato</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map((c, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.denominazione || c.codice}</td>
+        <td class="text-end">${c.num_vendite}</td>
+        <td class="text-end">${fmtEuro(c.fatturato)}</td>
+        <td class="text-end">${fmtEuro(c.incassato)}</td>
+      </tr>
+    `).join("");
+
+    // Distruggi eventuale chart precedente
+    const oldIdx = dashboardCharts.findIndex(c => c.canvas?.id === "chart-top-clienti");
+    if (oldIdx >= 0) { dashboardCharts[oldIdx].destroy(); dashboardCharts.splice(oldIdx, 1); }
+
+    const ctx = document.getElementById("chart-top-clienti");
+    const chart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: data.map(c => c.denominazione || c.codice),
+        datasets: [{
+          label: "Fatturato",
+          data: data.map(c => c.fatturato),
+          backgroundColor: CHART_COLORS.verde,
+        }],
+      },
+      options: {
+        ...CHART_DEFAULTS,
+        indexAxis: "y",
+        scales: {
+          x: { ...CHART_DEFAULTS.scales.x, ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => "€ " + fmtNum(v) } },
+          y: { ...CHART_DEFAULTS.scales.y, ticks: { ...CHART_DEFAULTS.scales.y.ticks, font: { size: 10 } } },
+        },
+      },
+    });
+    dashboardCharts.push(chart);
+  } catch (e) {
+    console.error("Errore top clienti:", e);
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Errore caricamento</td></tr>';
+  }
+}
+
+// ---- Sezione 6: Giacenza Magazzino ----
+async function renderDashGiacenza() {
+  const tbody = document.querySelector("#dash-table-giacenza tbody");
+  try {
+    const res = await apiFetch(`${API_URL}/magazzino/giacenze`);
+    const data = await res.json();
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessun dato</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map(g => `
+      <tr>
+        <td>${g.confezionamento_codice}</td>
+        <td>${g.formato}</td>
+        <td class="text-end">${fmtNum(g.capacita_litri, 2)}</td>
+        <td class="text-end">${fmtNum(g.totale_carichi)}</td>
+        <td class="text-end">${fmtNum(g.totale_scarichi)}</td>
+        <td class="text-end fw-bold">${fmtNum(g.giacenza_unita)}</td>
+        <td class="text-end fw-bold">${fmtNum(g.giacenza_litri, 1)}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    console.error("Errore giacenza:", e);
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">Errore caricamento</td></tr>';
+  }
 }
 
 // =============================================
@@ -717,6 +1101,7 @@ async function popolaFiltroAnniRaccolte() {
 function initRaccolteListUI() {
   document.getElementById("btn-nuova-raccolta")?.addEventListener("click", () => renderRaccoltaForm());
   document.getElementById("btn-filtra-raccolte")?.addEventListener("click", () => caricaRaccolte());
+  document.getElementById("search-raccolte")?.addEventListener("input", debounceSearch(() => caricaRaccolte()));
 }
 
 async function popolaFiltroParcelle() {
@@ -758,9 +1143,11 @@ async function caricaRaccolteStats() {
 async function caricaRaccolte(page = 1) {
   const anno = document.getElementById("filtro-raccolte-anno")?.value || "";
   const parcella = document.getElementById("filtro-raccolte-parcella")?.value || "";
+  const search = document.getElementById("search-raccolte")?.value?.trim() || "";
   const params = new URLSearchParams();
   if (anno) params.append("anno", anno);
   if (parcella) params.append("parcella_id", parcella);
+  if (search) params.set("search", search);
   params.set("page", page);
   params.set("per_page", 10);
 
@@ -1051,6 +1438,7 @@ async function popolaFiltroAnniLotti() {
 function initLottiListUI() {
   document.getElementById("btn-nuovo-lotto")?.addEventListener("click", () => renderLottoForm());
   document.getElementById("btn-filtra-lotti")?.addEventListener("click", () => caricaLotti());
+  document.getElementById("search-lotti")?.addEventListener("input", debounceSearch(() => caricaLotti()));
 }
 
 async function caricaLottiStats() {
@@ -1077,10 +1465,12 @@ async function caricaLotti(page = 1) {
   const anno = document.getElementById("filtro-lotti-anno")?.value || "";
   const tipo = document.getElementById("filtro-lotti-tipo")?.value || "";
   const stato = document.getElementById("filtro-lotti-stato")?.value || "";
+  const search = document.getElementById("search-lotti")?.value?.trim() || "";
   const params = new URLSearchParams();
   if (anno) params.append("anno", anno);
   if (tipo) params.append("tipo_olio", tipo);
   if (stato) params.append("stato", stato);
+  if (search) params.set("search", search);
   params.set("page", page);
   params.set("per_page", 10);
 
@@ -1434,6 +1824,7 @@ function initConfListUI() {
     caricaConfStats();
     caricaConfezionamenti();
   });
+  document.getElementById("search-confezionamenti")?.addEventListener("input", debounceSearch(() => caricaConfezionamenti()));
 }
 
 async function caricaConfStats() {
@@ -1457,9 +1848,11 @@ async function caricaConfStats() {
 async function caricaConfezionamenti(page = 1) {
   const anno = document.getElementById("filtro-conf-anno")?.value || "";
   const formato = document.getElementById("filtro-conf-formato")?.value || "";
+  const search = document.getElementById("search-confezionamenti")?.value?.trim() || "";
   const params = new URLSearchParams();
   if (anno) params.append("anno", anno);
   if (formato) params.append("formato", formato);
+  if (search) params.set("search", search);
   params.set("page", page);
   params.set("per_page", 10);
 
@@ -2485,6 +2878,9 @@ function initFlatpickr(container) {
 let costiLista = [];
 let costoInModifica = null;
 let categorieCostoLista = [];
+let catSortBy = "nome";
+let catSortDir = "asc";
+let catPage = 1;
 
 const STATO_PAGAMENTO_LABELS = {
   pagato: "Pagato",
@@ -2549,6 +2945,7 @@ async function renderCosti() {
   document.getElementById("filtro-costi-categoria")?.addEventListener("change", () => caricaCosti());
   document.getElementById("filtro-costi-stato")?.addEventListener("change", () => caricaCosti());
   document.getElementById("filtro-costi-fornitore")?.addEventListener("change", () => caricaCosti());
+  document.getElementById("search-costi")?.addEventListener("input", debounceSearch(() => caricaCosti()));
 
   await caricaCategorieCosto();
   await popolaFiltroCosti();
@@ -2558,8 +2955,9 @@ async function renderCosti() {
 
 async function caricaCategorieCosto() {
   try {
-    const res = await apiFetch(`${API_URL}/categorie-costo/`);
-    categorieCostoLista = await res.json();
+    const res = await apiFetch(`${API_URL}/categorie-costo/?per_page=100`);
+    const data = await res.json();
+    categorieCostoLista = data.items || [];
   } catch (err) {
     console.error("Errore caricamento categorie:", err);
   }
@@ -2643,11 +3041,13 @@ async function caricaCosti(page = 1) {
     const stato = document.getElementById("filtro-costi-stato")?.value;
     const forn = document.getElementById("filtro-costi-fornitore")?.value;
 
+    const search = document.getElementById("search-costi")?.value?.trim() || "";
     if (anno) params.set("anno", anno);
     if (tipo) params.set("tipo", tipo);
     if (cat) params.set("categoria_id", cat);
     if (stato) params.set("stato", stato);
     if (forn) params.set("fornitore_id", forn);
+    if (search) params.set("search", search);
     params.set("page", page);
     params.set("per_page", 10);
 
@@ -3075,39 +3475,98 @@ async function renderCategorieCosto() {
   main.appendChild(tpl.content.cloneNode(true));
 
   document.getElementById("btn-torna-costi-da-cat")?.addEventListener("click", () => renderCosti());
-  document.getElementById("btn-nuova-categoria")?.addEventListener("click", () => mostraFormCategoria());
-  document.getElementById("btn-annulla-cat")?.addEventListener("click", () => nascondiFormCategoria());
+  document.getElementById("btn-annulla-cat")?.addEventListener("click", () => resetFormCategoria());
   document.getElementById("form-categoria")?.addEventListener("submit", salvaCategoria);
 
+  document.getElementById("search-categorie")?.addEventListener("input", debounceSearch(() => {
+    catPage = 1;
+    caricaCategorieCostoTabella();
+  }));
+
+  // Sortable column headers
+  document.querySelectorAll(".sortable-th").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (catSortBy === col) {
+        catSortDir = catSortDir === "asc" ? "desc" : "asc";
+      } else {
+        catSortBy = col;
+        catSortDir = "asc";
+      }
+      catPage = 1;
+      caricaCategorieCostoTabella();
+    });
+  });
+
+  catPage = 1;
+  catSortBy = "nome";
+  catSortDir = "asc";
   await caricaCategorieCosto();
-  renderTabellaCategorie();
+  await caricaCategorieCostoTabella();
 }
 
 function mostraFormCategoria(cat) {
-  const wrapper = document.getElementById("cat-form-wrapper");
-  wrapper.style.display = "block";
+  const titolo = document.getElementById("cat-form-titolo");
   if (cat) {
+    titolo.innerHTML = '<i class="fa-solid fa-pen-to-square me-2"></i>Modifica Categoria';
     document.getElementById("cat-id").value = cat.id;
     document.getElementById("cat-codice").value = cat.codice;
     document.getElementById("cat-nome").value = cat.nome;
     document.getElementById("cat-tipo").value = cat.tipo_costo;
   } else {
-    document.getElementById("cat-id").value = "";
-    document.getElementById("cat-codice").value = "";
-    document.getElementById("cat-nome").value = "";
-    document.getElementById("cat-tipo").value = "campagna";
+    resetFormCategoria();
   }
 }
 
-function nascondiFormCategoria() {
-  document.getElementById("cat-form-wrapper").style.display = "none";
+function resetFormCategoria() {
+  const titolo = document.getElementById("cat-form-titolo");
+  if (titolo) titolo.innerHTML = '<i class="fa-solid fa-plus me-2"></i>Nuova Categoria';
+  document.getElementById("cat-id").value = "";
+  document.getElementById("cat-codice").value = "";
+  document.getElementById("cat-nome").value = "";
+  document.getElementById("cat-tipo").value = "campagna";
 }
 
-function renderTabellaCategorie() {
+async function caricaCategorieCostoTabella(page) {
+  if (page) catPage = page;
+  const search = document.getElementById("search-categorie")?.value || "";
+  const params = new URLSearchParams({
+    page: catPage,
+    per_page: 13,
+    sort_by: catSortBy,
+    sort_dir: catSortDir,
+  });
+  if (search) params.set("search", search);
+
+  try {
+    const res = await apiFetch(`${API_URL}/categorie-costo/?${params}`);
+    const data = await res.json();
+    renderTabellaCategorie(data.items || []);
+    renderPaginazione("categorie-pagination", "categorie-page-info", data.page, data.pages, data.total, caricaCategorieCostoTabella);
+    aggiornaSortIcons();
+  } catch (err) {
+    console.error("Errore caricamento tabella categorie:", err);
+  }
+}
+
+function aggiornaSortIcons() {
+  document.querySelectorAll(".sortable-th").forEach(th => {
+    const icon = th.querySelector(".sort-icon");
+    if (!icon) return;
+    const col = th.dataset.sort;
+    if (col === catSortBy) {
+      icon.className = `fa-solid fa-sort-${catSortDir === "asc" ? "up" : "down"} sort-icon active`;
+    } else {
+      icon.className = "fa-solid fa-sort sort-icon";
+    }
+  });
+}
+
+function renderTabellaCategorie(items) {
   const tbody = document.getElementById("categorie-tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = categorieCostoLista.map(c => `
+  tbody.innerHTML = items.map(c => `
     <tr>
       <td><code>${c.codice}</code></td>
       <td>${c.nome}</td>
@@ -3130,8 +3589,16 @@ function renderTabellaCategorie() {
   `).join("");
 }
 
-function editCategoriaCosto(id) {
-  const cat = categorieCostoLista.find(c => c.id === id);
+async function editCategoriaCosto(id) {
+  let cat = categorieCostoLista.find(c => c.id === id);
+  if (!cat) {
+    try {
+      const res = await apiFetch(`${API_URL}/categorie-costo/${id}`);
+      if (res.ok) cat = await res.json();
+    } catch (err) {
+      console.error("Errore caricamento categoria:", err);
+    }
+  }
   if (cat) mostraFormCategoria(cat);
 }
 
@@ -3143,7 +3610,7 @@ async function toggleCategoriaCosto(id, nuovoStato) {
       body: JSON.stringify({ attiva: nuovoStato }),
     });
     await caricaCategorieCosto();
-    renderTabellaCategorie();
+    await caricaCategorieCostoTabella();
   } catch (err) {
     console.error("Errore toggle categoria:", err);
   }
@@ -3159,7 +3626,7 @@ async function eliminaCategoriaCosto(id) {
         return;
       }
       await caricaCategorieCosto();
-      renderTabellaCategorie();
+      await caricaCategorieCostoTabella();
     } catch (err) {
       console.error("Errore eliminazione categoria:", err);
     }
@@ -3190,9 +3657,9 @@ async function salvaCategoria(e) {
       return;
     }
 
-    nascondiFormCategoria();
+    resetFormCategoria();
     await caricaCategorieCosto();
-    renderTabellaCategorie();
+    await caricaCategorieCostoTabella();
   } catch (err) {
     console.error("Errore salvataggio categoria:", err);
   }
@@ -3252,6 +3719,7 @@ async function renderMagazzino() {
   });
   document.getElementById("filtro-mag-tipo")?.addEventListener("change", () => caricaMovimenti());
   document.getElementById("filtro-mag-causale")?.addEventListener("change", () => caricaMovimenti());
+  document.getElementById("search-movimenti")?.addEventListener("input", debounceSearch(() => caricaMovimenti()));
 
   // Bottoni
   document.getElementById("btn-nuovo-carico")?.addEventListener("click", () => renderMovimentoForm(null, "carico"));
@@ -3386,11 +3854,13 @@ async function caricaMovimenti(page = 1) {
     const anno = document.getElementById("filtro-mag-anno")?.value || "";
     const tipo = document.getElementById("filtro-mag-tipo")?.value || "";
     const causale = document.getElementById("filtro-mag-causale")?.value || "";
+    const search = document.getElementById("search-movimenti")?.value?.trim() || "";
 
     const params = new URLSearchParams();
     if (anno) params.set("anno", anno);
     if (tipo) params.set("tipo", tipo);
     if (causale) params.set("causale", causale);
+    if (search) params.set("search", search);
     params.set("page", page);
     params.set("per_page", 10);
 
@@ -3762,6 +4232,7 @@ async function renderVendite() {
   document.getElementById("filtro-vendite-anno")?.addEventListener("change", () => { caricaVenditeStats(); caricaVendite(); });
   document.getElementById("filtro-vendite-stato")?.addEventListener("change", () => caricaVendite());
   document.getElementById("filtro-vendite-cliente")?.addEventListener("change", () => caricaVendite());
+  document.getElementById("search-vendite")?.addEventListener("input", debounceSearch(() => caricaVendite()));
   document.getElementById("btn-export-vendite-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
     const anno = document.getElementById("filtro-vendite-anno")?.value;
@@ -3795,11 +4266,13 @@ async function caricaVendite(page = 1) {
   const anno = document.getElementById("filtro-vendite-anno")?.value || "";
   const stato = document.getElementById("filtro-vendite-stato")?.value || "";
   const clienteId = document.getElementById("filtro-vendite-cliente")?.value || "";
+  const search = document.getElementById("search-vendite")?.value?.trim() || "";
 
   const params = new URLSearchParams();
   if (anno) params.set("anno", anno);
   if (stato) params.set("stato", stato);
   if (clienteId) params.set("cliente_id", clienteId);
+  if (search) params.set("search", search);
   params.set("page", page);
   params.set("per_page", 10);
 
@@ -4484,6 +4957,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-home")?.addEventListener("click", () => {
     setActiveMenu("menu-home");
     renderHome();
+  });
+
+  document.getElementById("menu-dashboard")?.addEventListener("click", () => {
+    setActiveMenu("menu-dashboard");
+    renderDashboard();
   });
 
   document.getElementById("menu-parcelle")?.addEventListener("click", () => {

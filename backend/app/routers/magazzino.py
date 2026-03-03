@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case
+from sqlalchemy import func, case, or_
 
 from app.database import get_db
 from app.models.movimento_magazzino_sql import MovimentoMagazzino
@@ -334,11 +334,21 @@ def list_movimenti(
     tipo: Optional[str] = Query(None),
     causale: Optional[str] = Query(None),
     confezionamento_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(MovimentoMagazzino)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                MovimentoMagazzino.codice.ilike(term),
+                MovimentoMagazzino.causale.ilike(term),
+                MovimentoMagazzino.note.ilike(term),
+            )
+        )
     if anno:
         query = query.filter(MovimentoMagazzino.anno_campagna == anno)
     if tipo:

@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.database import get_db
 from app.models.raccolta_sql import Raccolta, RaccoltaParcella
@@ -123,11 +123,19 @@ def raccolte_anni(db: Session = Depends(get_db)):
 def list_raccolte(
     anno: Optional[int] = Query(None),
     parcella_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Raccolta)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Raccolta.codice.ilike(term),
+            )
+        )
     if anno:
         query = query.filter(Raccolta.anno_campagna == anno)
     if parcella_id:

@@ -146,6 +146,7 @@ def list_fornitori(
     tipo: Optional[str] = Query(None),
     categoria: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     tutti: Optional[bool] = Query(False),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
@@ -163,15 +164,26 @@ def list_fornitori(
         query = query.filter(Fornitore.categoria_merceologica == categoria)
 
     if q:
-        search = f"%{q}%"
+        like = f"%{q}%"
         query = query.filter(
             or_(
-                Fornitore.codice.ilike(search),
-                Fornitore.nome.ilike(search),
-                Fornitore.cognome.ilike(search),
-                Fornitore.ragione_sociale.ilike(search),
-                Fornitore.email.ilike(search),
-                Fornitore.citta.ilike(search),
+                Fornitore.codice.ilike(like),
+                Fornitore.nome.ilike(like),
+                Fornitore.cognome.ilike(like),
+                Fornitore.ragione_sociale.ilike(like),
+                Fornitore.email.ilike(like),
+                Fornitore.citta.ilike(like),
+            )
+        )
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Fornitore.codice.ilike(term),
+                Fornitore.ragione_sociale.ilike(term),
+                Fornitore.nome.ilike(term),
+                Fornitore.cognome.ilike(term),
+                Fornitore.email.ilike(term),
             )
         )
 

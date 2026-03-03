@@ -40,7 +40,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="1.3.0",
+    version="1.4.8",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 

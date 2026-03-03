@@ -2,11 +2,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.database import get_db
 from app.models.categoria_costo_sql import CategoriaCosto
 from app.models.costo_sql import Costo
 from app.models.categoria_costo import CategoriaCostoCreate, CategoriaCostoUpdate, CategoriaCostoOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/categorie-costo", tags=["categorie-costo"])
@@ -43,18 +45,48 @@ def seed_categorie(db: Session):
         db.commit()
 
 
-@router.get("/", response_model=List[CategoriaCostoOut])
+@router.get("/")
 def list_categorie(
     tipo: Optional[str] = Query(None),
     attiva: Optional[bool] = Query(None),
+    search: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query("nome"),
+    sort_dir: Optional[str] = Query("asc"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(13, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(CategoriaCosto)
+
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                CategoriaCosto.codice.ilike(term),
+                CategoriaCosto.nome.ilike(term),
+                CategoriaCosto.tipo_costo.ilike(term),
+            )
+        )
     if tipo:
         query = query.filter(CategoriaCosto.tipo_costo == tipo)
     if attiva is not None:
         query = query.filter(CategoriaCosto.attiva == attiva)
-    return query.order_by(CategoriaCosto.ordine, CategoriaCosto.nome).all()
+
+    # Ordinamento dinamico
+    SORT_COLS = {
+        "codice": CategoriaCosto.codice,
+        "nome": CategoriaCosto.nome,
+        "tipo_costo": CategoriaCosto.tipo_costo,
+        "attiva": CategoriaCosto.attiva,
+    }
+    col = SORT_COLS.get(sort_by, CategoriaCosto.nome)
+    query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
+
+    items, total, pg, pp, pages_count = paginate(query, page, per_page)
+    return paginated_response(
+        [CategoriaCostoOut.model_validate(c) for c in items],
+        total, pg, pp, pages_count,
+    )
 
 
 @router.get("/{cat_id}", response_model=CategoriaCostoOut)

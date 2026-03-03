@@ -120,6 +120,7 @@ def export_clienti_csv(
 def list_clienti(
     tipo: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     tutti: Optional[bool] = Query(False),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
@@ -134,15 +135,27 @@ def list_clienti(
         query = query.filter(Cliente.tipo_cliente == tipo)
 
     if q:
-        search = f"%{q}%"
+        like = f"%{q}%"
         query = query.filter(
             or_(
-                Cliente.codice.ilike(search),
-                Cliente.nome.ilike(search),
-                Cliente.cognome.ilike(search),
-                Cliente.ragione_sociale.ilike(search),
-                Cliente.email.ilike(search),
-                Cliente.citta.ilike(search),
+                Cliente.codice.ilike(like),
+                Cliente.nome.ilike(like),
+                Cliente.cognome.ilike(like),
+                Cliente.ragione_sociale.ilike(like),
+                Cliente.email.ilike(like),
+                Cliente.citta.ilike(like),
+            )
+        )
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Cliente.codice.ilike(term),
+                Cliente.ragione_sociale.ilike(term),
+                Cliente.nome.ilike(term),
+                Cliente.cognome.ilike(term),
+                Cliente.email.ilike(term),
+                Cliente.telefono.ilike(term),
             )
         )
 

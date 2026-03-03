@@ -338,6 +338,11 @@ a:hover { color: var(--accent-hover); }
   border-radius: 8px;
 }
 
+.form-control::placeholder {
+  color: #999;
+  opacity: 1;
+}
+
 .form-control:focus, .form-select:focus {
   background: rgba(0, 0, 0, 0.4);
   border-color: var(--accent);
@@ -847,7 +852,7 @@ input.flatpickr-date + .form-control {
 
 .pagination-info {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: #b0b0b0;
 }
 
 .pagination-controls {
@@ -864,7 +869,7 @@ input.flatpickr-date + .form-control {
   border-radius: 6px;
   border: 1px solid var(--border-color);
   background: transparent;
-  color: var(--text-muted);
+  color: #c0c0c0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -903,4 +908,136 @@ input.flatpickr-date + .form-control {
   background: rgba(255, 255, 255, 0.08);
   color: white;
   border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* =============================================
+   DASHBOARD ANALITICA
+   ============================================= */
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dashboard-header h4 {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Dashboard Tabs */
+.dash-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 2px solid var(--border-color);
+  padding-bottom: 0;
+}
+
+.dash-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: all 0.15s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.dash-tab:hover {
+  color: var(--text-primary);
+  background: rgba(77, 124, 15, 0.08);
+}
+
+.dash-tab.active {
+  color: var(--accent-light);
+  border-bottom-color: var(--accent);
+  background: rgba(77, 124, 15, 0.12);
+}
+
+.dash-tab-content {
+  display: none;
+}
+
+.dash-tab-content.active {
+  display: block;
+}
+
+.dashboard-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.dashboard-section h5 {
+  color: var(--accent-light);
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.dashboard-table {
+  font-size: 0.82rem;
+  margin-bottom: 0;
+}
+
+.dashboard-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  border-bottom-color: var(--border-color) !important;
+}
+
+.dashboard-table td {
+  border-bottom-color: var(--border-light) !important;
+  vertical-align: middle;
+}
+
+.dashboard-table .text-end {
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-container {
+  position: relative;
+  min-height: 260px;
+  max-height: 320px;
+}
+
+.margine-positivo { color: #4ade80; }
+.margine-negativo { color: #f87171; }
+
+/* Dashboard responsive */
+@media (max-width: 991px) {
+  .dashboard-header { flex-direction: column; align-items: flex-start; }
+  .chart-container { margin-top: 1rem; min-height: 220px; }
+}
+
+/* Sortable column headers */
+.sortable-th {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  color: #e0e0e0;
+}
+.sortable-th:hover {
+  color: var(--accent);
+}
+.sort-icon {
+  font-size: .7rem;
+  color: #9e9e9e;
+  margin-left: 4px;
+  transition: color .15s;
+}
+.sort-icon.active {
+  color: var(--accent);
 }

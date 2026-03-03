@@ -6,7 +6,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import case, func, or_
 
 from app.database import get_db
 from app.models.vendita_sql import Vendita, VenditaRiga
@@ -177,6 +177,17 @@ def vendite_stats(anno: Optional[int] = Query(None), db: Session = Depends(get_d
 
     da_incassare = float(fatturato) - float(incassato)
 
+    # Litri venduti (da righe vendita confermate+)
+    litri_q = (
+        db.query(func.sum(VenditaRiga.quantita * Confezionamento.capacita_litri))
+        .join(Vendita, VenditaRiga.vendita_id == Vendita.id)
+        .join(Confezionamento, VenditaRiga.confezionamento_id == Confezionamento.id)
+        .filter(Vendita.stato.in_(["confermata", "spedita", "pagata"]))
+    )
+    if anno:
+        litri_q = litri_q.filter(Vendita.anno_campagna == anno)
+    litri_venduti = litri_q.scalar() or 0
+
     return {
         "totale": totale,
         "bozze": bozze,
@@ -186,6 +197,7 @@ def vendite_stats(anno: Optional[int] = Query(None), db: Session = Depends(get_d
         "fatturato": float(fatturato),
         "incassato": float(incassato),
         "da_incassare": round(da_incassare, 2),
+        "litri_venduti": float(litri_venduti),
     }
 
 
@@ -198,6 +210,58 @@ def vendite_anni(db: Session = Depends(get_db)):
         .all()
     )
     return [a[0] for a in anni]
+
+
+@router.get("/top-clienti")
+def top_clienti(
+    anno: Optional[int] = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    q = (
+        db.query(
+            Cliente.id,
+            Cliente.codice,
+            Cliente.tipo_cliente,
+            Cliente.ragione_sociale,
+            Cliente.nome,
+            Cliente.cognome,
+            func.count(Vendita.id).label("num_vendite"),
+            func.sum(Vendita.importo_totale).label("fatturato"),
+            func.sum(
+                case(
+                    (Vendita.stato == "pagata", Vendita.importo_totale),
+                    else_=0,
+                )
+            ).label("incassato"),
+        )
+        .join(Vendita, Vendita.cliente_id == Cliente.id)
+        .filter(Vendita.stato.in_(["confermata", "spedita", "pagata"]))
+    )
+    if anno:
+        q = q.filter(Vendita.anno_campagna == anno)
+    rows = (
+        q.group_by(Cliente.id, Cliente.codice, Cliente.tipo_cliente,
+                    Cliente.ragione_sociale, Cliente.nome, Cliente.cognome)
+        .order_by(func.sum(Vendita.importo_totale).desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for r in rows:
+        if r.tipo_cliente == "azienda":
+            denom = r.ragione_sociale or ""
+        else:
+            denom = " ".join(p for p in [r.nome or "", r.cognome or ""] if p)
+        result.append({
+            "cliente_id": r.id,
+            "codice": r.codice,
+            "denominazione": denom,
+            "num_vendite": r.num_vendite,
+            "fatturato": float(r.fatturato or 0),
+            "incassato": float(r.incassato or 0),
+        })
+    return result
 
 
 @router.get("/next-codice")
@@ -271,11 +335,21 @@ def list_vendite(
     anno: Optional[int] = Query(None),
     stato: Optional[str] = Query(None),
     cliente_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Vendita)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Vendita.codice.ilike(term),
+                Vendita.numero_fattura.ilike(term),
+                Vendita.numero_ddt.ilike(term),
+            )
+        )
     if anno:
         query = query.filter(Vendita.anno_campagna == anno)
     if stato:

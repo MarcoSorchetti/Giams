@@ -22,12 +22,16 @@
       <div class="text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.3.0</div>
+        <div class="app-version">v1.4.8</div>
       </div>
 
       <nav class="nav flex-column gap-2">
         <button id="menu-home" class="btn btn-dark text-start sidebar-link active" type="button">
           <i class="fa-solid fa-house me-2"></i> Home
+        </button>
+
+        <button id="menu-dashboard" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-chart-pie me-2"></i> Dashboard
         </button>
 
         <button id="menu-parcelle" class="btn btn-dark text-start sidebar-link" type="button">
@@ -164,6 +168,7 @@
         </div>
       </div>
     </div>
+
 
     <!-- Tabella -->
     <div class="card p-0">
@@ -472,6 +477,8 @@
       </div>
     </div>
 
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-raccolte" placeholder="Cerca..." style="max-width:300px;" />
+
     <div class="card p-0">
       <div class="table-responsive">
         <table class="table table-dark table-hover mb-0">
@@ -682,6 +689,8 @@
         </div>
       </div>
     </div>
+
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-lotti" placeholder="Cerca..." style="max-width:300px;" />
 
     <div class="card p-0">
       <div class="table-responsive">
@@ -905,6 +914,8 @@
         </div>
       </div>
     </div>
+
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-confezionamenti" placeholder="Cerca..." style="max-width:300px;" />
 
     <div class="card p-0">
       <div class="table-responsive">
@@ -1158,6 +1169,7 @@
         </div>
       </div>
     </div>
+
 
     <div class="card p-0">
       <div class="table-responsive">
@@ -1449,6 +1461,7 @@
         </div>
       </div>
     </div>
+
 
     <div class="card p-0">
       <div class="table-responsive">
@@ -1761,6 +1774,9 @@
       </div>
     </div>
 
+    <!-- Cerca -->
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-costi" placeholder="Cerca..." style="max-width:300px;" />
+
     <!-- Tabella -->
     <div class="card p-0">
       <div class="table-responsive">
@@ -2060,53 +2076,71 @@
         <button class="btn btn-outline-secondary btn-sm" id="btn-torna-costi-da-cat">
           <i class="fa-solid fa-arrow-left me-1"></i> Torna ai Costi
         </button>
-        <button class="btn btn-accent" id="btn-nuova-categoria">
-          <i class="fa-solid fa-plus me-1"></i> Nuova Categoria
-        </button>
       </div>
     </div>
 
-    <!-- Form nuova/modifica categoria (nascosto) -->
-    <div id="cat-form-wrapper" class="card p-3 mb-3" style="display:none;">
-      <form id="form-categoria" class="row g-3 align-items-end">
-        <input type="hidden" id="cat-id" />
-        <div class="col-md-3">
-          <label class="form-label">Codice</label>
-          <input type="text" class="form-control form-control-sm" id="cat-codice" maxlength="20" required />
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Nome</label>
-          <input type="text" class="form-control form-control-sm" id="cat-nome" maxlength="100" required />
-        </div>
-        <div class="col-md-3">
-          <label class="form-label">Tipo</label>
-          <select class="form-select form-select-sm" id="cat-tipo" required>
-            <option value="campagna">Campagna</option>
-            <option value="strutturale">Strutturale</option>
-          </select>
-        </div>
-        <div class="col-md-2 d-flex gap-2">
-          <button type="submit" class="btn btn-accent btn-sm"><i class="fa-solid fa-check"></i></button>
-          <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-annulla-cat"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-      </form>
+    <div class="mb-3">
+      <input type="text" class="form-control form-control-sm" id="search-categorie" placeholder="Cerca categoria..." style="max-width:350px;" />
     </div>
 
-    <!-- Tabella categorie -->
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Nome</th>
-              <th>Tipo</th>
-              <th class="text-center">Attiva</th>
-              <th class="text-center">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="categorie-tbody"></tbody>
-        </table>
+    <div class="row g-4">
+      <!-- SINISTRA: Elenco categorie -->
+      <div class="col-lg-7">
+        <div class="card p-0">
+          <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+              <thead>
+                <tr>
+                  <th class="sortable-th" data-sort="codice">Codice <i class="fa-solid fa-sort sort-icon"></i></th>
+                  <th class="sortable-th" data-sort="nome">Nome <i class="fa-solid fa-sort sort-icon"></i></th>
+                  <th class="sortable-th" data-sort="tipo_costo">Tipo <i class="fa-solid fa-sort sort-icon"></i></th>
+                  <th class="sortable-th text-center" data-sort="attiva">Attiva <i class="fa-solid fa-sort sort-icon"></i></th>
+                  <th class="text-center">Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="categorie-tbody"></tbody>
+            </table>
+          </div>
+          <div class="pagination-wrapper px-3 pb-2">
+            <span class="pagination-info" id="categorie-page-info"></span>
+            <div class="pagination-controls" id="categorie-pagination"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DESTRA: Form nuova/modifica -->
+      <div class="col-lg-5">
+        <div class="card p-3" id="cat-form-wrapper">
+          <h5 class="card-section-title mb-3" id="cat-form-titolo">
+            <i class="fa-solid fa-plus me-2"></i>Nuova Categoria
+          </h5>
+          <form id="form-categoria">
+            <input type="hidden" id="cat-id" />
+            <div class="mb-3">
+              <label class="form-label">Codice *</label>
+              <input type="text" class="form-control form-control-sm" id="cat-codice" maxlength="20" required placeholder="es. ENERGIA" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Nome *</label>
+              <input type="text" class="form-control form-control-sm" id="cat-nome" maxlength="100" required placeholder="es. Energia e combustibili" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Tipo *</label>
+              <select class="form-select form-select-sm" id="cat-tipo" required>
+                <option value="campagna">Campagna</option>
+                <option value="strutturale">Strutturale</option>
+              </select>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-accent btn-sm flex-grow-1">
+                <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-annulla-cat">
+                <i class="fa-solid fa-xmark me-1"></i> Annulla
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </template>
@@ -2209,6 +2243,8 @@
         </div>
       </div>
     </div>
+
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-movimenti" placeholder="Cerca..." style="max-width:300px;" />
 
     <!-- Tabella Giacenze -->
     <div id="mag-content-giacenze">
@@ -2420,6 +2456,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Cerca -->
+    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-vendite" placeholder="Cerca..." style="max-width:300px;" />
 
     <!-- Tabella -->
     <div class="table-responsive">
@@ -2712,9 +2751,141 @@
     </div>
   </template>
 
+  <!-- ===================== TEMPLATE DASHBOARD ===================== -->
+  <template id="template-dashboard">
+    <div class="p-4">
+      <div class="dashboard-header mb-3">
+        <h4 class="mb-0"><i class="fa-solid fa-chart-pie me-2"></i>Dashboard Analitica</h4>
+        <div class="d-flex align-items-center gap-2">
+          <label class="text-muted small mb-0">Anno:</label>
+          <select id="dashboard-anno" class="form-select form-select-sm" style="width:auto;"></select>
+        </div>
+      </div>
+
+      <!-- Tab navigation -->
+      <div class="dash-tabs mb-4" id="dash-tabs">
+        <button class="dash-tab active" data-tab="produzione">
+          <i class="fa-solid fa-oil-can me-1"></i> Produzione & Rese
+        </button>
+        <button class="dash-tab" data-tab="costi">
+          <i class="fa-solid fa-euro-sign me-1"></i> Costi & Ricavi
+        </button>
+        <button class="dash-tab" data-tab="commerciale">
+          <i class="fa-solid fa-ranking-star me-1"></i> Clienti & Magazzino
+        </button>
+      </div>
+
+      <!-- TAB 1: Produzione & Rese -->
+      <div class="dash-tab-content active" id="dash-panel-produzione">
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-oil-can me-2"></i>Andamento Produzione</h5>
+          <div class="row">
+            <div class="col-lg-6">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-produzione">
+                  <thead><tr><th>Anno</th><th class="text-end">KG Olive</th><th class="text-end">KG Olio</th><th class="text-end">Litri Olio</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="chart-container"><canvas id="chart-produzione"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-percent me-2"></i>Rese Produttive</h5>
+          <div class="row">
+            <div class="col-lg-6">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-rese">
+                  <thead><tr><th>Anno</th><th class="text-end">Resa KG&rarr;KG (%)</th><th class="text-end">Resa KG&rarr;LT (%)</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-6">
+              <div class="chart-container"><canvas id="chart-rese"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: Costi & Ricavi -->
+      <div class="dash-tab-content" id="dash-panel-costi">
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-euro-sign me-2"></i>Costo al Litro vs Prezzo Vendita</h5>
+          <div class="row">
+            <div class="col-lg-7">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-costo-litro">
+                  <thead><tr><th>Anno</th><th class="text-end">Costo Camp.</th><th class="text-end">Litri Prod.</th><th class="text-end">Costo/Lt</th><th class="text-end">Prezzo Vend./Lt</th><th class="text-end">Margine/Lt</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="chart-container"><canvas id="chart-costo-litro"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-scale-balanced me-2"></i>Fatturato vs Costi</h5>
+          <div class="row">
+            <div class="col-lg-7">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-fatturato">
+                  <thead><tr><th>Anno</th><th class="text-end">Fatturato</th><th class="text-end">Costi</th><th class="text-end">Margine</th><th class="text-end">Incassato</th><th class="text-end">Da Incassare</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="chart-container"><canvas id="chart-fatturato"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: Clienti & Magazzino -->
+      <div class="dash-tab-content" id="dash-panel-commerciale">
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-ranking-star me-2"></i>Top Clienti per Fatturato <span class="text-muted small" id="dash-top-clienti-anno"></span></h5>
+          <div class="row">
+            <div class="col-lg-7">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-top-clienti">
+                  <thead><tr><th>#</th><th>Cliente</th><th class="text-end">N. Vendite</th><th class="text-end">Fatturato</th><th class="text-end">Incassato</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="chart-container"><canvas id="chart-top-clienti"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-warehouse me-2"></i>Giacenza Magazzino</h5>
+          <div class="table-responsive">
+            <table class="table table-sm table-dark dashboard-table" id="dash-table-giacenza">
+              <thead><tr><th>Confezionamento</th><th>Formato</th><th class="text-end">Capacita' (Lt)</th><th class="text-end">Carichi</th><th class="text-end">Scarichi</th><th class="text-end">Giacenza (unita')</th><th class="text-end">Giacenza (Lt)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </template>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/it.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="app.js"></script>
 
 </body>
