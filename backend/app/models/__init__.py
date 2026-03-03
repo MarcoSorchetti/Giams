@@ -9,3 +9,4 @@ from app.models.fornitore_sql import Fornitore  # noqa: F401
 from app.models.categoria_costo_sql import CategoriaCosto  # noqa: F401
 from app.models.costo_sql import Costo  # noqa: F401
 from app.models.movimento_magazzino_sql import MovimentoMagazzino  # noqa: F401
+from app.models.vendita_sql import Vendita, VenditaRiga  # noqa: F401

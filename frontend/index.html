@@ -22,7 +22,7 @@
       <div class="text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.1.0</div>
+        <div class="app-version">v1.2.0</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -58,8 +58,8 @@
           <i class="fa-solid fa-warehouse me-2"></i> Magazzino
         </button>
 
-        <button class="btn btn-dark text-start sidebar-link disabled" type="button">
-          <i class="fa-solid fa-cart-shopping me-2"></i> Vendite (prossimamente)
+        <button id="menu-vendite" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-cart-shopping me-2"></i> Vendite
         </button>
 
         <button id="menu-utenti" class="btn btn-dark text-start sidebar-link" type="button">
@@ -906,6 +906,7 @@
               <th>Litri Tot.</th>
               <th>Lotti</th>
               <th>Costo</th>
+              <th class="text-end">Prezzo Listino</th>
               <th>Azioni</th>
             </tr>
           </thead>
@@ -960,6 +961,10 @@
               <div class="col-6">
                 <label class="form-label">Costo Totale (&euro;)</label>
                 <input type="number" step="0.01" class="form-control form-control-sm" id="cf-costo" />
+              </div>
+              <div class="col-6">
+                <label class="form-label">Prezzo Listino (&euro;/unita')</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="cf-prezzo-unitario" placeholder="0.00" />
               </div>
               <div class="col-12">
                 <label class="form-label">Note</label>
@@ -2302,6 +2307,352 @@
         </div>
       </div>
     </form>
+  </template>
+
+  <!-- TEMPLATE: VENDITE LISTA -->
+  <template id="template-vendite">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1">Vendite</h2>
+        <div class="module-subtitle">Gestione fatture, DDT, pagamenti</div>
+      </div>
+      <button class="btn btn-accent" id="btn-nuova-vendita">
+        <i class="fa-solid fa-plus me-1"></i> Nuova Vendita
+      </button>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="row g-3 mb-4" id="vendite-stats-row">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value" id="stat-vendite-totale">0</div><div class="stat-label">Vendite</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-success" id="stat-vendite-fatturato">€ 0</div><div class="stat-label">Fatturato</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-warning" id="stat-vendite-bozze">0</div><div class="stat-label">Bozze</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-info" id="stat-vendite-da-incassare">€ 0</div><div class="stat-label">Da Incassare</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-accent" id="stat-vendite-incassato">€ 0</div><div class="stat-label">Incassato</div></div>
+      </div>
+    </div>
+
+    <!-- Filtri -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Anno</label>
+            <select id="filtro-vendite-anno" class="form-select form-select-sm" style="width:120px;"></select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Stato</label>
+            <select id="filtro-vendite-stato" class="form-select form-select-sm" style="width:150px;">
+              <option value="">Tutti</option>
+              <option value="bozza">Bozza</option>
+              <option value="confermata">Confermata</option>
+              <option value="spedita">Spedita</option>
+              <option value="pagata">Pagata</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Cliente</label>
+            <select id="filtro-vendite-cliente" class="form-select form-select-sm" style="width:200px;">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella -->
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Data</th>
+            <th>Cliente</th>
+            <th>Stato</th>
+            <th>Fattura</th>
+            <th class="text-end">Totale</th>
+            <th class="text-center">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="vendite-tbody"></tbody>
+      </table>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: VENDITA FORM (bozza) -->
+  <template id="template-vendita-form">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1" id="vendita-form-title">Nuova Vendita</h2>
+        <div class="module-subtitle">Crea o modifica una vendita in bozza</div>
+      </div>
+      <button class="btn btn-outline-secondary" id="btn-torna-vendite">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna alla lista
+      </button>
+    </div>
+
+    <form id="vendita-form" autocomplete="off">
+      <input type="hidden" id="vf-id" />
+
+      <div class="card bg-glass mb-3">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Codice</label>
+              <input type="text" id="vf-codice" class="form-control" readonly />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Data Vendita</label>
+              <input type="text" id="vf-data" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Anno Campagna</label>
+              <input type="number" id="vf-anno" class="form-control" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Cliente *</label>
+              <select id="vf-cliente" class="form-select" required>
+                <option value="">— Seleziona —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Indirizzo spedizione -->
+      <div class="card bg-glass mb-3">
+        <div class="card-header bg-transparent border-secondary py-2">
+          <i class="fa-solid fa-truck me-1"></i> Indirizzo Spedizione
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Indirizzo</label>
+              <input type="text" id="vf-sped-indirizzo" class="form-control" />
+            </div>
+            <div class="col-md-2">
+              <label class="form-label">CAP</label>
+              <input type="text" id="vf-sped-cap" class="form-control" maxlength="5" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Citta'</label>
+              <input type="text" id="vf-sped-citta" class="form-control" />
+            </div>
+            <div class="col-md-1">
+              <label class="form-label">Prov.</label>
+              <input type="text" id="vf-sped-provincia" class="form-control" maxlength="2" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Righe prodotto -->
+      <div class="card bg-glass mb-3">
+        <div class="card-header bg-transparent border-secondary py-2 d-flex justify-content-between align-items-center">
+          <span><i class="fa-solid fa-list me-1"></i> Righe Prodotto</span>
+          <button type="button" class="btn btn-sm btn-accent" id="btn-aggiungi-riga">
+            <i class="fa-solid fa-plus me-1"></i> Aggiungi Riga
+          </button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-dark align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:35%">Prodotto</th>
+                  <th style="width:15%" class="text-center">Qty</th>
+                  <th style="width:18%" class="text-end">Prezzo Unit.</th>
+                  <th style="width:18%" class="text-end">Importo</th>
+                  <th style="width:14%" class="text-center"></th>
+                </tr>
+              </thead>
+              <tbody id="vendita-righe-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Totali e condizioni -->
+      <div class="card bg-glass mb-3">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Note</label>
+              <textarea id="vf-note" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="col-md-8">
+              <div class="row g-2">
+                <div class="col-md-4">
+                  <label class="form-label">Imponibile</label>
+                  <input type="text" id="vf-imponibile" class="form-control text-end" readonly />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Sconto %</label>
+                  <input type="number" id="vf-sconto" class="form-control text-end" step="0.1" min="0" max="100" value="0" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Imponibile Scontato</label>
+                  <input type="text" id="vf-imponibile-scontato" class="form-control text-end" readonly />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">IVA %</label>
+                  <input type="number" id="vf-iva" class="form-control text-end" step="1" min="0" value="4" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Importo IVA</label>
+                  <input type="text" id="vf-importo-iva" class="form-control text-end" readonly />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-bold">TOTALE</label>
+                  <input type="text" id="vf-totale" class="form-control text-end fw-bold" readonly />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-accent flex-grow-1">
+          <i class="fa-solid fa-floppy-disk me-1"></i> Salva Bozza
+        </button>
+        <button type="button" class="btn btn-outline-danger" id="btn-elimina-vendita" style="display:none;">
+          <i class="fa-solid fa-trash me-1"></i> Elimina
+        </button>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: VENDITA DETTAGLIO (confermata+) -->
+  <template id="template-vendita-dettaglio">
+    <div class="module-header mb-3">
+      <div>
+        <h2 class="module-title mb-1" id="vd-titolo">Dettaglio Vendita</h2>
+        <div class="module-subtitle" id="vd-sottotitolo"></div>
+      </div>
+      <button class="btn btn-outline-secondary" id="btn-torna-vendite-det">
+        <i class="fa-solid fa-arrow-left me-1"></i> Torna alla lista
+      </button>
+    </div>
+
+    <!-- Info vendita -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-3"><strong>Codice:</strong> <span id="vd-codice"></span></div>
+          <div class="col-md-3"><strong>Data:</strong> <span id="vd-data"></span> <button class="btn btn-sm btn-link p-0 ms-1" id="btn-modifica-data" title="Modifica data"><i class="fa-solid fa-pen-to-square" style="font-size:0.75rem;"></i></button></div>
+          <div class="col-md-3"><strong>Cliente:</strong> <span id="vd-cliente"></span></div>
+          <div class="col-md-3"><strong>Stato:</strong> <span id="vd-stato-badge"></span></div>
+          <div class="col-md-3"><strong>Fattura:</strong> <span id="vd-fattura"></span></div>
+          <div class="col-md-3"><strong>DDT:</strong> <span id="vd-ddt"></span></div>
+          <div class="col-md-3"><strong>Data Conferma:</strong> <span id="vd-data-conferma"></span></div>
+          <div class="col-md-3"><strong>Data Spedizione:</strong> <span id="vd-data-spedizione"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indirizzo spedizione -->
+    <div class="card bg-glass mb-3" id="vd-spedizione-card">
+      <div class="card-header bg-transparent border-secondary py-2">
+        <i class="fa-solid fa-truck me-1"></i> Indirizzo Spedizione
+      </div>
+      <div class="card-body">
+        <span id="vd-sped-indirizzo"></span>
+      </div>
+    </div>
+
+    <!-- Righe -->
+    <div class="card bg-glass mb-3">
+      <div class="card-header bg-transparent border-secondary py-2">
+        <i class="fa-solid fa-list me-1"></i> Righe Prodotto
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-dark align-middle mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Codice</th>
+                <th>Prodotto</th>
+                <th>Contenitore</th>
+                <th class="text-center">Qty</th>
+                <th class="text-end">Prezzo Unit.</th>
+                <th class="text-end">Importo</th>
+              </tr>
+            </thead>
+            <tbody id="vd-righe-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Totali -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body">
+        <div class="row justify-content-end">
+          <div class="col-md-5">
+            <table class="table table-dark table-sm mb-0">
+              <tr><td>Imponibile</td><td class="text-end" id="vd-imponibile"></td></tr>
+              <tr id="vd-sconto-row"><td>Sconto (<span id="vd-sconto-pct"></span>%)</td><td class="text-end" id="vd-sconto-val"></td></tr>
+              <tr><td>Imponibile Scontato</td><td class="text-end" id="vd-imponibile-scontato"></td></tr>
+              <tr><td>IVA (<span id="vd-iva-pct"></span>%)</td><td class="text-end" id="vd-importo-iva"></td></tr>
+              <tr class="fw-bold"><td>TOTALE</td><td class="text-end" id="vd-totale"></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pagamento -->
+    <div class="card bg-glass mb-3" id="vd-pagamento-card" style="display:none;">
+      <div class="card-header bg-transparent border-secondary py-2">
+        <i class="fa-solid fa-money-check-dollar me-1"></i> Pagamento
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-4"><strong>Data:</strong> <span id="vd-pag-data"></span></div>
+          <div class="col-md-4"><strong>Modalita':</strong> <span id="vd-pag-modalita"></span></div>
+          <div class="col-md-4"><strong>Riferimento:</strong> <span id="vd-pag-riferimento"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Note -->
+    <div class="card bg-glass mb-3" id="vd-note-card" style="display:none;">
+      <div class="card-body">
+        <strong>Note:</strong> <span id="vd-note"></span>
+      </div>
+    </div>
+
+    <!-- Azioni -->
+    <div class="d-flex gap-2 flex-wrap" id="vd-azioni">
+      <button class="btn btn-success" id="btn-conferma-vendita" style="display:none;">
+        <i class="fa-solid fa-check me-1"></i> Conferma Vendita
+      </button>
+      <button class="btn btn-info" id="btn-spedisci-vendita" style="display:none;">
+        <i class="fa-solid fa-truck me-1"></i> Segna come Spedita
+      </button>
+      <button class="btn btn-accent" id="btn-paga-vendita" style="display:none;">
+        <i class="fa-solid fa-money-bill me-1"></i> Registra Pagamento
+      </button>
+      <button class="btn btn-outline-secondary" id="btn-download-fattura" style="display:none;">
+        <i class="fa-solid fa-file-pdf me-1"></i> Scarica Fattura PDF
+      </button>
+      <button class="btn btn-outline-secondary" id="btn-download-ddt" style="display:none;">
+        <i class="fa-solid fa-file-pdf me-1"></i> Scarica DDT PDF
+      </button>
+      <button class="btn btn-warning" id="btn-modifica-vendita" style="display:none;">
+        <i class="fa-solid fa-pen me-1"></i> Modifica
+      </button>
+    </div>
   </template>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

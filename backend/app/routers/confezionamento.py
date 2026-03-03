@@ -58,6 +58,7 @@ def _build_conf_out(conf, db):
         num_unita=conf.num_unita,
         litri_totali=float(conf.litri_totali),
         costo_totale=float(conf.costo_totale) if conf.costo_totale else None,
+        prezzo_unitario=float(conf.prezzo_unitario) if conf.prezzo_unitario else None,
         note=conf.note,
         lotti=lotti_out,
         created_at=conf.created_at,

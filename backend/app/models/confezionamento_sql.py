@@ -15,6 +15,7 @@ class Confezionamento(Base):
     num_unita = Column(Integer, nullable=False)
     litri_totali = Column(Numeric(8, 2), nullable=False)
     costo_totale = Column(Numeric(8, 2), nullable=True)
+    prezzo_unitario = Column(Numeric(10, 2), nullable=True)
     note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())

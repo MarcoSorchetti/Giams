@@ -1,0 +1,555 @@
+from datetime import date
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+from app.database import get_db
+from app.models.vendita_sql import Vendita, VenditaRiga
+from app.models.vendita import (
+    VenditaCreate, VenditaUpdate, VenditaOut, VenditaRigaOut,
+    VenditaPatchInfo, SpedisciPayload, PagaPayload,
+)
+from app.models.confezionamento_sql import Confezionamento
+from app.models.contenitore_sql import Contenitore
+from app.models.cliente_sql import Cliente
+from app.models.movimento_magazzino_sql import MovimentoMagazzino
+from app.routers.magazzino import _calcola_giacenza, _next_codice_movimento
+
+
+router = APIRouter(prefix="/vendite", tags=["vendite"])
+
+STATI_VALIDI = {"bozza", "confermata", "spedita", "pagata"}
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _next_codice_vendita(anno: int, db: Session) -> str:
+    last = (
+        db.query(Vendita)
+        .filter(Vendita.codice.like(f"V/%/{anno}"))
+        .order_by(Vendita.codice.desc())
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.codice.split("/")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"V/{num:03d}/{anno}"
+
+
+def _next_numero_fattura(anno: int, db: Session) -> str:
+    last = (
+        db.query(Vendita)
+        .filter(Vendita.numero_fattura.like(f"FI/%/{anno}"))
+        .order_by(Vendita.numero_fattura.desc())
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.numero_fattura.split("/")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"FI/{num:03d}/{anno}"
+
+
+def _next_numero_ddt(anno: int, db: Session) -> str:
+    last = (
+        db.query(Vendita)
+        .filter(Vendita.numero_ddt.like(f"DDT/%/{anno}"))
+        .order_by(Vendita.numero_ddt.desc())
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.numero_ddt.split("/")[1]) + 1
+        except (IndexError, ValueError):
+            num = 1
+    else:
+        num = 1
+    return f"DDT/{num:03d}/{anno}"
+
+
+def _cliente_denominazione(c):
+    if not c:
+        return None
+    if c.tipo_cliente == "azienda":
+        return c.ragione_sociale or ""
+    parti = [c.nome or "", c.cognome or ""]
+    return " ".join(p for p in parti if p)
+
+
+def _build_vendita_out(v, db) -> VenditaOut:
+    cli = db.query(Cliente).filter(Cliente.id == v.cliente_id).first()
+
+    righe_db = db.query(VenditaRiga).filter(VenditaRiga.vendita_id == v.id).all()
+    righe_out = []
+    for r in righe_db:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == r.confezionamento_id).first()
+        cont_desc = None
+        if conf and conf.contenitore_id:
+            cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
+            if cont:
+                cont_desc = cont.descrizione
+        righe_out.append(VenditaRigaOut(
+            id=r.id,
+            confezionamento_id=r.confezionamento_id,
+            confezionamento_codice=conf.codice if conf else None,
+            confezionamento_formato=conf.formato if conf else None,
+            contenitore_descrizione=cont_desc,
+            quantita=r.quantita,
+            prezzo_unitario=float(r.prezzo_unitario),
+            importo_riga=float(r.importo_riga),
+        ))
+
+    return VenditaOut(
+        id=v.id,
+        codice=v.codice,
+        cliente_id=v.cliente_id,
+        cliente_denominazione=_cliente_denominazione(cli),
+        data_vendita=v.data_vendita,
+        anno_campagna=v.anno_campagna,
+        stato=v.stato,
+        imponibile=float(v.imponibile),
+        sconto_percentuale=float(v.sconto_percentuale) if v.sconto_percentuale else None,
+        imponibile_scontato=float(v.imponibile_scontato),
+        iva_percentuale=float(v.iva_percentuale),
+        importo_iva=float(v.importo_iva),
+        importo_totale=float(v.importo_totale),
+        numero_fattura=v.numero_fattura,
+        data_pagamento=v.data_pagamento,
+        modalita_pagamento=v.modalita_pagamento,
+        riferimento_pagamento=v.riferimento_pagamento,
+        data_spedizione=v.data_spedizione,
+        numero_ddt=v.numero_ddt,
+        note_spedizione=v.note_spedizione,
+        spedizione_indirizzo=v.spedizione_indirizzo,
+        spedizione_cap=v.spedizione_cap,
+        spedizione_citta=v.spedizione_citta,
+        spedizione_provincia=v.spedizione_provincia,
+        data_conferma=v.data_conferma,
+        note=v.note,
+        righe=righe_out,
+        created_at=v.created_at,
+        updated_at=v.updated_at,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Stats & Utility
+# ---------------------------------------------------------------------------
+
+@router.get("/stats")
+def vendite_stats(anno: Optional[int] = Query(None), db: Session = Depends(get_db)):
+    q = db.query(Vendita)
+    if anno:
+        q = q.filter(Vendita.anno_campagna == anno)
+
+    totale = q.count()
+    bozze = q.filter(Vendita.stato == "bozza").count()
+    confermate = q.filter(Vendita.stato == "confermata").count()
+    spedite = q.filter(Vendita.stato == "spedita").count()
+    pagate = q.filter(Vendita.stato == "pagata").count()
+
+    # Fatturato = importo_totale di tutte le vendite confermate+
+    q_conf = db.query(Vendita).filter(Vendita.stato.in_(["confermata", "spedita", "pagata"]))
+    if anno:
+        q_conf = q_conf.filter(Vendita.anno_campagna == anno)
+    fatturato = q_conf.with_entities(func.sum(Vendita.importo_totale)).scalar() or 0
+
+    # Incassato = importo_totale di vendite pagate
+    q_pag = db.query(Vendita).filter(Vendita.stato == "pagata")
+    if anno:
+        q_pag = q_pag.filter(Vendita.anno_campagna == anno)
+    incassato = q_pag.with_entities(func.sum(Vendita.importo_totale)).scalar() or 0
+
+    da_incassare = float(fatturato) - float(incassato)
+
+    return {
+        "totale": totale,
+        "bozze": bozze,
+        "confermate": confermate,
+        "spedite": spedite,
+        "pagate": pagate,
+        "fatturato": float(fatturato),
+        "incassato": float(incassato),
+        "da_incassare": round(da_incassare, 2),
+    }
+
+
+@router.get("/anni")
+def vendite_anni(db: Session = Depends(get_db)):
+    anni = (
+        db.query(Vendita.anno_campagna)
+        .distinct()
+        .order_by(Vendita.anno_campagna.desc())
+        .all()
+    )
+    return [a[0] for a in anni]
+
+
+@router.get("/next-codice")
+def next_codice(anno: int = Query(...), db: Session = Depends(get_db)):
+    return {"codice": _next_codice_vendita(anno, db)}
+
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
+
+@router.get("/", response_model=List[VenditaOut])
+def list_vendite(
+    anno: Optional[int] = Query(None),
+    stato: Optional[str] = Query(None),
+    cliente_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Vendita)
+    if anno:
+        query = query.filter(Vendita.anno_campagna == anno)
+    if stato:
+        query = query.filter(Vendita.stato == stato)
+    if cliente_id:
+        query = query.filter(Vendita.cliente_id == cliente_id)
+
+    vendite = query.order_by(Vendita.data_vendita.desc()).all()
+    return [_build_vendita_out(v, db) for v in vendite]
+
+
+@router.get("/{vendita_id}", response_model=VenditaOut)
+def get_vendita(vendita_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+    return _build_vendita_out(v, db)
+
+
+@router.post("/", response_model=VenditaOut, status_code=status.HTTP_201_CREATED)
+def create_vendita(data: VenditaCreate, db: Session = Depends(get_db)):
+    # Verifica cliente
+    cli = db.query(Cliente).filter(Cliente.id == data.cliente_id).first()
+    if not cli:
+        raise HTTPException(status_code=400, detail="Cliente non trovato.")
+
+    # Auto-genera codice se vuoto
+    codice = data.codice.strip() if data.codice else ""
+    if not codice:
+        codice = _next_codice_vendita(data.anno_campagna, db)
+
+    if db.query(Vendita).filter(Vendita.codice == codice).first():
+        raise HTTPException(status_code=400, detail="Codice vendita gia' esistente.")
+
+    # Verifica confezionamenti nelle righe
+    for riga in data.righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+        if not conf:
+            raise HTTPException(status_code=400, detail=f"Confezionamento {riga.confezionamento_id} non trovato.")
+
+    vendita_dict = data.model_dump(exclude={"righe"})
+    vendita_dict["codice"] = codice
+    vendita_dict["stato"] = "bozza"
+
+    v = Vendita(**vendita_dict)
+    db.add(v)
+    db.flush()
+
+    for riga in data.righe:
+        r = VenditaRiga(
+            vendita_id=v.id,
+            confezionamento_id=riga.confezionamento_id,
+            quantita=riga.quantita,
+            prezzo_unitario=riga.prezzo_unitario,
+            importo_riga=riga.importo_riga,
+        )
+        db.add(r)
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+@router.put("/{vendita_id}", response_model=VenditaOut)
+def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato != "bozza":
+        raise HTTPException(status_code=400, detail="Solo le vendite in bozza possono essere modificate.")
+
+    update_data = data.model_dump(exclude_unset=True)
+    righe_data = update_data.pop("righe", None)
+
+    if "codice" in update_data and update_data["codice"] != v.codice:
+        if db.query(Vendita).filter(Vendita.codice == update_data["codice"], Vendita.id != vendita_id).first():
+            raise HTTPException(status_code=400, detail="Codice vendita gia' esistente.")
+
+    if "cliente_id" in update_data:
+        cli = db.query(Cliente).filter(Cliente.id == update_data["cliente_id"]).first()
+        if not cli:
+            raise HTTPException(status_code=400, detail="Cliente non trovato.")
+
+    for key, value in update_data.items():
+        setattr(v, key, value)
+
+    if righe_data is not None:
+        # Cancella righe esistenti e ricrea
+        db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
+        for riga in righe_data:
+            conf = db.query(Confezionamento).filter(Confezionamento.id == riga["confezionamento_id"]).first()
+            if not conf:
+                raise HTTPException(status_code=400, detail=f"Confezionamento {riga['confezionamento_id']} non trovato.")
+            r = VenditaRiga(
+                vendita_id=vendita_id,
+                confezionamento_id=riga["confezionamento_id"],
+                quantita=riga["quantita"],
+                prezzo_unitario=riga["prezzo_unitario"],
+                importo_riga=riga["importo_riga"],
+            )
+            db.add(r)
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+@router.delete("/{vendita_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vendita(vendita_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato != "bozza":
+        raise HTTPException(status_code=400, detail="Solo le vendite in bozza possono essere eliminate.")
+
+    db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
+    db.delete(v)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Modifica dati non-critici (data, note) — disponibile su qualsiasi stato
+# ---------------------------------------------------------------------------
+
+@router.patch("/{vendita_id}", response_model=VenditaOut)
+def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    update_data = data.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare.")
+
+    for key, value in update_data.items():
+        setattr(v, key, value)
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+# ---------------------------------------------------------------------------
+# Transizioni di stato
+# ---------------------------------------------------------------------------
+
+@router.post("/{vendita_id}/conferma", response_model=VenditaOut)
+def conferma_vendita(vendita_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato != "bozza":
+        raise HTTPException(status_code=400, detail="Solo le vendite in bozza possono essere confermate.")
+
+    righe = db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).all()
+    if not righe:
+        raise HTTPException(status_code=400, detail="La vendita non ha righe prodotto.")
+
+    # 1. Verifica giacenza per ogni riga
+    for riga in righe:
+        giacenza = _calcola_giacenza(riga.confezionamento_id, db)
+        if riga.quantita > giacenza:
+            conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+            codice_conf = conf.codice if conf else str(riga.confezionamento_id)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Giacenza insufficiente per {codice_conf}: richieste {riga.quantita} unita', disponibili {giacenza}."
+            )
+
+    # 2. Crea scarichi magazzino per ogni riga
+    for riga in righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+        mov = MovimentoMagazzino(
+            codice=_next_codice_movimento(v.anno_campagna, db),
+            confezionamento_id=riga.confezionamento_id,
+            tipo_movimento="scarico",
+            causale="vendita",
+            quantita=riga.quantita,
+            data_movimento=v.data_vendita or date.today(),
+            anno_campagna=v.anno_campagna,
+            cliente_id=v.cliente_id,
+            riferimento_documento=v.codice,
+            note=f"Scarico vendita {v.codice} — {conf.codice if conf else ''}",
+        )
+        db.add(mov)
+        db.flush()
+
+    # 3. Genera numero fattura
+    v.numero_fattura = _next_numero_fattura(v.anno_campagna, db)
+
+    # 4. Snapshot indirizzo spedizione da cliente se non compilato
+    if not v.spedizione_indirizzo:
+        cli = db.query(Cliente).filter(Cliente.id == v.cliente_id).first()
+        if cli:
+            v.spedizione_indirizzo = cli.consegna_indirizzo or cli.indirizzo
+            v.spedizione_cap = cli.consegna_cap or cli.cap
+            v.spedizione_citta = cli.consegna_citta or cli.citta
+            v.spedizione_provincia = cli.consegna_provincia or cli.provincia
+
+    # 5. Aggiorna stato
+    v.stato = "confermata"
+    v.data_conferma = v.data_vendita or date.today()
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+@router.post("/{vendita_id}/spedisci", response_model=VenditaOut)
+def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato != "confermata":
+        raise HTTPException(status_code=400, detail="Solo le vendite confermate possono essere spedite.")
+
+    v.stato = "spedita"
+    v.data_spedizione = payload.data_spedizione
+    if payload.numero_ddt:
+        v.numero_ddt = payload.numero_ddt
+    else:
+        v.numero_ddt = _next_numero_ddt(v.anno_campagna, db)
+    if payload.note_spedizione:
+        v.note_spedizione = payload.note_spedizione
+    if payload.spedizione_indirizzo:
+        v.spedizione_indirizzo = payload.spedizione_indirizzo
+        v.spedizione_cap = payload.spedizione_cap
+        v.spedizione_citta = payload.spedizione_citta
+        v.spedizione_provincia = payload.spedizione_provincia
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+@router.post("/{vendita_id}/paga", response_model=VenditaOut)
+def paga_vendita(vendita_id: int, payload: PagaPayload, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato not in ("confermata", "spedita"):
+        raise HTTPException(status_code=400, detail="Solo le vendite confermate o spedite possono essere pagate.")
+
+    v.stato = "pagata"
+    v.data_pagamento = payload.data_pagamento
+    v.modalita_pagamento = payload.modalita_pagamento
+    v.riferimento_pagamento = payload.riferimento_pagamento
+
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
+# ---------------------------------------------------------------------------
+# PDF — Fattura interna e DDT
+# ---------------------------------------------------------------------------
+
+@router.get("/{vendita_id}/fattura/pdf")
+def download_fattura_pdf(vendita_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+    if v.stato == "bozza":
+        raise HTTPException(status_code=400, detail="La fattura e' disponibile solo per vendite confermate.")
+
+    from app.services.pdf_vendita import genera_fattura_pdf
+
+    cli = db.query(Cliente).filter(Cliente.id == v.cliente_id).first()
+    righe = db.query(VenditaRiga).filter(VenditaRiga.vendita_id == v.id).all()
+
+    # Arricchisci righe con dati confezionamento
+    righe_info = []
+    for r in righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == r.confezionamento_id).first()
+        cont_desc = None
+        if conf and conf.contenitore_id:
+            cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
+            if cont:
+                cont_desc = cont.descrizione
+        righe_info.append({
+            "confezionamento_codice": conf.codice if conf else "",
+            "confezionamento_formato": conf.formato if conf else "",
+            "contenitore_descrizione": cont_desc or "",
+            "quantita": r.quantita,
+            "prezzo_unitario": float(r.prezzo_unitario),
+            "importo_riga": float(r.importo_riga),
+        })
+
+    pdf_bytes = genera_fattura_pdf(v, cli, righe_info)
+    filename = f"Fattura_{v.numero_fattura or v.codice}.pdf".replace("/", "-")
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{vendita_id}/ddt/pdf")
+def download_ddt_pdf(vendita_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+    if v.stato == "bozza":
+        raise HTTPException(status_code=400, detail="Il DDT e' disponibile solo per vendite confermate.")
+
+    from app.services.pdf_vendita import genera_ddt_pdf
+
+    cli = db.query(Cliente).filter(Cliente.id == v.cliente_id).first()
+    righe = db.query(VenditaRiga).filter(VenditaRiga.vendita_id == v.id).all()
+
+    righe_info = []
+    for r in righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == r.confezionamento_id).first()
+        cont_desc = None
+        if conf and conf.contenitore_id:
+            cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
+            if cont:
+                cont_desc = cont.descrizione
+        righe_info.append({
+            "confezionamento_codice": conf.codice if conf else "",
+            "confezionamento_formato": conf.formato if conf else "",
+            "contenitore_descrizione": cont_desc or "",
+            "quantita": r.quantita,
+        })
+
+    pdf_bytes = genera_ddt_pdf(v, cli, righe_info)
+    filename = f"DDT_{v.numero_ddt or v.codice}.pdf".replace("/", "-")
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

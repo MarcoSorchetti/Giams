@@ -25,6 +25,7 @@ class ConfezionamentoBase(BaseModel):
     num_unita: int
     litri_totali: float
     costo_totale: Optional[float] = None
+    prezzo_unitario: Optional[float] = None
     note: Optional[str] = None
 
 
@@ -42,6 +43,7 @@ class ConfezionamentoUpdate(BaseModel):
     num_unita: Optional[int] = None
     litri_totali: Optional[float] = None
     costo_totale: Optional[float] = None
+    prezzo_unitario: Optional[float] = None
     note: Optional[str] = None
     lotti: Optional[List[ConfezionamentoLottoBase]] = None
 

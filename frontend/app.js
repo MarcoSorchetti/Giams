@@ -20,6 +20,9 @@ let contenitoriLista = [];
 let contenitoreInModifica = null;
 let clientiLista = [];
 let clienteInModifica = null;
+let venditeLista = [];
+let venditaInModifica = null;
+let venditeConfezionamentiCache = [];
 
 // =============================================
 // AUTH
@@ -150,6 +153,13 @@ async function renderHome() {
           </div>
         </div>
         <div class="col-6 col-md-4">
+          <div class="quick-card" id="quick-vendite">
+            <div class="quick-card-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+            <div class="quick-card-title">Vendite</div>
+            <div class="quick-card-desc">Fatture, DDT, pagamenti</div>
+          </div>
+        </div>
+        <div class="col-6 col-md-4">
           <div class="quick-card" id="quick-utenti">
             <div class="quick-card-icon"><i class="fa-solid fa-user-gear"></i></div>
             <div class="quick-card-title">Gestione Utenti</div>
@@ -187,6 +197,10 @@ async function renderHome() {
   document.getElementById("quick-magazzino")?.addEventListener("click", () => {
     setActiveMenu("menu-magazzino");
     renderMagazzino();
+  });
+  document.getElementById("quick-vendite")?.addEventListener("click", () => {
+    setActiveMenu("menu-vendite");
+    renderVendite();
   });
   document.getElementById("quick-utenti")?.addEventListener("click", () => {
     setActiveMenu("menu-utenti");
@@ -407,7 +421,7 @@ function eliminaParcella(id, nome) {
   });
 }
 
-function mostraConferma(messaggio, onConfirm) {
+function mostraConferma(messaggio, onConfirm, labelConferma = "Elimina", classeConferma = "btn-danger") {
   const overlay = document.createElement("div");
   overlay.className = "modal-confirm-overlay";
   overlay.innerHTML = `
@@ -415,7 +429,7 @@ function mostraConferma(messaggio, onConfirm) {
       <h5>${messaggio}</h5>
       <div class="d-flex gap-2 justify-content-center mt-3">
         <button class="btn btn-outline-secondary" id="modal-annulla">Annulla</button>
-        <button class="btn btn-danger" id="modal-conferma">Elimina</button>
+        <button class="btn ${classeConferma}" id="modal-conferma">${labelConferma}</button>
       </div>
     </div>
   `;
@@ -1394,13 +1408,14 @@ function renderTabellaConf() {
   if (!tbody) return;
 
   if (confezionamentiLista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-secondary py-4">Nessun confezionamento trovato</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-secondary py-4">Nessun confezionamento trovato</td></tr>`;
     return;
   }
 
   tbody.innerHTML = confezionamentiLista.map(c => {
     const lottiNomi = c.lotti.map(l => `${l.lotto_codice} (${l.litri_utilizzati}L)`).join(", ") || "—";
     const costo = c.costo_totale ? `€ ${parseFloat(c.costo_totale).toFixed(0)}` : "—";
+    const prezzo = c.prezzo_unitario ? `€ ${parseFloat(c.prezzo_unitario).toFixed(2)}` : "—";
     const desc = c.contenitore_descrizione || getContenitoreLabel(c.formato);
     return `
       <tr>
@@ -1411,6 +1426,7 @@ function renderTabellaConf() {
         <td>${parseFloat(c.litri_totali).toFixed(1)}</td>
         <td class="small">${lottiNomi}</td>
         <td>${costo}</td>
+        <td class="text-end">${prezzo}</td>
         <td>
           <button class="btn-action btn-action-edit me-1" onclick="renderConfezionamentoForm(${c.id})" title="Modifica">
             <i class="fa-solid fa-pen-to-square"></i>
@@ -1541,6 +1557,7 @@ async function popolaFormConf(id) {
     document.getElementById("cf-num-unita").value = c.num_unita || "";
     document.getElementById("cf-litri-totali").value = c.litri_totali || "";
     document.getElementById("cf-costo").value = c.costo_totale || "";
+    document.getElementById("cf-prezzo-unitario").value = c.prezzo_unitario || "";
     document.getElementById("cf-note").value = c.note || "";
 
     if (c.lotti) {
@@ -1586,6 +1603,7 @@ async function salvaConfezionamento() {
     num_unita: numUnita,
     litri_totali: numUnita * cap,
     costo_totale: parseFloat(document.getElementById("cf-costo").value) || null,
+    prezzo_unitario: parseFloat(document.getElementById("cf-prezzo-unitario").value) || null,
     note: document.getElementById("cf-note").value || null,
     lotti,
   };
@@ -3556,6 +3574,751 @@ function eliminaMovimento(id, codice) {
 
 
 // =============================================
+// VENDITE
+// =============================================
+
+function fmtEuro(v) {
+  if (v == null) return "€ 0,00";
+  return "€ " + Number(v).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function statoBadge(stato) {
+  const map = {
+    bozza: '<span class="badge bg-warning text-dark">Bozza</span>',
+    confermata: '<span class="badge bg-info">Confermata</span>',
+    spedita: '<span class="badge bg-primary">Spedita</span>',
+    pagata: '<span class="badge bg-success">Pagata</span>',
+  };
+  return map[stato] || `<span class="badge bg-secondary">${stato}</span>`;
+}
+
+// ---- LISTA VENDITE ----
+
+async function renderVendite() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-vendite");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  document.getElementById("btn-nuova-vendita")?.addEventListener("click", () => renderVenditaForm());
+
+  // Carica anni
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/anni`);
+    const anni = await res.json();
+    const selAnno = document.getElementById("filtro-vendite-anno");
+    const currentYear = new Date().getFullYear();
+    const anniSet = new Set([...anni, currentYear]);
+    const anniOrd = [...anniSet].sort((a, b) => b - a);
+    selAnno.innerHTML = '<option value="" selected>Tutti</option>' + anniOrd.map(a => `<option value="${a}">${a}</option>`).join("");
+  } catch (e) { console.error(e); }
+
+  // Carica clienti per filtro
+  try {
+    const res = await apiFetch(`${API_URL}/clienti/`);
+    const clienti = await res.json();
+    const selCli = document.getElementById("filtro-vendite-cliente");
+    selCli.innerHTML = '<option value="">Tutti</option>' + clienti.map(c => {
+      const nome = c.tipo_cliente === "azienda" ? (c.ragione_sociale || "") : `${c.nome || ""} ${c.cognome || ""}`.trim();
+      return `<option value="${c.id}">${nome}</option>`;
+    }).join("");
+  } catch (e) { console.error(e); }
+
+  // Event filtri
+  document.getElementById("filtro-vendite-anno")?.addEventListener("change", () => { caricaVenditeStats(); caricaVendite(); });
+  document.getElementById("filtro-vendite-stato")?.addEventListener("change", caricaVendite);
+  document.getElementById("filtro-vendite-cliente")?.addEventListener("change", caricaVendite);
+
+  await caricaVenditeStats();
+  await caricaVendite();
+}
+
+async function caricaVenditeStats() {
+  const anno = document.getElementById("filtro-vendite-anno")?.value || "";
+  try {
+    const url = anno ? `${API_URL}/vendite/stats?anno=${anno}` : `${API_URL}/vendite/stats`;
+    const res = await apiFetch(url);
+    const s = await res.json();
+    document.getElementById("stat-vendite-totale").textContent = s.totale || 0;
+    document.getElementById("stat-vendite-fatturato").textContent = fmtEuro(s.fatturato);
+    document.getElementById("stat-vendite-bozze").textContent = s.bozze || 0;
+    document.getElementById("stat-vendite-da-incassare").textContent = fmtEuro(s.da_incassare);
+    document.getElementById("stat-vendite-incassato").textContent = fmtEuro(s.incassato);
+  } catch (e) { console.error(e); }
+}
+
+async function caricaVendite() {
+  const anno = document.getElementById("filtro-vendite-anno")?.value || "";
+  const stato = document.getElementById("filtro-vendite-stato")?.value || "";
+  const clienteId = document.getElementById("filtro-vendite-cliente")?.value || "";
+
+  let url = `${API_URL}/vendite/?`;
+  if (anno) url += `anno=${anno}&`;
+  if (stato) url += `stato=${stato}&`;
+  if (clienteId) url += `cliente_id=${clienteId}&`;
+
+  try {
+    const res = await apiFetch(url);
+    venditeLista = await res.json();
+    renderTabellaVendite();
+  } catch (e) { console.error(e); }
+}
+
+function renderTabellaVendite() {
+  const tbody = document.getElementById("vendite-tbody");
+  if (!tbody) return;
+  if (!venditeLista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessuna vendita trovata.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = venditeLista.map(v => `
+    <tr>
+      <td><strong>${v.codice}</strong></td>
+      <td>${v.data_vendita || "—"}</td>
+      <td>${v.cliente_denominazione || "—"}</td>
+      <td>${statoBadge(v.stato)}</td>
+      <td>${v.numero_fattura || "—"}</td>
+      <td class="text-end">${fmtEuro(v.importo_totale)}</td>
+      <td class="text-center text-nowrap">
+        ${v.stato === "bozza"
+          ? `<button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaDettaglio(${v.id})" title="Dettaglio"><i class="fa-solid fa-eye"></i></button>
+             <button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaForm(${v.id})" title="Modifica"><i class="fa-solid fa-pen"></i></button>
+             <button class="btn btn-sm btn-success me-1" onclick="confermaVendita(${v.id})" title="Conferma"><i class="fa-solid fa-check"></i></button>
+             <button class="btn btn-sm btn-outline-danger" onclick="eliminaVendita(${v.id}, '${v.codice}')" title="Elimina"><i class="fa-solid fa-trash"></i></button>`
+          : `<button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaDettaglio(${v.id})" title="Dettaglio"><i class="fa-solid fa-eye"></i></button>${v.stato === "confermata" ? `<button class="btn btn-sm btn-info me-1" onclick="spedisciVendita(${v.id}, ${v.anno_campagna})" title="Spedisci"><i class="fa-solid fa-truck"></i></button><button class="btn btn-sm btn-accent" onclick="pagaVendita(${v.id})" title="Paga"><i class="fa-solid fa-money-bill"></i></button>` : ""}${v.stato === "spedita" ? `<button class="btn btn-sm btn-accent" onclick="pagaVendita(${v.id})" title="Paga"><i class="fa-solid fa-money-bill"></i></button>` : ""}`
+        }
+      </td>
+    </tr>
+  `).join("");
+}
+
+
+// ---- FORM VENDITA (bozza) ----
+
+async function renderVenditaForm(venditaId = null) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-vendita-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  venditaInModifica = null;
+
+  // Carica confezionamenti per select righe
+  try {
+    const res = await apiFetch(`${API_URL}/confezionamenti/`);
+    venditeConfezionamentiCache = await res.json();
+  } catch (e) { venditeConfezionamentiCache = []; }
+
+  // Carica clienti
+  let clientiOptions = '<option value="">— Seleziona —</option>';
+  try {
+    const res = await apiFetch(`${API_URL}/clienti/`);
+    const clienti = await res.json();
+    clientiOptions += clienti.map(c => {
+      const nome = c.tipo_cliente === "azienda" ? (c.ragione_sociale || "") : `${c.nome || ""} ${c.cognome || ""}`.trim();
+      return `<option value="${c.id}" data-sconto="${c.sconto_default || 0}" data-sped-ind="${c.consegna_indirizzo || c.indirizzo || ""}" data-sped-cap="${c.consegna_cap || c.cap || ""}" data-sped-citta="${c.consegna_citta || c.citta || ""}" data-sped-prov="${c.consegna_provincia || c.provincia || ""}">${nome}</option>`;
+    }).join("");
+  } catch (e) { console.error(e); }
+  document.getElementById("vf-cliente").innerHTML = clientiOptions;
+
+  const currentYear = new Date().getFullYear();
+  document.getElementById("vf-anno").value = currentYear;
+
+  // Flatpickr sulla data
+  const fpData = flatpickr("#vf-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
+
+  // Auto-genera codice
+  async function aggiornaCodiceDaAnno(anno) {
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/next-codice?anno=${anno}`);
+      const data = await res.json();
+      document.getElementById("vf-codice").value = data.codice;
+    } catch (e) { console.error(e); }
+  }
+  await aggiornaCodiceDaAnno(currentYear);
+
+  // Quando cambia anno → rigenera codice
+  document.getElementById("vf-anno").addEventListener("change", (e) => {
+    const anno = parseInt(e.target.value);
+    if (anno) aggiornaCodiceDaAnno(anno);
+  });
+
+  // Quando cambia cliente → auto-compila sconto e indirizzo spedizione
+  document.getElementById("vf-cliente").addEventListener("change", (e) => {
+    const opt = e.target.selectedOptions[0];
+    if (opt && opt.value) {
+      document.getElementById("vf-sconto").value = opt.dataset.sconto || 0;
+      document.getElementById("vf-sped-indirizzo").value = opt.dataset.spedInd || "";
+      document.getElementById("vf-sped-cap").value = opt.dataset.spedCap || "";
+      document.getElementById("vf-sped-citta").value = opt.dataset.spedCitta || "";
+      document.getElementById("vf-sped-provincia").value = opt.dataset.spedProv || "";
+      ricalcolaTotaliVendita();
+    }
+  });
+
+  // Sconto e IVA → ricalcola
+  document.getElementById("vf-sconto").addEventListener("input", ricalcolaTotaliVendita);
+  document.getElementById("vf-iva").addEventListener("input", ricalcolaTotaliVendita);
+
+  // Aggiungi riga
+  document.getElementById("btn-aggiungi-riga").addEventListener("click", () => aggiungiRigaVendita());
+
+  // Torna alla lista
+  document.getElementById("btn-torna-vendite").addEventListener("click", renderVendite);
+
+  // Submit
+  document.getElementById("vendita-form").addEventListener("submit", salvaVendita);
+
+  // Se modifica, carica dati
+  if (venditaId) {
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${venditaId}`);
+      const v = await res.json();
+      venditaInModifica = v;
+      document.getElementById("vendita-form-title").textContent = `Modifica Vendita ${v.codice}`;
+      document.getElementById("vf-id").value = v.id;
+      document.getElementById("vf-codice").value = v.codice;
+      document.getElementById("vf-data").value = v.data_vendita;
+      document.getElementById("vf-data")._flatpickr?.setDate(v.data_vendita);
+      document.getElementById("vf-anno").value = v.anno_campagna;
+      document.getElementById("vf-cliente").value = v.cliente_id;
+      document.getElementById("vf-sconto").value = v.sconto_percentuale || 0;
+      document.getElementById("vf-iva").value = v.iva_percentuale || 4;
+      document.getElementById("vf-sped-indirizzo").value = v.spedizione_indirizzo || "";
+      document.getElementById("vf-sped-cap").value = v.spedizione_cap || "";
+      document.getElementById("vf-sped-citta").value = v.spedizione_citta || "";
+      document.getElementById("vf-sped-provincia").value = v.spedizione_provincia || "";
+      document.getElementById("vf-note").value = v.note || "";
+
+      // Carica righe
+      for (const r of v.righe) {
+        aggiungiRigaVendita(r);
+      }
+      ricalcolaTotaliVendita();
+
+      // Mostra bottone elimina
+      const btnElim = document.getElementById("btn-elimina-vendita");
+      btnElim.style.display = "";
+      btnElim.addEventListener("click", () => eliminaVendita(v.id, v.codice));
+    } catch (e) { console.error(e); }
+  } else {
+    // Nuova: aggiungi una riga vuota
+    aggiungiRigaVendita();
+  }
+}
+
+function aggiungiRigaVendita(rigaData = null) {
+  const tbody = document.getElementById("vendita-righe-tbody");
+  const tr = document.createElement("tr");
+
+  let confOptions = '<option value="">— Seleziona —</option>';
+  confOptions += venditeConfezionamentiCache.map(c => {
+    const label = `${c.codice} — ${c.formato} (${c.contenitore_descrizione || "N/A"})`;
+    return `<option value="${c.id}" data-prezzo="${c.prezzo_unitario || 0}">${label}</option>`;
+  }).join("");
+
+  tr.innerHTML = `
+    <td>
+      <select class="form-select form-select-sm riga-conf" required>${confOptions}</select>
+    </td>
+    <td><input type="number" class="form-control form-control-sm text-center riga-qty" min="1" value="${rigaData ? rigaData.quantita : 1}" required /></td>
+    <td><input type="number" class="form-control form-control-sm text-end riga-prezzo" step="0.01" min="0" value="${rigaData ? rigaData.prezzo_unitario : 0}" required /></td>
+    <td><input type="text" class="form-control form-control-sm text-end riga-importo" readonly value="${rigaData ? Number(rigaData.importo_riga).toFixed(2) : '0.00'}" /></td>
+    <td class="text-center">
+      <button type="button" class="btn btn-sm btn-outline-danger btn-rimuovi-riga"><i class="fa-solid fa-times"></i></button>
+    </td>
+  `;
+
+  if (rigaData && rigaData.confezionamento_id) {
+    tr.querySelector(".riga-conf").value = rigaData.confezionamento_id;
+  }
+
+  // Quando si seleziona un confezionamento → auto-compila prezzo listino
+  tr.querySelector(".riga-conf").addEventListener("change", (e) => {
+    const opt = e.target.selectedOptions[0];
+    const prezzo = parseFloat(opt?.dataset.prezzo || 0);
+    tr.querySelector(".riga-prezzo").value = prezzo.toFixed(2);
+    calcolaImportoRiga(tr);
+  });
+
+  tr.querySelector(".riga-qty").addEventListener("input", () => calcolaImportoRiga(tr));
+  tr.querySelector(".riga-prezzo").addEventListener("input", () => calcolaImportoRiga(tr));
+
+  tr.querySelector(".btn-rimuovi-riga").addEventListener("click", () => {
+    tr.remove();
+    ricalcolaTotaliVendita();
+  });
+
+  tbody.appendChild(tr);
+}
+
+function calcolaImportoRiga(tr) {
+  const qty = parseInt(tr.querySelector(".riga-qty").value) || 0;
+  const prezzo = parseFloat(tr.querySelector(".riga-prezzo").value) || 0;
+  const importo = qty * prezzo;
+  tr.querySelector(".riga-importo").value = importo.toFixed(2);
+  ricalcolaTotaliVendita();
+}
+
+function ricalcolaTotaliVendita() {
+  const righe = document.querySelectorAll("#vendita-righe-tbody tr");
+  let imponibile = 0;
+  righe.forEach(tr => {
+    imponibile += parseFloat(tr.querySelector(".riga-importo")?.value || 0);
+  });
+
+  const sconto = parseFloat(document.getElementById("vf-sconto")?.value || 0);
+  const ivaPct = parseFloat(document.getElementById("vf-iva")?.value || 4);
+
+  const scontoVal = imponibile * (sconto / 100);
+  const imponibileScontato = imponibile - scontoVal;
+  const importoIva = imponibileScontato * (ivaPct / 100);
+  const totale = imponibileScontato + importoIva;
+
+  document.getElementById("vf-imponibile").value = imponibile.toFixed(2);
+  document.getElementById("vf-imponibile-scontato").value = imponibileScontato.toFixed(2);
+  document.getElementById("vf-importo-iva").value = importoIva.toFixed(2);
+  document.getElementById("vf-totale").value = totale.toFixed(2);
+}
+
+async function salvaVendita(e) {
+  e.preventDefault();
+
+  // Raccogli righe
+  const righe = [];
+  document.querySelectorAll("#vendita-righe-tbody tr").forEach(tr => {
+    const confId = parseInt(tr.querySelector(".riga-conf").value);
+    const qty = parseInt(tr.querySelector(".riga-qty").value) || 0;
+    const prezzo = parseFloat(tr.querySelector(".riga-prezzo").value) || 0;
+    const importo = parseFloat(tr.querySelector(".riga-importo").value) || 0;
+    if (confId && qty > 0) {
+      righe.push({
+        confezionamento_id: confId,
+        quantita: qty,
+        prezzo_unitario: prezzo,
+        importo_riga: importo,
+      });
+    }
+  });
+
+  if (!righe.length) {
+    alert("Aggiungi almeno una riga prodotto.");
+    return;
+  }
+
+  const payload = {
+    codice: document.getElementById("vf-codice").value,
+    cliente_id: parseInt(document.getElementById("vf-cliente").value),
+    data_vendita: document.getElementById("vf-data").value,
+    anno_campagna: parseInt(document.getElementById("vf-anno").value),
+    imponibile: parseFloat(document.getElementById("vf-imponibile").value) || 0,
+    sconto_percentuale: parseFloat(document.getElementById("vf-sconto").value) || 0,
+    imponibile_scontato: parseFloat(document.getElementById("vf-imponibile-scontato").value) || 0,
+    iva_percentuale: parseFloat(document.getElementById("vf-iva").value) || 4,
+    importo_iva: parseFloat(document.getElementById("vf-importo-iva").value) || 0,
+    importo_totale: parseFloat(document.getElementById("vf-totale").value) || 0,
+    spedizione_indirizzo: document.getElementById("vf-sped-indirizzo").value || null,
+    spedizione_cap: document.getElementById("vf-sped-cap").value || null,
+    spedizione_citta: document.getElementById("vf-sped-citta").value || null,
+    spedizione_provincia: document.getElementById("vf-sped-provincia").value || null,
+    note: document.getElementById("vf-note").value || null,
+    righe,
+  };
+
+  const id = document.getElementById("vf-id")?.value;
+  const isEdit = !!id;
+
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/${isEdit ? id : ""}`, {
+      method: isEdit ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore salvataggio vendita");
+      return;
+    }
+
+    const saved = await res.json();
+    // Dopo il salvataggio vai al dettaglio se confermata, altrimenti torna alla lista
+    renderVendite();
+  } catch (e) {
+    console.error("Errore salvataggio vendita:", e);
+    alert("Errore di connessione");
+  }
+}
+
+function eliminaVendita(id, codice) {
+  mostraConferma(`Eliminare la vendita "${codice}"?`, async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore eliminazione");
+        return;
+      }
+      renderVendite();
+    } catch (e) {
+      console.error("Errore eliminazione vendita", e);
+    }
+  });
+}
+
+
+// ---- DETTAGLIO VENDITA ----
+
+async function renderVenditaDettaglio(venditaId) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-vendita-dettaglio");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  document.getElementById("btn-torna-vendite-det")?.addEventListener("click", renderVendite);
+
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/${venditaId}`);
+    if (!res.ok) { alert("Vendita non trovata"); renderVendite(); return; }
+    const v = await res.json();
+
+    document.getElementById("vd-titolo").textContent = `Vendita ${v.codice}`;
+    document.getElementById("vd-sottotitolo").textContent = `${v.cliente_denominazione || ""} — ${v.stato.toUpperCase()}`;
+    document.getElementById("vd-codice").textContent = v.codice;
+    document.getElementById("vd-data").textContent = v.data_vendita || "—";
+    document.getElementById("btn-modifica-data").addEventListener("click", () => modificaDataVendita(v.id, v.data_vendita));
+    document.getElementById("vd-cliente").textContent = v.cliente_denominazione || "—";
+    document.getElementById("vd-stato-badge").innerHTML = statoBadge(v.stato);
+    document.getElementById("vd-fattura").textContent = v.numero_fattura || "—";
+    document.getElementById("vd-ddt").textContent = v.numero_ddt || "—";
+    document.getElementById("vd-data-conferma").textContent = v.data_conferma || "—";
+    document.getElementById("vd-data-spedizione").textContent = v.data_spedizione || "—";
+
+    // Indirizzo spedizione
+    const spedParts = [v.spedizione_indirizzo, [v.spedizione_cap, v.spedizione_citta, v.spedizione_provincia ? `(${v.spedizione_provincia})` : ""].filter(Boolean).join(" ")].filter(Boolean);
+    document.getElementById("vd-sped-indirizzo").textContent = spedParts.join(" — ") || "Non specificato";
+
+    // Righe
+    const righeHtml = v.righe.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${r.confezionamento_codice || "—"}</td>
+        <td>${r.confezionamento_formato || "—"}</td>
+        <td>${r.contenitore_descrizione || "—"}</td>
+        <td class="text-center">${r.quantita}</td>
+        <td class="text-end">${fmtEuro(r.prezzo_unitario)}</td>
+        <td class="text-end">${fmtEuro(r.importo_riga)}</td>
+      </tr>
+    `).join("");
+    document.getElementById("vd-righe-tbody").innerHTML = righeHtml;
+
+    // Totali
+    document.getElementById("vd-imponibile").textContent = fmtEuro(v.imponibile);
+    if (v.sconto_percentuale && v.sconto_percentuale > 0) {
+      document.getElementById("vd-sconto-pct").textContent = v.sconto_percentuale;
+      document.getElementById("vd-sconto-val").textContent = "- " + fmtEuro(v.imponibile - v.imponibile_scontato);
+    } else {
+      document.getElementById("vd-sconto-row").style.display = "none";
+    }
+    document.getElementById("vd-imponibile-scontato").textContent = fmtEuro(v.imponibile_scontato);
+    document.getElementById("vd-iva-pct").textContent = v.iva_percentuale || 4;
+    document.getElementById("vd-importo-iva").textContent = fmtEuro(v.importo_iva);
+    document.getElementById("vd-totale").textContent = fmtEuro(v.importo_totale);
+
+    // Pagamento
+    if (v.stato === "pagata") {
+      document.getElementById("vd-pagamento-card").style.display = "";
+      document.getElementById("vd-pag-data").textContent = v.data_pagamento || "—";
+      document.getElementById("vd-pag-modalita").textContent = v.modalita_pagamento || "—";
+      document.getElementById("vd-pag-riferimento").textContent = v.riferimento_pagamento || "—";
+    }
+
+    // Note
+    if (v.note) {
+      document.getElementById("vd-note-card").style.display = "";
+      document.getElementById("vd-note").textContent = v.note;
+    }
+
+    // Azioni basate sullo stato
+    if (v.stato === "bozza") {
+      const btnModifica = document.getElementById("btn-modifica-vendita");
+      btnModifica.style.display = "";
+      btnModifica.addEventListener("click", () => renderVenditaForm(v.id));
+
+      const btnConferma = document.getElementById("btn-conferma-vendita");
+      btnConferma.style.display = "";
+      btnConferma.addEventListener("click", () => confermaVendita(v.id));
+    }
+
+    if (v.stato === "confermata") {
+      document.getElementById("btn-spedisci-vendita").style.display = "";
+      document.getElementById("btn-spedisci-vendita").addEventListener("click", () => spedisciVendita(v.id, v.anno_campagna));
+
+      document.getElementById("btn-paga-vendita").style.display = "";
+      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id));
+    }
+
+    if (v.stato === "spedita") {
+      document.getElementById("btn-paga-vendita").style.display = "";
+      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id));
+    }
+
+    // PDF sempre disponibili per confermata+
+    if (v.stato !== "bozza") {
+      document.getElementById("btn-download-fattura").style.display = "";
+      document.getElementById("btn-download-fattura").addEventListener("click", () => scaricaFatturaPdf(v.id));
+
+      document.getElementById("btn-download-ddt").style.display = "";
+      document.getElementById("btn-download-ddt").addEventListener("click", () => scaricaDdtPdf(v.id));
+    }
+
+  } catch (e) {
+    console.error("Errore caricamento dettaglio vendita:", e);
+  }
+}
+
+
+// ---- TRANSIZIONI DI STATO ----
+
+function _afterVenditaTransition(id) {
+  // Se siamo nella lista vendite, aggiorna la lista; altrimenti vai al dettaglio
+  if (document.getElementById("vendite-tbody")) {
+    caricaVenditeStats();
+    caricaVendite();
+  } else {
+    renderVenditaDettaglio(id);
+  }
+}
+
+function modificaDataVendita(id, dataAttuale) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-confirm-overlay";
+  overlay.innerHTML = `
+    <div class="modal-confirm-box" style="max-width:350px;">
+      <h5 class="mb-3">Modifica Data Vendita</h5>
+      <div class="mb-3">
+        <label class="form-label form-label-sm">Nuova data</label>
+        <input type="text" id="modal-nuova-data" class="form-control form-control-sm" />
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-secondary btn-sm" id="modal-data-annulla">Annulla</button>
+        <button class="btn btn-primary btn-sm" id="modal-data-salva">Salva</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  flatpickr("#modal-nuova-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: dataAttuale || "today" });
+
+  overlay.querySelector("#modal-data-annulla").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#modal-data-salva").addEventListener("click", async () => {
+    const nuovaData = document.getElementById("modal-nuova-data").value;
+    if (!nuovaData) { alert("Inserire una data"); return; }
+
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_vendita: nuovaData }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore modifica data");
+        return;
+      }
+      overlay.remove();
+      renderVenditaDettaglio(id);
+    } catch (e) {
+      console.error("Errore modifica data vendita:", e);
+    }
+  });
+}
+
+function confermaVendita(id) {
+  mostraConferma("Confermare la vendita? Il magazzino verra' scalato automaticamente.", async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${id}/conferma`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore conferma");
+        return;
+      }
+      _afterVenditaTransition(id);
+    } catch (e) {
+      console.error("Errore conferma vendita:", e);
+    }
+  }, "Conferma e Scarica Magazzino", "btn-success");
+}
+
+function spedisciVendita(id, anno) {
+  // Modal per inserire dati spedizione
+  const overlay = document.createElement("div");
+  overlay.className = "modal-confirm-overlay";
+  overlay.innerHTML = `
+    <div class="modal-confirm-box" style="max-width:450px;">
+      <h5 class="mb-3">Segna come Spedita</h5>
+      <div class="mb-2">
+        <label class="form-label form-label-sm">Data Spedizione *</label>
+        <input type="text" id="modal-sped-data" class="form-control form-control-sm" required />
+      </div>
+      <div class="mb-2">
+        <label class="form-label form-label-sm">Numero DDT (auto se vuoto)</label>
+        <input type="text" id="modal-sped-ddt" class="form-control form-control-sm" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label form-label-sm">Note Spedizione</label>
+        <textarea id="modal-sped-note" class="form-control form-control-sm" rows="2"></textarea>
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-secondary btn-sm" id="modal-sped-annulla">Annulla</button>
+        <button class="btn btn-info btn-sm" id="modal-sped-conferma">Conferma Spedizione</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  flatpickr("#modal-sped-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
+
+  overlay.querySelector("#modal-sped-annulla").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#modal-sped-conferma").addEventListener("click", async () => {
+    const dataSped = document.getElementById("modal-sped-data").value;
+    if (!dataSped) { alert("Inserire la data di spedizione"); return; }
+
+    const payload = {
+      data_spedizione: dataSped,
+      numero_ddt: document.getElementById("modal-sped-ddt").value || null,
+      note_spedizione: document.getElementById("modal-sped-note").value || null,
+    };
+
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${id}/spedisci`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore spedizione");
+        return;
+      }
+      overlay.remove();
+      _afterVenditaTransition(id);
+    } catch (e) {
+      console.error("Errore spedizione:", e);
+    }
+  });
+}
+
+function pagaVendita(id) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-confirm-overlay";
+  overlay.innerHTML = `
+    <div class="modal-confirm-box" style="max-width:450px;">
+      <h5 class="mb-3">Registra Pagamento</h5>
+      <div class="mb-2">
+        <label class="form-label form-label-sm">Data Pagamento *</label>
+        <input type="text" id="modal-pag-data" class="form-control form-control-sm" required />
+      </div>
+      <div class="mb-2">
+        <label class="form-label form-label-sm">Modalita'</label>
+        <select id="modal-pag-modalita" class="form-select form-select-sm">
+          <option value="">— Seleziona —</option>
+          <option value="Bonifico">Bonifico</option>
+          <option value="Contanti">Contanti</option>
+          <option value="Assegno">Assegno</option>
+          <option value="Carta di credito">Carta di credito</option>
+          <option value="Altro">Altro</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label form-label-sm">Riferimento</label>
+        <input type="text" id="modal-pag-rif" class="form-control form-control-sm" placeholder="N. bonifico, CRO, ecc." />
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-outline-secondary btn-sm" id="modal-pag-annulla">Annulla</button>
+        <button class="btn btn-accent btn-sm" id="modal-pag-conferma">Registra Pagamento</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  flatpickr("#modal-pag-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
+
+  overlay.querySelector("#modal-pag-annulla").addEventListener("click", () => overlay.remove());
+  overlay.querySelector("#modal-pag-conferma").addEventListener("click", async () => {
+    const dataPag = document.getElementById("modal-pag-data").value;
+    if (!dataPag) { alert("Inserire la data di pagamento"); return; }
+
+    const payload = {
+      data_pagamento: dataPag,
+      modalita_pagamento: document.getElementById("modal-pag-modalita").value || null,
+      riferimento_pagamento: document.getElementById("modal-pag-rif").value || null,
+    };
+
+    try {
+      const res = await apiFetch(`${API_URL}/vendite/${id}/paga`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.detail || "Errore pagamento");
+        return;
+      }
+      overlay.remove();
+      _afterVenditaTransition(id);
+    } catch (e) {
+      console.error("Errore pagamento:", e);
+    }
+  });
+}
+
+
+// ---- DOWNLOAD PDF ----
+
+async function scaricaFatturaPdf(id) {
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/${id}/fattura/pdf`);
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore download fattura");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Fattura_${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Errore download fattura:", e);
+  }
+}
+
+async function scaricaDdtPdf(id) {
+  try {
+    const res = await apiFetch(`${API_URL}/vendite/${id}/ddt/pdf`);
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail || "Errore download DDT");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `DDT_${id}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Errore download DDT:", e);
+  }
+}
+
+
+// =============================================
 // INIT
 // =============================================
 
@@ -3608,6 +4371,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-magazzino")?.addEventListener("click", () => {
     setActiveMenu("menu-magazzino");
     renderMagazzino();
+  });
+
+  document.getElementById("menu-vendite")?.addEventListener("click", () => {
+    setActiveMenu("menu-vendite");
+    renderVendite();
   });
 
   document.getElementById("menu-utenti")?.addEventListener("click", () => {
