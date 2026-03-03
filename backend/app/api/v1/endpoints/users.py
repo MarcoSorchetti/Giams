@@ -32,6 +32,7 @@ def create_user(user_in: UserCreate, db: Session = Depends(get_db)):
     db_user = User(
         username=user_in.username,
         password_hash=get_password_hash(user_in.password),
+        is_admin=user_in.is_admin,
     )
     db.add(db_user)
     db.commit()
@@ -52,6 +53,8 @@ def update_user(user_id: int, user_in: UserUpdate, db: Session = Depends(get_db)
         user.password_hash = get_password_hash(user_in.password)
     if user_in.is_active is not None:
         user.is_active = user_in.is_active
+    if user_in.is_admin is not None:
+        user.is_admin = user_in.is_admin
     db.commit()
     db.refresh(user)
     return user

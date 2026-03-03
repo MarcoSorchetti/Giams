@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <title>GIAMS - Login</title>
   <link rel="stylesheet" href="styles.css" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
 </head>
 <body class="login-page">
   <div class="login-card">
@@ -23,7 +24,15 @@
 
       <div class="login-form-group">
         <label for="password">Password</label>
-        <input type="password" id="password" required />
+        <div style="position:relative;">
+          <input type="password" id="password" required style="padding-right:40px;" />
+          <button type="button" id="toggle-password"
+            style="position:absolute; right:8px; top:50%; transform:translateY(-50%);
+                   background:none; border:none; color:#8a8a9a; cursor:pointer; padding:4px;"
+            title="Mostra/Nascondi password">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+        </div>
       </div>
 
       <button type="submit" class="login-btn" id="login-btn">Accedi</button>
@@ -59,6 +68,17 @@
         loginCard.classList.add("shake");
       }
 
+      // Toggle mostra/nascondi password
+      const toggleBtn = document.getElementById("toggle-password");
+      const pwdInput = document.getElementById("password");
+      toggleBtn.addEventListener("click", () => {
+        const isHidden = pwdInput.type === "password";
+        pwdInput.type = isHidden ? "text" : "password";
+        toggleBtn.innerHTML = isHidden
+          ? '<i class="fa-solid fa-eye-slash"></i>'
+          : '<i class="fa-solid fa-eye"></i>';
+      });
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         errorBox.style.display = "none";
@@ -87,6 +107,7 @@
           localStorage.setItem("giams_token", data.access_token);
           localStorage.setItem("giams_token_type", data.token_type || "bearer");
           if (data.username) localStorage.setItem("giams_user", data.username);
+          localStorage.setItem("giams_is_admin", data.is_admin ? "true" : "false");
 
           window.location.href = "index.html";
         } catch (err) {

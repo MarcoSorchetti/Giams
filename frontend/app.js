@@ -40,7 +40,28 @@ function logout() {
   localStorage.removeItem("giams_token");
   localStorage.removeItem("giams_token_type");
   localStorage.removeItem("giams_user");
+  localStorage.removeItem("giams_is_admin");
   window.location.href = "login.html";
+}
+
+/**
+ * Wrapper per fetch che aggiunge automaticamente il token JWT.
+ * Gestisce 401 (token scaduto) con redirect a login.
+ */
+async function apiFetch(url, options = {}) {
+  const token = getToken();
+  if (token) {
+    options.headers = {
+      ...options.headers,
+      "Authorization": `Bearer ${token}`,
+    };
+  }
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    logout();
+    throw new Error("Sessione scaduta");
+  }
+  return res;
 }
 
 async function getAppVersion() {
@@ -200,7 +221,7 @@ function initParcelleListUI() {
 
 async function caricaParcelleStats() {
   try {
-    const res = await fetch(`${API_URL}/parcelle/stats`);
+    const res = await apiFetch(`${API_URL}/parcelle/stats`);
     const stats = await res.json();
     document.getElementById("stat-parcelle").textContent = stats.totale_parcelle;
     document.getElementById("stat-ettari").textContent = parseFloat(stats.totale_ettari).toFixed(1);
@@ -222,7 +243,7 @@ async function caricaParcelle() {
   if (stato) params.append("stato", stato);
 
   try {
-    const res = await fetch(`${API_URL}/parcelle/?${params}`);
+    const res = await apiFetch(`${API_URL}/parcelle/?${params}`);
     parcelleLista = await res.json();
     renderTabellaParcelle();
   } catch (err) {
@@ -306,7 +327,7 @@ function initParcellaFormUI() {
 
 async function popolaFormParcella(id) {
   try {
-    const res = await fetch(`${API_URL}/parcelle/${id}`);
+    const res = await apiFetch(`${API_URL}/parcelle/${id}`);
     const p = await res.json();
 
     document.getElementById("p-codice").value = p.codice || "";
@@ -350,7 +371,7 @@ async function salvaParcella() {
     : `${API_URL}/parcelle/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -377,7 +398,7 @@ async function salvaParcella() {
 function eliminaParcella(id, nome) {
   mostraConferma(`Eliminare la parcella "${nome}"?`, async () => {
     try {
-      await fetch(`${API_URL}/parcelle/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/parcelle/${id}`, { method: "DELETE" });
       caricaParcelleStats();
       caricaParcelle();
     } catch (err) {
@@ -435,7 +456,7 @@ function initUtentiUI() {
 
 async function caricaUtenti() {
   try {
-    const res = await fetch(`${API_URL}/users/`);
+    const res = await apiFetch(`${API_URL}/users/`);
     const utenti = await res.json();
     renderTabellaUtenti(utenti);
   } catch (err) {
@@ -452,12 +473,17 @@ function renderTabellaUtenti(utenti) {
       <td>${u.id}</td>
       <td>${u.username}</td>
       <td>
+        <span class="badge-stato-${u.is_admin ? 'produttivo' : 'attivo'}">
+          ${u.is_admin ? "Admin" : "Operatore"}
+        </span>
+      </td>
+      <td>
         <span class="badge-stato-${u.is_active ? 'produttivo' : 'dismesso'}">
           ${u.is_active ? "Attivo" : "Disattivato"}
         </span>
       </td>
       <td>
-        <button class="btn-action btn-action-edit me-1" onclick="modificaUtente(${u.id}, '${u.username}', ${u.is_active})" title="Modifica">
+        <button class="btn-action btn-action-edit me-1" onclick="modificaUtente(${u.id}, '${u.username}', ${u.is_active}, ${u.is_admin})" title="Modifica">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
         <button class="btn-action btn-action-delete" onclick="eliminaUtente(${u.id}, '${u.username}')" title="Elimina">
@@ -468,13 +494,14 @@ function renderTabellaUtenti(utenti) {
   `).join("");
 }
 
-function modificaUtente(id, username, isActive) {
+function modificaUtente(id, username, isActive, isAdmin) {
   utenteInModifica = id;
   document.getElementById("form-utente-titolo").textContent = "Modifica Utente";
   document.getElementById("u-username").value = username;
   document.getElementById("u-password").value = "";
   document.getElementById("u-password").required = false;
   document.getElementById("u-attivo").checked = isActive;
+  document.getElementById("u-admin").checked = isAdmin;
 }
 
 function resetFormUtente() {
@@ -484,12 +511,14 @@ function resetFormUtente() {
   document.getElementById("u-password").value = "";
   document.getElementById("u-password").required = true;
   document.getElementById("u-attivo").checked = true;
+  document.getElementById("u-admin").checked = false;
 }
 
 async function salvaUtente() {
   const data = {
     username: document.getElementById("u-username").value.trim(),
     is_active: document.getElementById("u-attivo").checked,
+    is_admin: document.getElementById("u-admin").checked,
   };
   const pwd = document.getElementById("u-password").value;
   if (pwd) data.password = pwd;
@@ -505,7 +534,7 @@ async function salvaUtente() {
   }
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -527,7 +556,7 @@ async function salvaUtente() {
 function eliminaUtente(id, username) {
   mostraConferma(`Eliminare l'utente "${username}"?`, async () => {
     try {
-      await fetch(`${API_URL}/users/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/users/${id}`, { method: "DELETE" });
       caricaUtenti();
     } catch (err) {
       console.error("Errore eliminazione utente:", err);
@@ -596,7 +625,7 @@ async function renderRaccolteLista() {
 
 async function popolaFiltroAnniRaccolte() {
   try {
-    const res = await fetch(`${API_URL}/raccolte/anni`);
+    const res = await apiFetch(`${API_URL}/raccolte/anni`);
     const anni = await res.json();
     const sel = document.getElementById("filtro-raccolte-anno");
     if (sel) {
@@ -619,7 +648,7 @@ function initRaccolteListUI() {
 
 async function popolaFiltroParcelle() {
   try {
-    const res = await fetch(`${API_URL}/parcelle/`);
+    const res = await apiFetch(`${API_URL}/parcelle/`);
     const parcelle = await res.json();
     const sel = document.getElementById("filtro-raccolte-parcella");
     if (sel) {
@@ -641,7 +670,7 @@ async function caricaRaccolteStats() {
   if (anno) params.append("anno", anno);
 
   try {
-    const res = await fetch(`${API_URL}/raccolte/stats?${params}`);
+    const res = await apiFetch(`${API_URL}/raccolte/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-raccolte").textContent = stats.totale_raccolte;
     document.getElementById("stat-kg-olive").textContent = parseFloat(stats.totale_kg).toLocaleString("it-IT");
@@ -661,7 +690,7 @@ async function caricaRaccolte() {
   if (parcella) params.append("parcella_id", parcella);
 
   try {
-    const res = await fetch(`${API_URL}/raccolte/?${params}`);
+    const res = await apiFetch(`${API_URL}/raccolte/?${params}`);
     raccolteLista = await res.json();
     renderTabellaRaccolte();
   } catch (err) {
@@ -751,7 +780,7 @@ async function renderRaccoltaForm(id) {
 
 async function aggiornaCodicRaccolta(anno) {
   try {
-    const res = await fetch(`${API_URL}/raccolte/next-codice?anno=${anno}`);
+    const res = await apiFetch(`${API_URL}/raccolte/next-codice?anno=${anno}`);
     const data = await res.json();
     document.getElementById("r-codice").value = data.codice;
   } catch (err) {
@@ -764,7 +793,7 @@ async function renderParcelleSelezione() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_URL}/parcelle/`);
+    const res = await apiFetch(`${API_URL}/parcelle/`);
     const parcelle = await res.json();
 
     container.innerHTML = parcelle.map(p => `
@@ -808,7 +837,7 @@ function initRaccoltaFormUI() {
 
 async function popolaFormRaccolta(id) {
   try {
-    const res = await fetch(`${API_URL}/raccolte/${id}`);
+    const res = await apiFetch(`${API_URL}/raccolte/${id}`);
     const r = await res.json();
 
     document.getElementById("r-codice").value = r.codice || "";
@@ -875,7 +904,7 @@ async function salvaRaccolta() {
     : `${API_URL}/raccolte/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -899,7 +928,7 @@ async function salvaRaccolta() {
 function eliminaRaccolta(id, codice) {
   mostraConferma(`Eliminare la raccolta "${codice}"? Anche il lotto associato verra' eliminato.`, async () => {
     try {
-      await fetch(`${API_URL}/raccolte/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/raccolte/${id}`, { method: "DELETE" });
       caricaRaccolteStats();
       caricaRaccolte();
     } catch (err) {
@@ -926,7 +955,7 @@ async function renderLottiLista() {
 
 async function popolaFiltroAnniLotti() {
   try {
-    const res = await fetch(`${API_URL}/lotti/anni`);
+    const res = await apiFetch(`${API_URL}/lotti/anni`);
     const anni = await res.json();
     const sel = document.getElementById("filtro-lotti-anno");
     if (sel) {
@@ -953,7 +982,7 @@ async function caricaLottiStats() {
   if (anno) params.append("anno", anno);
 
   try {
-    const res = await fetch(`${API_URL}/lotti/stats?${params}`);
+    const res = await apiFetch(`${API_URL}/lotti/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-lotti").textContent = stats.totale_lotti;
     document.getElementById("stat-kg-olive-lotti").textContent = parseFloat(stats.totale_kg_olive).toLocaleString("it-IT");
@@ -977,7 +1006,7 @@ async function caricaLotti() {
   if (stato) params.append("stato", stato);
 
   try {
-    const res = await fetch(`${API_URL}/lotti/?${params}`);
+    const res = await apiFetch(`${API_URL}/lotti/?${params}`);
     lottiLista = await res.json();
     renderTabellaLotti();
   } catch (err) {
@@ -1072,7 +1101,7 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
   if (selRaccolta) selRaccolta.value = raccoltaId;
 
   try {
-    const res = await fetch(`${API_URL}/raccolte/${raccoltaId}`);
+    const res = await apiFetch(`${API_URL}/raccolte/${raccoltaId}`);
     const r = await res.json();
     document.getElementById("l-kg").value = r.kg_olive_totali || "";
     document.getElementById("l-anno").value = r.anno_campagna || "2026";
@@ -1093,7 +1122,7 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
 
 async function aggiornaCodiceLotto(anno) {
   try {
-    const res = await fetch(`${API_URL}/lotti/next-codice?anno=${anno}`);
+    const res = await apiFetch(`${API_URL}/lotti/next-codice?anno=${anno}`);
     const data = await res.json();
     document.getElementById("l-codice").value = data.codice;
   } catch (err) {
@@ -1103,7 +1132,7 @@ async function aggiornaCodiceLotto(anno) {
 
 async function popolaSelectRaccolte() {
   try {
-    const res = await fetch(`${API_URL}/raccolte/`);
+    const res = await apiFetch(`${API_URL}/raccolte/`);
     const raccolte = await res.json();
     const sel = document.getElementById("l-raccolta");
     if (sel) {
@@ -1138,7 +1167,7 @@ function initLottoFormUI() {
 
 async function popolaFormLotto(id) {
   try {
-    const res = await fetch(`${API_URL}/lotti/${id}`);
+    const res = await apiFetch(`${API_URL}/lotti/${id}`);
     const l = await res.json();
 
     document.getElementById("l-codice").value = l.codice_lotto || "";
@@ -1210,7 +1239,7 @@ async function salvaLotto() {
     : `${API_URL}/lotti/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -1234,7 +1263,7 @@ async function salvaLotto() {
 function eliminaLotto(id, codice) {
   mostraConferma(`Eliminare il lotto "${codice}"?`, async () => {
     try {
-      await fetch(`${API_URL}/lotti/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/lotti/${id}`, { method: "DELETE" });
       caricaLottiStats();
       caricaLotti();
     } catch (err) {
@@ -1252,7 +1281,7 @@ let contenitoriCache = [];
 
 async function caricaContenitoriCache() {
   try {
-    const res = await fetch(`${API_URL}/contenitori/`);
+    const res = await apiFetch(`${API_URL}/contenitori/`);
     contenitoriCache = await res.json();
   } catch (err) {
     console.error("Errore caricamento contenitori:", err);
@@ -1302,7 +1331,7 @@ function popolaFiltroContenitori() {
 
 async function popolaFiltroAnniConf() {
   try {
-    const res = await fetch(`${API_URL}/confezionamenti/anni`);
+    const res = await apiFetch(`${API_URL}/confezionamenti/anni`);
     const anni = await res.json();
     const sel = document.getElementById("filtro-conf-anno");
     if (sel) {
@@ -1332,7 +1361,7 @@ async function caricaConfStats() {
   if (anno) params.append("anno", anno);
 
   try {
-    const res = await fetch(`${API_URL}/confezionamenti/stats?${params}`);
+    const res = await apiFetch(`${API_URL}/confezionamenti/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-conf-totale").textContent = stats.totale_confezionamenti;
     document.getElementById("stat-conf-unita").textContent = stats.totale_unita.toLocaleString("it-IT");
@@ -1352,7 +1381,7 @@ async function caricaConfezionamenti() {
   if (formato) params.append("formato", formato);
 
   try {
-    const res = await fetch(`${API_URL}/confezionamenti/?${params}`);
+    const res = await apiFetch(`${API_URL}/confezionamenti/?${params}`);
     confezionamentiLista = await res.json();
     renderTabellaConf();
   } catch (err) {
@@ -1438,7 +1467,7 @@ async function renderLottiSelezione() {
   if (!container) return;
 
   try {
-    const res = await fetch(`${API_URL}/lotti/`);
+    const res = await apiFetch(`${API_URL}/lotti/`);
     const lotti = await res.json();
 
     container.innerHTML = lotti.map(l => `
@@ -1500,7 +1529,7 @@ function initConfFormUI() {
 
 async function popolaFormConf(id) {
   try {
-    const res = await fetch(`${API_URL}/confezionamenti/${id}`);
+    const res = await apiFetch(`${API_URL}/confezionamenti/${id}`);
     const c = await res.json();
 
     document.getElementById("cf-codice").value = c.codice || "";
@@ -1567,7 +1596,7 @@ async function salvaConfezionamento() {
     : `${API_URL}/confezionamenti/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -1591,7 +1620,7 @@ async function salvaConfezionamento() {
 function eliminaConfezionamento(id, codice) {
   mostraConferma(`Eliminare il confezionamento "${codice}"?`, async () => {
     try {
-      await fetch(`${API_URL}/confezionamenti/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/confezionamenti/${id}`, { method: "DELETE" });
       caricaConfStats();
       caricaConfezionamenti();
     } catch (err) {
@@ -1617,7 +1646,7 @@ async function renderContenitori() {
 
 async function caricaContenitori() {
   try {
-    const res = await fetch(`${API_URL}/contenitori/?tutti=true`);
+    const res = await apiFetch(`${API_URL}/contenitori/?tutti=true`);
     contenitoriLista = await res.json();
     renderContenitoriGrid();
   } catch (err) {
@@ -1713,7 +1742,7 @@ async function renderContenitoreForm(id) {
 
 async function popolaFormContenitore(id) {
   try {
-    const res = await fetch(`${API_URL}/contenitori/${id}`);
+    const res = await apiFetch(`${API_URL}/contenitori/${id}`);
     const ct = await res.json();
 
     document.getElementById("ct-codice").value = ct.codice || "";
@@ -1743,7 +1772,7 @@ async function salvaContenitore() {
     : `${API_URL}/contenitori/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -1762,7 +1791,7 @@ async function salvaContenitore() {
     if (fotoInput?.files.length > 0) {
       const formData = new FormData();
       formData.append("file", fotoInput.files[0]);
-      await fetch(`${API_URL}/contenitori/${saved.id}/foto`, {
+      await apiFetch(`${API_URL}/contenitori/${saved.id}/foto`, {
         method: "POST",
         body: formData,
       });
@@ -1779,7 +1808,7 @@ async function salvaContenitore() {
 function eliminaContenitore(id, descrizione) {
   mostraConferma(`Eliminare il contenitore "${descrizione}"?`, async () => {
     try {
-      const res = await fetch(`${API_URL}/contenitori/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_URL}/contenitori/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || "Errore durante l'eliminazione.");
@@ -1820,7 +1849,7 @@ function initClientiListUI() {
 
 async function caricaClientiStats() {
   try {
-    const res = await fetch(`${API_URL}/clienti/stats`);
+    const res = await apiFetch(`${API_URL}/clienti/stats`);
     const s = await res.json();
     document.getElementById("stat-clienti-totale").textContent = s.totale;
     document.getElementById("stat-clienti-attivi").textContent = s.attivi;
@@ -1841,7 +1870,7 @@ async function caricaClienti() {
   if (tutti) params.append("tutti", "true");
 
   try {
-    const res = await fetch(`${API_URL}/clienti/?${params}`);
+    const res = await apiFetch(`${API_URL}/clienti/?${params}`);
     clientiLista = await res.json();
     renderTabellaClienti();
   } catch (err) {
@@ -1947,7 +1976,7 @@ function toggleSezioniCliente(tipo) {
 
 async function popolaFormCliente(id) {
   try {
-    const res = await fetch(`${API_URL}/clienti/${id}`);
+    const res = await apiFetch(`${API_URL}/clienti/${id}`);
     const c = await res.json();
 
     document.getElementById("cli-codice").value = c.codice || "";
@@ -2034,7 +2063,7 @@ async function salvaCliente() {
     : `${API_URL}/clienti/`;
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -2057,7 +2086,7 @@ async function salvaCliente() {
 function eliminaCliente(id, nome) {
   mostraConferma(`Eliminare il cliente "${nome}"?`, async () => {
     try {
-      await fetch(`${API_URL}/clienti/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/clienti/${id}`, { method: "DELETE" });
       caricaClientiStats();
       caricaClienti();
     } catch (err) {
@@ -2105,7 +2134,7 @@ async function renderFornitori() {
 
 async function caricaFornitoriStats() {
   try {
-    const res = await fetch(`${API_URL}/fornitori/stats`);
+    const res = await apiFetch(`${API_URL}/fornitori/stats`);
     const data = await res.json();
     document.getElementById("stat-fornitori-totale").textContent = data.totale;
     document.getElementById("stat-fornitori-attivi").textContent = data.attivi;
@@ -2128,7 +2157,7 @@ async function caricaFornitori() {
   if (categoria) url += `&categoria=${categoria}`;
 
   try {
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     fornitoriLista = await res.json();
     renderTabellaFornitori();
   } catch (err) {
@@ -2172,7 +2201,7 @@ function renderTabellaFornitori() {
 
 async function editFornitore(id) {
   try {
-    const res = await fetch(`${API_URL}/fornitori/${id}`);
+    const res = await apiFetch(`${API_URL}/fornitori/${id}`);
     fornitoreInModifica = await res.json();
     renderFornitoreForm();
   } catch (err) {
@@ -2198,7 +2227,7 @@ function renderFornitoreForm() {
     popolaFormFornitore(fornitoreInModifica);
   } else {
     // Carica prossimo codice automatico
-    fetch(`${API_URL}/fornitori/next-codice`)
+    apiFetch(`${API_URL}/fornitori/next-codice`)
       .then(r => r.json())
       .then(d => { document.getElementById("forn-codice").value = d.codice; })
       .catch(() => {});
@@ -2278,7 +2307,7 @@ async function salvaFornitore(e) {
   const method = isEdit ? "PUT" : "POST";
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -2300,7 +2329,7 @@ async function salvaFornitore(e) {
 function eliminaFornitore(id, nome) {
   mostraConferma(`Eliminare il fornitore "${nome}"?`, async () => {
     try {
-      await fetch(`${API_URL}/fornitori/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/fornitori/${id}`, { method: "DELETE" });
       caricaFornitoriStats();
       caricaFornitori();
     } catch (err) {
@@ -2394,7 +2423,7 @@ async function renderCosti() {
 
 async function caricaCategorieCosto() {
   try {
-    const res = await fetch(`${API_URL}/categorie-costo/`);
+    const res = await apiFetch(`${API_URL}/categorie-costo/`);
     categorieCostoLista = await res.json();
   } catch (err) {
     console.error("Errore caricamento categorie:", err);
@@ -2404,7 +2433,7 @@ async function caricaCategorieCosto() {
 async function popolaFiltroCosti() {
   // Anni
   try {
-    const res = await fetch(`${API_URL}/costi/anni`);
+    const res = await apiFetch(`${API_URL}/costi/anni`);
     const anni = await res.json();
     const selAnno = document.getElementById("filtro-costi-anno");
     if (selAnno) {
@@ -2422,7 +2451,7 @@ async function popolaFiltroCosti() {
 
   // Fornitori
   try {
-    const res = await fetch(`${API_URL}/fornitori/?tutti=false`);
+    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false`);
     const fornitori = await res.json();
     const selForn = document.getElementById("filtro-costi-fornitore");
     if (selForn) {
@@ -2454,7 +2483,7 @@ async function caricaCostiStats() {
   try {
     const anno = document.getElementById("filtro-costi-anno")?.value || "";
     const url = anno ? `${API_URL}/costi/stats?anno=${anno}` : `${API_URL}/costi/stats`;
-    const res = await fetch(url);
+    const res = await apiFetch(url);
     const s = await res.json();
 
     const fmt = (v) => "\u20AC " + Number(v).toLocaleString("it-IT", {minimumFractionDigits:2});
@@ -2485,7 +2514,7 @@ async function caricaCosti() {
     if (stato) params.set("stato", stato);
     if (forn) params.set("fornitore_id", forn);
 
-    const res = await fetch(`${API_URL}/costi/?${params.toString()}`);
+    const res = await apiFetch(`${API_URL}/costi/?${params.toString()}`);
     costiLista = await res.json();
     renderTabellaCosti();
   } catch (err) {
@@ -2529,7 +2558,7 @@ function renderTabellaCosti() {
 
 async function editCosto(id) {
   try {
-    const res = await fetch(`${API_URL}/costi/${id}`);
+    const res = await apiFetch(`${API_URL}/costi/${id}`);
     costoInModifica = await res.json();
     renderCostoForm();
   } catch (err) {
@@ -2672,7 +2701,7 @@ async function renderCostoForm() {
     const costoId = document.getElementById("costo-id")?.value;
     if (!costoId) return;
     try {
-      const res = await fetch(`${API_URL}/costi/${costoId}/documento`, { method: "DELETE" });
+      const res = await apiFetch(`${API_URL}/costi/${costoId}/documento`, { method: "DELETE" });
       if (res.ok) {
         _resetCostoDocViewer();
         document.getElementById("costo-doc-input").value = "";
@@ -2722,7 +2751,7 @@ function toggleAmmortamento() {
 
 async function popolaSelectFornitoriCosto() {
   try {
-    const res = await fetch(`${API_URL}/fornitori/?tutti=false`);
+    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false`);
     const fornitori = await res.json();
     const sel = document.getElementById("costo-fornitore");
     if (!sel) return;
@@ -2758,7 +2787,7 @@ async function aggiornaCodiciCosto() {
   const anno = document.getElementById("costo-anno")?.value;
   if (!anno || costoInModifica) return;
   try {
-    const res = await fetch(`${API_URL}/costi/next-codice?anno=${anno}`);
+    const res = await apiFetch(`${API_URL}/costi/next-codice?anno=${anno}`);
     const data = await res.json();
     document.getElementById("costo-codice").value = data.codice;
   } catch (err) { /* ignore */ }
@@ -2851,7 +2880,7 @@ async function salvaCosto(e) {
   try {
     const method = id ? "PUT" : "POST";
     const url = id ? `${API_URL}/costi/${id}` : `${API_URL}/costi/`;
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -2870,7 +2899,7 @@ async function salvaCosto(e) {
     if (docInput?.files.length > 0) {
       const formData = new FormData();
       formData.append("file", docInput.files[0]);
-      await fetch(`${API_URL}/costi/${saved.id}/documento`, {
+      await apiFetch(`${API_URL}/costi/${saved.id}/documento`, {
         method: "POST",
         body: formData,
       });
@@ -2887,7 +2916,7 @@ async function salvaCosto(e) {
 function eliminaCosto(id) {
   mostraConferma("Eliminare questo costo?", async () => {
     try {
-      await fetch(`${API_URL}/costi/${id}`, { method: "DELETE" });
+      await apiFetch(`${API_URL}/costi/${id}`, { method: "DELETE" });
       costoInModifica = null;
       renderCosti();
     } catch (err) {
@@ -2969,7 +2998,7 @@ function editCategoriaCosto(id) {
 
 async function toggleCategoriaCosto(id, nuovoStato) {
   try {
-    await fetch(`${API_URL}/categorie-costo/${id}`, {
+    await apiFetch(`${API_URL}/categorie-costo/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ attiva: nuovoStato }),
@@ -2984,7 +3013,7 @@ async function toggleCategoriaCosto(id, nuovoStato) {
 async function eliminaCategoriaCosto(id) {
   mostraConferma("Eliminare questa categoria?", async () => {
     try {
-      const res = await fetch(`${API_URL}/categorie-costo/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_URL}/categorie-costo/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || "Errore eliminazione.");
@@ -3010,7 +3039,7 @@ async function salvaCategoria(e) {
   try {
     const method = id ? "PUT" : "POST";
     const url = id ? `${API_URL}/categorie-costo/${id}` : `${API_URL}/categorie-costo/`;
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -3092,7 +3121,7 @@ async function renderMagazzino() {
 
   // Popola filtro anni
   try {
-    const res = await fetch(`${API_URL}/magazzino/anni`);
+    const res = await apiFetch(`${API_URL}/magazzino/anni`);
     const anni = await res.json();
     const sel = document.getElementById("filtro-mag-anno");
     if (sel) {
@@ -3141,8 +3170,8 @@ async function caricaMagStats() {
     const anno = document.getElementById("filtro-mag-anno")?.value || "";
     const qs = anno ? `?anno=${anno}` : "";
     const [resStats, resGiac] = await Promise.all([
-      fetch(`${API_URL}/magazzino/stats${qs}`),
-      fetch(`${API_URL}/magazzino/giacenze${qs}`),
+      apiFetch(`${API_URL}/magazzino/stats${qs}`),
+      apiFetch(`${API_URL}/magazzino/giacenze${qs}`),
     ]);
     const s = await resStats.json();
     const giacenze = await resGiac.json();
@@ -3167,7 +3196,7 @@ async function caricaGiacenze() {
   try {
     const anno = document.getElementById("filtro-mag-anno")?.value || "";
     const qs = anno ? `?anno=${anno}` : "";
-    const res = await fetch(`${API_URL}/magazzino/giacenze${qs}`);
+    const res = await apiFetch(`${API_URL}/magazzino/giacenze${qs}`);
     giacenzeLista = await res.json();
     renderTabellaGiacenze();
   } catch (e) {
@@ -3215,7 +3244,7 @@ async function caricaMovimenti() {
     if (causale) qs.push(`causale=${causale}`);
     const qstr = qs.length > 0 ? `?${qs.join("&")}` : "";
 
-    const res = await fetch(`${API_URL}/magazzino/${qstr}`);
+    const res = await apiFetch(`${API_URL}/magazzino/${qstr}`);
     movimentiLista = await res.json();
     renderTabellaMovimenti();
   } catch (e) {
@@ -3345,7 +3374,7 @@ function aggiornaCausaliPerTipo(tipo) {
 
 async function aggiornaCodiceMovimento(anno) {
   try {
-    const res = await fetch(`${API_URL}/magazzino/next-codice?anno=${anno}`);
+    const res = await apiFetch(`${API_URL}/magazzino/next-codice?anno=${anno}`);
     const data = await res.json();
     const el = document.getElementById("mov-codice");
     if (el) el.value = data.codice;
@@ -3356,7 +3385,7 @@ async function aggiornaCodiceMovimento(anno) {
 
 async function popolaSelectConfezionamenti() {
   try {
-    const res = await fetch(`${API_URL}/confezionamenti/`);
+    const res = await apiFetch(`${API_URL}/confezionamenti/`);
     const lista = await res.json();
     const sel = document.getElementById("mov-confezionamento");
     if (!sel) return;
@@ -3373,7 +3402,7 @@ async function popolaSelectConfezionamenti() {
 
 async function popolaSelectClientiMov() {
   try {
-    const res = await fetch(`${API_URL}/clienti/`);
+    const res = await apiFetch(`${API_URL}/clienti/`);
     const lista = await res.json();
     const sel = document.getElementById("mov-cliente");
     if (!sel) return;
@@ -3399,7 +3428,7 @@ async function aggiornaGiacenzaInfo() {
     return;
   }
   try {
-    const res = await fetch(`${API_URL}/magazzino/giacenze`);
+    const res = await apiFetch(`${API_URL}/magazzino/giacenze`);
     const giacenze = await res.json();
     const g = giacenze.find(x => x.confezionamento_id === parseInt(confId));
     if (g) {
@@ -3414,7 +3443,7 @@ async function aggiornaGiacenzaInfo() {
 
 async function popolaFormMovimento(id) {
   try {
-    const res = await fetch(`${API_URL}/magazzino/${id}`);
+    const res = await apiFetch(`${API_URL}/magazzino/${id}`);
     const m = await res.json();
 
     document.getElementById("mov-id").value = m.id;
@@ -3467,7 +3496,7 @@ async function salvaMovimento(e) {
   const method = id ? "PUT" : "POST";
 
   try {
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -3492,7 +3521,7 @@ async function sincronizzaMagazzino() {
   const anno = document.getElementById("filtro-mag-anno")?.value || "";
   const qs = anno ? `?anno=${anno}` : "";
   try {
-    const res = await fetch(`${API_URL}/magazzino/sincronizza${qs}`, { method: "POST" });
+    const res = await apiFetch(`${API_URL}/magazzino/sincronizza${qs}`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) {
       alert(data.detail || "Errore sincronizzazione");
@@ -3512,7 +3541,7 @@ function eliminaMovimento(id, codice) {
   const msg = codice ? `Eliminare il movimento ${codice}?` : "Eliminare questo movimento?";
   mostraConferma(msg, async () => {
     try {
-      const res = await fetch(`${API_URL}/magazzino/${id}`, { method: "DELETE" });
+      const res = await apiFetch(`${API_URL}/magazzino/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || "Errore eliminazione");

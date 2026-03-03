@@ -10,9 +10,11 @@ Responsabile Progetto: Marco Sorchetti
 
 import os
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+from app.core.security import get_current_user, get_current_admin
 
 # Routers
 from app.routers.auth import router as auth_router
@@ -58,18 +60,23 @@ app.add_middleware(
 # ------------------------------------------------------------------------------
 # Registrazione Routers
 # ------------------------------------------------------------------------------
+_protected = [Depends(get_current_user)]
+
+# Auth — login NON protetto, /me protetto internamente
 app.include_router(auth_router, prefix="/api")
-app.include_router(users_router.router, prefix="/api")
-app.include_router(parcella_router, prefix="/api")
-app.include_router(raccolta_router, prefix="/api")
-app.include_router(lotto_router, prefix="/api")
-app.include_router(confezionamento_router, prefix="/api")
-app.include_router(contenitore_router, prefix="/api")
-app.include_router(cliente_router, prefix="/api")
-app.include_router(fornitore_router, prefix="/api")
-app.include_router(categoria_costo_router, prefix="/api")
-app.include_router(costo_router, prefix="/api")
-app.include_router(magazzino_router, prefix="/api")
+
+# Tutti gli altri router richiedono JWT valido
+app.include_router(users_router.router, prefix="/api", dependencies=[Depends(get_current_admin)])
+app.include_router(parcella_router, prefix="/api", dependencies=_protected)
+app.include_router(raccolta_router, prefix="/api", dependencies=_protected)
+app.include_router(lotto_router, prefix="/api", dependencies=_protected)
+app.include_router(confezionamento_router, prefix="/api", dependencies=_protected)
+app.include_router(contenitore_router, prefix="/api", dependencies=_protected)
+app.include_router(cliente_router, prefix="/api", dependencies=_protected)
+app.include_router(fornitore_router, prefix="/api", dependencies=_protected)
+app.include_router(categoria_costo_router, prefix="/api", dependencies=_protected)
+app.include_router(costo_router, prefix="/api", dependencies=_protected)
+app.include_router(magazzino_router, prefix="/api", dependencies=_protected)
 
 
 # ------------------------------------------------------------------------------
