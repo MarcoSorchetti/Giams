@@ -1,6 +1,9 @@
+import csv
+import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
@@ -12,6 +15,7 @@ from app.models.cliente_sql import Cliente
 from app.models.movimento_magazzino import (
     MovimentoMagCreate, MovimentoMagUpdate, MovimentoMagOut,
 )
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/magazzino", tags=["magazzino"])
@@ -261,11 +265,11 @@ def magazzino_anni(db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# CRUD
+# Export CSV
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=List[MovimentoMagOut])
-def list_movimenti(
+@router.get("/export/csv")
+def export_movimenti_csv(
     anno: Optional[int] = Query(None),
     tipo: Optional[str] = Query(None),
     causale: Optional[str] = Query(None),
@@ -283,7 +287,70 @@ def list_movimenti(
         query = query.filter(MovimentoMagazzino.confezionamento_id == confezionamento_id)
 
     movimenti = query.order_by(MovimentoMagazzino.data_movimento.desc()).all()
-    return [_build_movimento_out(m, db) for m in movimenti]
+
+    conf_ids = list({m.confezionamento_id for m in movimenti if m.confezionamento_id})
+    conf_map = {}
+    if conf_ids:
+        for c in db.query(Confezionamento).filter(Confezionamento.id.in_(conf_ids)).all():
+            conf_map[c.id] = c
+    cli_ids = list({m.cliente_id for m in movimenti if m.cliente_id})
+    cli_map = {}
+    if cli_ids:
+        for c in db.query(Cliente).filter(Cliente.id.in_(cli_ids)).all():
+            cli_map[c.id] = c
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "Codice", "Data", "Tipo", "Causale", "Confezionamento", "Formato",
+        "Quantita", "Cliente", "Riferimento", "Note",
+    ])
+    for m in movimenti:
+        conf = conf_map.get(m.confezionamento_id)
+        cli = cli_map.get(m.cliente_id) if m.cliente_id else None
+        writer.writerow([
+            m.codice, str(m.data_movimento) if m.data_movimento else "",
+            m.tipo_movimento, m.causale,
+            conf.codice if conf else "", conf.formato if conf else "",
+            m.quantita, _cliente_denominazione(cli) or "",
+            m.riferimento_documento or "", m.note or "",
+        ])
+
+    filename = f"Movimenti_{anno or 'tutti'}.csv"
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
+
+@router.get("/")
+def list_movimenti(
+    anno: Optional[int] = Query(None),
+    tipo: Optional[str] = Query(None),
+    causale: Optional[str] = Query(None),
+    confezionamento_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    query = db.query(MovimentoMagazzino)
+    if anno:
+        query = query.filter(MovimentoMagazzino.anno_campagna == anno)
+    if tipo:
+        query = query.filter(MovimentoMagazzino.tipo_movimento == tipo)
+    if causale:
+        query = query.filter(MovimentoMagazzino.causale == causale)
+    if confezionamento_id:
+        query = query.filter(MovimentoMagazzino.confezionamento_id == confezionamento_id)
+
+    query = query.order_by(MovimentoMagazzino.data_movimento.desc())
+    movimenti, total, pg, pp, pages_count = paginate(query, page, per_page)
+    return paginated_response([_build_movimento_out(m, db) for m in movimenti], total, pg, pp, pages_count)
 
 
 @router.get("/{mov_id}", response_model=MovimentoMagOut)

@@ -1,3 +1,5 @@
+import csv
+import io
 from datetime import date
 from typing import List, Optional
 
@@ -17,6 +19,7 @@ from app.models.contenitore_sql import Contenitore
 from app.models.cliente_sql import Cliente
 from app.models.movimento_magazzino_sql import MovimentoMagazzino
 from app.routers.magazzino import _calcola_giacenza, _next_codice_movimento
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/vendite", tags=["vendite"])
@@ -203,11 +206,11 @@ def next_codice(anno: int = Query(...), db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
-# CRUD
+# Export CSV
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=List[VenditaOut])
-def list_vendite(
+@router.get("/export/csv")
+def export_vendite_csv(
     anno: Optional[int] = Query(None),
     stato: Optional[str] = Query(None),
     cliente_id: Optional[int] = Query(None),
@@ -222,7 +225,140 @@ def list_vendite(
         query = query.filter(Vendita.cliente_id == cliente_id)
 
     vendite = query.order_by(Vendita.data_vendita.desc()).all()
-    return [_build_vendita_out(v, db) for v in vendite]
+
+    cli_ids = list({v.cliente_id for v in vendite if v.cliente_id})
+    cli_map = {}
+    if cli_ids:
+        for c in db.query(Cliente).filter(Cliente.id.in_(cli_ids)).all():
+            cli_map[c.id] = c
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "Codice", "Data Vendita", "Cliente", "Stato", "N. Fattura",
+        "Imponibile", "Sconto %", "Imponibile Scontato", "IVA %",
+        "Importo IVA", "Importo Totale", "Data Pagamento", "Modalita Pagamento",
+        "Data Spedizione", "N. DDT", "Note",
+    ])
+    for v in vendite:
+        cli = cli_map.get(v.cliente_id)
+        writer.writerow([
+            v.codice, str(v.data_vendita) if v.data_vendita else "",
+            _cliente_denominazione(cli), v.stato, v.numero_fattura or "",
+            f"{float(v.imponibile):.2f}", f"{float(v.sconto_percentuale):.1f}" if v.sconto_percentuale else "0",
+            f"{float(v.imponibile_scontato):.2f}", f"{float(v.iva_percentuale):.0f}",
+            f"{float(v.importo_iva):.2f}", f"{float(v.importo_totale):.2f}",
+            str(v.data_pagamento) if v.data_pagamento else "",
+            v.modalita_pagamento or "",
+            str(v.data_spedizione) if v.data_spedizione else "",
+            v.numero_ddt or "", v.note or "",
+        ])
+
+    filename = f"Vendite_{anno or 'tutti'}.csv"
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
+
+@router.get("/")
+def list_vendite(
+    anno: Optional[int] = Query(None),
+    stato: Optional[str] = Query(None),
+    cliente_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Vendita)
+    if anno:
+        query = query.filter(Vendita.anno_campagna == anno)
+    if stato:
+        query = query.filter(Vendita.stato == stato)
+    if cliente_id:
+        query = query.filter(Vendita.cliente_id == cliente_id)
+
+    query = query.order_by(Vendita.data_vendita.desc())
+    vendite, total, pg, pp, pages_count = paginate(query, page, per_page)
+    if not vendite:
+        return paginated_response([], total, pg, pp, pages_count)
+
+    # Pre-carica dati correlati in batch per evitare N+1
+    vendita_ids = [v.id for v in vendite]
+    cliente_ids = list({v.cliente_id for v in vendite if v.cliente_id})
+
+    clienti_map = {}
+    if cliente_ids:
+        for c in db.query(Cliente).filter(Cliente.id.in_(cliente_ids)).all():
+            clienti_map[c.id] = c
+
+    all_righe = db.query(VenditaRiga).filter(VenditaRiga.vendita_id.in_(vendita_ids)).all()
+    righe_map = {}
+    conf_ids = set()
+    for r in all_righe:
+        righe_map.setdefault(r.vendita_id, []).append(r)
+        conf_ids.add(r.confezionamento_id)
+
+    conf_map = {}
+    cont_ids = set()
+    if conf_ids:
+        for conf in db.query(Confezionamento).filter(Confezionamento.id.in_(conf_ids)).all():
+            conf_map[conf.id] = conf
+            if conf.contenitore_id:
+                cont_ids.add(conf.contenitore_id)
+
+    cont_map = {}
+    if cont_ids:
+        for cont in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[cont.id] = cont
+
+    result = []
+    for v in vendite:
+        cli = clienti_map.get(v.cliente_id)
+        righe_out = []
+        for r in righe_map.get(v.id, []):
+            conf = conf_map.get(r.confezionamento_id)
+            cont_desc = None
+            if conf and conf.contenitore_id:
+                cont = cont_map.get(conf.contenitore_id)
+                if cont:
+                    cont_desc = cont.descrizione
+            righe_out.append(VenditaRigaOut(
+                id=r.id,
+                confezionamento_id=r.confezionamento_id,
+                confezionamento_codice=conf.codice if conf else None,
+                confezionamento_formato=conf.formato if conf else None,
+                contenitore_descrizione=cont_desc,
+                quantita=r.quantita,
+                prezzo_unitario=float(r.prezzo_unitario),
+                importo_riga=float(r.importo_riga),
+            ))
+        result.append(VenditaOut(
+            id=v.id, codice=v.codice, cliente_id=v.cliente_id,
+            cliente_denominazione=_cliente_denominazione(cli),
+            data_vendita=v.data_vendita, anno_campagna=v.anno_campagna,
+            stato=v.stato, imponibile=float(v.imponibile),
+            sconto_percentuale=float(v.sconto_percentuale) if v.sconto_percentuale else None,
+            imponibile_scontato=float(v.imponibile_scontato),
+            iva_percentuale=float(v.iva_percentuale),
+            importo_iva=float(v.importo_iva), importo_totale=float(v.importo_totale),
+            numero_fattura=v.numero_fattura, data_pagamento=v.data_pagamento,
+            modalita_pagamento=v.modalita_pagamento,
+            riferimento_pagamento=v.riferimento_pagamento,
+            data_spedizione=v.data_spedizione, numero_ddt=v.numero_ddt,
+            note_spedizione=v.note_spedizione,
+            spedizione_indirizzo=v.spedizione_indirizzo,
+            spedizione_cap=v.spedizione_cap, spedizione_citta=v.spedizione_citta,
+            spedizione_provincia=v.spedizione_provincia,
+            data_conferma=v.data_conferma, note=v.note,
+            righe=righe_out, created_at=v.created_at, updated_at=v.updated_at,
+        ))
+    return paginated_response(result, total, pg, pp, pages_count)
 
 
 @router.get("/{vendita_id}", response_model=VenditaOut)

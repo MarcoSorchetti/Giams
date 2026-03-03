@@ -22,7 +22,7 @@
       <div class="text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.2.0</div>
+        <div class="app-version">v1.3.0</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -183,6 +183,10 @@
           </thead>
           <tbody id="parcelle-tbody"></tbody>
         </table>
+      </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="parcelle-page-info"></span>
+        <div class="pagination-controls" id="parcelle-pagination"></div>
       </div>
     </div>
   </template>
@@ -488,6 +492,10 @@
           <tbody id="raccolte-tbody"></tbody>
         </table>
       </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="raccolte-page-info"></span>
+        <div class="pagination-controls" id="raccolte-pagination"></div>
+      </div>
     </div>
   </template>
 
@@ -694,6 +702,10 @@
           </thead>
           <tbody id="lotti-tbody"></tbody>
         </table>
+      </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="lotti-page-info"></span>
+        <div class="pagination-controls" id="lotti-pagination"></div>
       </div>
     </div>
   </template>
@@ -913,6 +925,10 @@
           <tbody id="conf-tbody"></tbody>
         </table>
       </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="conf-page-info"></span>
+        <div class="pagination-controls" id="conf-pagination"></div>
+      </div>
     </div>
   </template>
 
@@ -1080,9 +1096,14 @@
         <h2 class="module-title mb-1">Gestione Clienti</h2>
         <div class="module-subtitle">Anagrafica clienti per fatturazione e vendite</div>
       </div>
-      <button class="btn btn-accent" id="btn-nuovo-cliente">
-        <i class="fa-solid fa-plus me-1"></i> Nuovo Cliente
-      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-csv" id="btn-export-clienti-csv" title="Scarica CSV">
+          <i class="fa-solid fa-file-csv me-1"></i> CSV
+        </button>
+        <button class="btn btn-accent" id="btn-nuovo-cliente">
+          <i class="fa-solid fa-plus me-1"></i> Nuovo Cliente
+        </button>
+      </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -1157,6 +1178,10 @@
           <tbody id="clienti-tbody"></tbody>
         </table>
       </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="clienti-page-info"></span>
+        <div class="pagination-controls" id="clienti-pagination"></div>
+      </div>
     </div>
   </template>
 
@@ -1221,7 +1246,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Partita IVA</label>
-                <input type="text" class="form-control form-control-sm" id="cli-piva" maxlength="11" />
+                <input type="text" class="form-control form-control-sm" id="cli-piva" maxlength="13" />
               </div>
               <div class="col-6">
                 <label class="form-label">Codice SDI</label>
@@ -1351,9 +1376,14 @@
         <h2 class="module-title mb-1">Gestione Fornitori</h2>
         <div class="module-subtitle">Anagrafica fornitori e dati bancari</div>
       </div>
-      <button class="btn btn-accent" id="btn-nuovo-fornitore">
-        <i class="fa-solid fa-plus me-1"></i> Nuovo Fornitore
-      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-csv" id="btn-export-fornitori-csv" title="Scarica CSV">
+          <i class="fa-solid fa-file-csv me-1"></i> CSV
+        </button>
+        <button class="btn btn-accent" id="btn-nuovo-fornitore">
+          <i class="fa-solid fa-plus me-1"></i> Nuovo Fornitore
+        </button>
+      </div>
     </div>
 
     <div class="row g-3 mb-4">
@@ -1438,6 +1468,10 @@
           <tbody id="fornitori-tbody"></tbody>
         </table>
       </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="fornitori-page-info"></span>
+        <div class="pagination-controls" id="fornitori-pagination"></div>
+      </div>
     </div>
   </template>
 
@@ -1502,7 +1536,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Partita IVA</label>
-                <input type="text" class="form-control form-control-sm" id="forn-piva" maxlength="11" />
+                <input type="text" class="form-control form-control-sm" id="forn-piva" maxlength="13" />
               </div>
               <div class="col-6">
                 <label class="form-label">Codice SDI</label>
@@ -1639,6 +1673,9 @@
         <div class="module-subtitle">Fatture, spese di campagna e costi strutturali</div>
       </div>
       <div class="d-flex gap-2">
+        <button class="btn btn-csv" id="btn-export-costi-csv" title="Scarica CSV">
+          <i class="fa-solid fa-file-csv me-1"></i> CSV
+        </button>
         <button class="btn btn-outline-secondary btn-sm" id="btn-gestisci-categorie">
           <i class="fa-solid fa-tags me-1"></i> Categorie
         </button>
@@ -1742,6 +1779,10 @@
           </thead>
           <tbody id="costi-tbody"></tbody>
         </table>
+      </div>
+      <div class="pagination-wrapper px-3 pb-2">
+        <span class="pagination-info" id="costi-page-info"></span>
+        <div class="pagination-controls" id="costi-pagination"></div>
       </div>
     </div>
   </template>
@@ -2078,6 +2119,9 @@
         <div class="module-subtitle">Giacenze, carichi e scarichi prodotti confezionati</div>
       </div>
       <div class="d-flex gap-2">
+        <button class="btn btn-csv" id="btn-export-movimenti-csv" title="Scarica CSV">
+          <i class="fa-solid fa-file-csv me-1"></i> CSV
+        </button>
         <button class="btn btn-outline-secondary btn-sm" id="btn-sincronizza-mag">
           <i class="fa-solid fa-rotate me-1"></i> Sincronizza da Produzione
         </button>
@@ -2208,6 +2252,10 @@
             <tbody id="movimenti-tbody"></tbody>
           </table>
         </div>
+        <div class="pagination-wrapper px-3 pb-2">
+          <span class="pagination-info" id="movimenti-page-info"></span>
+          <div class="pagination-controls" id="movimenti-pagination"></div>
+        </div>
       </div>
     </div>
   </template>
@@ -2316,9 +2364,14 @@
         <h2 class="module-title mb-1">Vendite</h2>
         <div class="module-subtitle">Gestione fatture, DDT, pagamenti</div>
       </div>
-      <button class="btn btn-accent" id="btn-nuova-vendita">
-        <i class="fa-solid fa-plus me-1"></i> Nuova Vendita
-      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-csv" id="btn-export-vendite-csv" title="Scarica CSV">
+          <i class="fa-solid fa-file-csv me-1"></i> CSV
+        </button>
+        <button class="btn btn-accent" id="btn-nuova-vendita">
+          <i class="fa-solid fa-plus me-1"></i> Nuova Vendita
+        </button>
+      </div>
     </div>
 
     <!-- Stat cards -->
@@ -2384,6 +2437,10 @@
         </thead>
         <tbody id="vendite-tbody"></tbody>
       </table>
+    </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="vendite-page-info"></span>
+      <div class="pagination-controls" id="vendite-pagination"></div>
     </div>
   </template>
 

@@ -15,7 +15,7 @@ class FornitoreBase(BaseModel):
 
     # Anagrafica azienda
     ragione_sociale: Optional[str] = Field(None, max_length=150)
-    partita_iva: Optional[str] = Field(None, max_length=11)
+    partita_iva: Optional[str] = Field(None, max_length=13)
     codice_sdi: Optional[str] = Field(None, max_length=7)
     pec: Optional[str] = Field(None, max_length=100)
     referente_nome: Optional[str] = Field(None, max_length=100)
@@ -56,7 +56,7 @@ class FornitoreUpdate(BaseModel):
     codice_fiscale: Optional[str] = Field(None, max_length=16)
 
     ragione_sociale: Optional[str] = Field(None, max_length=150)
-    partita_iva: Optional[str] = Field(None, max_length=11)
+    partita_iva: Optional[str] = Field(None, max_length=13)
     codice_sdi: Optional[str] = Field(None, max_length=7)
     pec: Optional[str] = Field(None, max_length=100)
     referente_nome: Optional[str] = Field(None, max_length=100)

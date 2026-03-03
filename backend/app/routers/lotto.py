@@ -8,6 +8,7 @@ from app.database import get_db
 from app.models.lotto_sql import LottoOlio
 from app.models.raccolta_sql import Raccolta
 from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/lotti", tags=["lotti"])
@@ -116,11 +117,13 @@ def lotti_anni(db: Session = Depends(get_db)):
     return [a[0] for a in anni]
 
 
-@router.get("/", response_model=List[LottoOut])
+@router.get("/")
 def list_lotti(
     anno: Optional[int] = Query(None),
     tipo_olio: Optional[str] = Query(None),
     stato: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(LottoOlio)
@@ -131,8 +134,41 @@ def list_lotti(
     if stato:
         query = query.filter(LottoOlio.stato == stato)
 
-    lotti = query.order_by(LottoOlio.data_molitura.desc()).all()
-    return [_build_lotto_out(l, db) for l in lotti]
+    query = query.order_by(LottoOlio.data_molitura.desc())
+    lotti, total, pg, pp, pages_count = paginate(query, page, per_page)
+    if not lotti:
+        return paginated_response([], total, pg, pp, pages_count)
+
+    # Pre-carica raccolte in batch
+    raccolta_ids = list({l.raccolta_id for l in lotti if l.raccolta_id})
+    raccolte_map = {}
+    if raccolta_ids:
+        for r in db.query(Raccolta).filter(Raccolta.id.in_(raccolta_ids)).all():
+            raccolte_map[r.id] = r
+
+    result = []
+    for lotto in lotti:
+        raccolta = raccolte_map.get(lotto.raccolta_id)
+        result.append(LottoOut(
+            id=lotto.id, codice_lotto=lotto.codice_lotto,
+            raccolta_id=lotto.raccolta_id,
+            raccolta_codice=raccolta.codice if raccolta else None,
+            anno_campagna=lotto.anno_campagna, data_molitura=lotto.data_molitura,
+            frantoio=lotto.frantoio, kg_olive=float(lotto.kg_olive),
+            litri_olio=float(lotto.litri_olio),
+            kg_olio=float(lotto.kg_olio) if lotto.kg_olio else None,
+            resa_percentuale=float(lotto.resa_percentuale) if lotto.resa_percentuale else None,
+            acidita=float(lotto.acidita) if lotto.acidita else None,
+            perossidi=float(lotto.perossidi) if lotto.perossidi else None,
+            polifenoli=lotto.polifenoli, tipo_olio=lotto.tipo_olio,
+            certificazione=lotto.certificazione,
+            costo_frantoio=float(lotto.costo_frantoio) if lotto.costo_frantoio else None,
+            costo_trasporto=float(lotto.costo_trasporto) if lotto.costo_trasporto else None,
+            costo_totale_molitura=float(lotto.costo_totale_molitura) if lotto.costo_totale_molitura else None,
+            stato=lotto.stato, note=lotto.note,
+            created_at=lotto.created_at, updated_at=lotto.updated_at,
+        ))
+    return paginated_response(result, total, pg, pp, pages_count)
 
 
 @router.get("/{lotto_id}", response_model=LottoOut)

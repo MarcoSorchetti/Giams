@@ -24,6 +24,61 @@ let venditeLista = [];
 let venditaInModifica = null;
 let venditeConfezionamentiCache = [];
 
+// ---- Paginazione & CSV ----
+function renderPaginazione(containerId, infoId, pagina, totalePages, totale, callback) {
+  const container = document.getElementById(containerId);
+  const info = document.getElementById(infoId);
+  if (!container) return;
+
+  if (info) {
+    info.textContent = totale > 0
+      ? `Pagina ${pagina} di ${totalePages} (${totale} risultati)`
+      : "";
+  }
+
+  if (totalePages <= 1) { container.innerHTML = ""; return; }
+
+  let html = "";
+  html += `<button class="btn" ${pagina <= 1 ? "disabled" : ""} data-page="1">&laquo;</button>`;
+  html += `<button class="btn" ${pagina <= 1 ? "disabled" : ""} data-page="${pagina - 1}">&lsaquo;</button>`;
+
+  let start = Math.max(1, pagina - 2);
+  let end = Math.min(totalePages, pagina + 2);
+  if (end - start < 4) {
+    if (start === 1) end = Math.min(totalePages, start + 4);
+    else start = Math.max(1, end - 4);
+  }
+
+  for (let i = start; i <= end; i++) {
+    html += `<button class="btn ${i === pagina ? "active" : ""}" data-page="${i}">${i}</button>`;
+  }
+
+  html += `<button class="btn" ${pagina >= totalePages ? "disabled" : ""} data-page="${pagina + 1}">&rsaquo;</button>`;
+  html += `<button class="btn" ${pagina >= totalePages ? "disabled" : ""} data-page="${totalePages}">&raquo;</button>`;
+
+  container.innerHTML = html;
+  container.querySelectorAll(".btn:not(:disabled)").forEach(btn => {
+    btn.addEventListener("click", () => callback(parseInt(btn.dataset.page)));
+  });
+}
+
+async function scaricaCSV(endpoint, params, nomeFile) {
+  try {
+    const res = await apiFetch(`${API_URL}/${endpoint}/export/csv?${params}`);
+    if (!res.ok) { alert("Errore export CSV"); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nomeFile;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Errore export CSV:", e);
+    alert("Errore export CSV");
+  }
+}
+
 // =============================================
 // AUTH
 // =============================================
@@ -246,7 +301,7 @@ async function caricaParcelleStats() {
   }
 }
 
-async function caricaParcelle() {
+async function caricaParcelle(page = 1) {
   const q = document.getElementById("filtro-q")?.value || "";
   const varieta = document.getElementById("filtro-varieta")?.value || "";
   const stato = document.getElementById("filtro-stato")?.value || "";
@@ -255,11 +310,15 @@ async function caricaParcelle() {
   if (q) params.append("q", q);
   if (varieta) params.append("varieta", varieta);
   if (stato) params.append("stato", stato);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
     const res = await apiFetch(`${API_URL}/parcelle/?${params}`);
-    parcelleLista = await res.json();
+    const data = await res.json();
+    parcelleLista = data.items;
     renderTabellaParcelle();
+    renderPaginazione("parcelle-pagination", "parcelle-page-info", data.page, data.pages, data.total, caricaParcelle);
   } catch (err) {
     console.error("Errore caricamento parcelle:", err);
   }
@@ -662,8 +721,8 @@ function initRaccolteListUI() {
 
 async function popolaFiltroParcelle() {
   try {
-    const res = await apiFetch(`${API_URL}/parcelle/`);
-    const parcelle = await res.json();
+    const res = await apiFetch(`${API_URL}/parcelle/?per_page=100`);
+    const parcelle = (await res.json()).items;
     const sel = document.getElementById("filtro-raccolte-parcella");
     if (sel) {
       parcelle.forEach(p => {
@@ -696,17 +755,21 @@ async function caricaRaccolteStats() {
   }
 }
 
-async function caricaRaccolte() {
+async function caricaRaccolte(page = 1) {
   const anno = document.getElementById("filtro-raccolte-anno")?.value || "";
   const parcella = document.getElementById("filtro-raccolte-parcella")?.value || "";
   const params = new URLSearchParams();
   if (anno) params.append("anno", anno);
   if (parcella) params.append("parcella_id", parcella);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
     const res = await apiFetch(`${API_URL}/raccolte/?${params}`);
-    raccolteLista = await res.json();
+    const data = await res.json();
+    raccolteLista = data.items;
     renderTabellaRaccolte();
+    renderPaginazione("raccolte-pagination", "raccolte-page-info", data.page, data.pages, data.total, caricaRaccolte);
   } catch (err) {
     console.error("Errore caricamento raccolte:", err);
   }
@@ -807,8 +870,8 @@ async function renderParcelleSelezione() {
   if (!container) return;
 
   try {
-    const res = await apiFetch(`${API_URL}/parcelle/`);
-    const parcelle = await res.json();
+    const res = await apiFetch(`${API_URL}/parcelle/?per_page=100`);
+    const parcelle = (await res.json()).items;
 
     container.innerHTML = parcelle.map(p => `
       <div class="d-flex align-items-center gap-2 mb-2 raccolta-parcella-row">
@@ -1010,7 +1073,7 @@ async function caricaLottiStats() {
   }
 }
 
-async function caricaLotti() {
+async function caricaLotti(page = 1) {
   const anno = document.getElementById("filtro-lotti-anno")?.value || "";
   const tipo = document.getElementById("filtro-lotti-tipo")?.value || "";
   const stato = document.getElementById("filtro-lotti-stato")?.value || "";
@@ -1018,11 +1081,15 @@ async function caricaLotti() {
   if (anno) params.append("anno", anno);
   if (tipo) params.append("tipo_olio", tipo);
   if (stato) params.append("stato", stato);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
     const res = await apiFetch(`${API_URL}/lotti/?${params}`);
-    lottiLista = await res.json();
+    const data = await res.json();
+    lottiLista = data.items;
     renderTabellaLotti();
+    renderPaginazione("lotti-pagination", "lotti-page-info", data.page, data.pages, data.total, caricaLotti);
   } catch (err) {
     console.error("Errore caricamento lotti:", err);
   }
@@ -1146,8 +1213,8 @@ async function aggiornaCodiceLotto(anno) {
 
 async function popolaSelectRaccolte() {
   try {
-    const res = await apiFetch(`${API_URL}/raccolte/`);
-    const raccolte = await res.json();
+    const res = await apiFetch(`${API_URL}/raccolte/?per_page=100`);
+    const raccolte = (await res.json()).items;
     const sel = document.getElementById("l-raccolta");
     if (sel) {
       raccolte.filter(r => !r.ha_lotto).forEach(r => {
@@ -1387,17 +1454,21 @@ async function caricaConfStats() {
   }
 }
 
-async function caricaConfezionamenti() {
+async function caricaConfezionamenti(page = 1) {
   const anno = document.getElementById("filtro-conf-anno")?.value || "";
   const formato = document.getElementById("filtro-conf-formato")?.value || "";
   const params = new URLSearchParams();
   if (anno) params.append("anno", anno);
   if (formato) params.append("formato", formato);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
     const res = await apiFetch(`${API_URL}/confezionamenti/?${params}`);
-    confezionamentiLista = await res.json();
+    const data = await res.json();
+    confezionamentiLista = data.items;
     renderTabellaConf();
+    renderPaginazione("conf-pagination", "conf-page-info", data.page, data.pages, data.total, caricaConfezionamenti);
   } catch (err) {
     console.error("Errore caricamento confezionamenti:", err);
   }
@@ -1483,8 +1554,8 @@ async function renderLottiSelezione() {
   if (!container) return;
 
   try {
-    const res = await apiFetch(`${API_URL}/lotti/`);
-    const lotti = await res.json();
+    const res = await apiFetch(`${API_URL}/lotti/?per_page=100`);
+    const lotti = (await res.json()).items;
 
     container.innerHTML = lotti.map(l => `
       <div class="d-flex align-items-center gap-2 mb-2 conf-lotto-row">
@@ -1863,6 +1934,16 @@ function initClientiListUI() {
   document.getElementById("filtro-clienti-q")?.addEventListener("keyup", (e) => {
     if (e.key === "Enter") { caricaClientiStats(); caricaClienti(); }
   });
+  document.getElementById("btn-export-clienti-csv")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    const q = document.getElementById("filtro-clienti-q")?.value;
+    const tipo = document.getElementById("filtro-clienti-tipo")?.value;
+    const tutti = document.getElementById("filtro-clienti-tutti")?.checked;
+    if (q) params.set("q", q);
+    if (tipo) params.set("tipo", tipo);
+    if (tutti) params.set("tutti", "true");
+    scaricaCSV("clienti", params.toString(), "Clienti.csv");
+  });
 }
 
 async function caricaClientiStats() {
@@ -1878,7 +1959,7 @@ async function caricaClientiStats() {
   }
 }
 
-async function caricaClienti() {
+async function caricaClienti(page = 1) {
   const q = document.getElementById("filtro-clienti-q")?.value || "";
   const tipo = document.getElementById("filtro-clienti-tipo")?.value || "";
   const tutti = document.getElementById("filtro-clienti-tutti")?.checked || false;
@@ -1886,11 +1967,15 @@ async function caricaClienti() {
   if (q) params.append("q", q);
   if (tipo) params.append("tipo", tipo);
   if (tutti) params.append("tutti", "true");
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
     const res = await apiFetch(`${API_URL}/clienti/?${params}`);
-    clientiLista = await res.json();
+    const data = await res.json();
+    clientiLista = data.items;
     renderTabellaClienti();
+    renderPaginazione("clienti-pagination", "clienti-page-info", data.page, data.pages, data.total, caricaClienti);
   } catch (err) {
     console.error("Errore caricamento clienti:", err);
   }
@@ -2143,10 +2228,23 @@ async function renderFornitori() {
     renderFornitoreForm();
   });
 
-  document.getElementById("btn-filtra-fornitori").addEventListener("click", caricaFornitori);
+  document.getElementById("btn-filtra-fornitori").addEventListener("click", () => caricaFornitori());
 
   document.getElementById("filtro-fornitori-q").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); caricaFornitori(); }
+  });
+
+  document.getElementById("btn-export-fornitori-csv")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    const q = document.getElementById("filtro-fornitori-q")?.value;
+    const tipo = document.getElementById("filtro-fornitori-tipo")?.value;
+    const categoria = document.getElementById("filtro-fornitori-categoria")?.value;
+    const tutti = document.getElementById("filtro-fornitori-tutti")?.checked;
+    if (q) params.set("q", q);
+    if (tipo) params.set("tipo", tipo);
+    if (categoria) params.set("categoria", categoria);
+    if (tutti) params.set("tutti", "true");
+    scaricaCSV("fornitori", params.toString(), "Fornitori.csv");
   });
 }
 
@@ -2163,21 +2261,26 @@ async function caricaFornitoriStats() {
   }
 }
 
-async function caricaFornitori() {
+async function caricaFornitori(page = 1) {
   const q = document.getElementById("filtro-fornitori-q")?.value || "";
   const tipo = document.getElementById("filtro-fornitori-tipo")?.value || "";
   const categoria = document.getElementById("filtro-fornitori-categoria")?.value || "";
   const tutti = document.getElementById("filtro-fornitori-tutti")?.checked || false;
 
-  let url = `${API_URL}/fornitori/?tutti=${tutti}`;
-  if (q) url += `&q=${encodeURIComponent(q)}`;
-  if (tipo) url += `&tipo=${tipo}`;
-  if (categoria) url += `&categoria=${categoria}`;
+  const params = new URLSearchParams();
+  params.set("tutti", tutti);
+  if (q) params.set("q", q);
+  if (tipo) params.set("tipo", tipo);
+  if (categoria) params.set("categoria", categoria);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
-    const res = await apiFetch(url);
-    fornitoriLista = await res.json();
+    const res = await apiFetch(`${API_URL}/fornitori/?${params}`);
+    const data = await res.json();
+    fornitoriLista = data.items;
     renderTabellaFornitori();
+    renderPaginazione("fornitori-pagination", "fornitori-page-info", data.page, data.pages, data.total, caricaFornitori);
   } catch (err) {
     console.error("Errore caricamento fornitori:", err);
   }
@@ -2422,6 +2525,20 @@ async function renderCosti() {
 
   document.getElementById("btn-nuovo-costo")?.addEventListener("click", () => renderCostoForm());
   document.getElementById("btn-gestisci-categorie")?.addEventListener("click", () => renderCategorieCosto());
+  document.getElementById("btn-export-costi-csv")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    const anno = document.getElementById("filtro-costi-anno")?.value;
+    const tipo = document.getElementById("filtro-costi-tipo")?.value;
+    const cat = document.getElementById("filtro-costi-categoria")?.value;
+    const stato = document.getElementById("filtro-costi-stato")?.value;
+    const forn = document.getElementById("filtro-costi-fornitore")?.value;
+    if (anno) params.set("anno", anno);
+    if (tipo) params.set("tipo", tipo);
+    if (cat) params.set("categoria_id", cat);
+    if (stato) params.set("stato", stato);
+    if (forn) params.set("fornitore_id", forn);
+    scaricaCSV("costi", params.toString(), "Costi.csv");
+  });
 
   // Filtri
   document.getElementById("filtro-costi-anno")?.addEventListener("change", () => caricaCosti());
@@ -2469,8 +2586,8 @@ async function popolaFiltroCosti() {
 
   // Fornitori
   try {
-    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false`);
-    const fornitori = await res.json();
+    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false&per_page=100`);
+    const fornitori = (await res.json()).items;
     const selForn = document.getElementById("filtro-costi-fornitore");
     if (selForn) {
       fornitori.forEach(f => {
@@ -2517,7 +2634,7 @@ async function caricaCostiStats() {
   }
 }
 
-async function caricaCosti() {
+async function caricaCosti(page = 1) {
   try {
     const params = new URLSearchParams();
     const anno = document.getElementById("filtro-costi-anno")?.value;
@@ -2531,10 +2648,14 @@ async function caricaCosti() {
     if (cat) params.set("categoria_id", cat);
     if (stato) params.set("stato", stato);
     if (forn) params.set("fornitore_id", forn);
+    params.set("page", page);
+    params.set("per_page", 10);
 
     const res = await apiFetch(`${API_URL}/costi/?${params.toString()}`);
-    costiLista = await res.json();
+    const data = await res.json();
+    costiLista = data.items;
     renderTabellaCosti();
+    renderPaginazione("costi-pagination", "costi-page-info", data.page, data.pages, data.total, caricaCosti);
   } catch (err) {
     console.error("Errore caricamento costi:", err);
   }
@@ -2769,8 +2890,8 @@ function toggleAmmortamento() {
 
 async function popolaSelectFornitoriCosto() {
   try {
-    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false`);
-    const fornitori = await res.json();
+    const res = await apiFetch(`${API_URL}/fornitori/?tutti=false&per_page=100`);
+    const fornitori = (await res.json()).items;
     const sel = document.getElementById("costo-fornitore");
     if (!sel) return;
     fornitori.forEach(f => {
@@ -3129,13 +3250,23 @@ async function renderMagazzino() {
     if (magazzinoTabAttiva === "giacenze") caricaGiacenze();
     else caricaMovimenti();
   });
-  document.getElementById("filtro-mag-tipo")?.addEventListener("change", caricaMovimenti);
-  document.getElementById("filtro-mag-causale")?.addEventListener("change", caricaMovimenti);
+  document.getElementById("filtro-mag-tipo")?.addEventListener("change", () => caricaMovimenti());
+  document.getElementById("filtro-mag-causale")?.addEventListener("change", () => caricaMovimenti());
 
   // Bottoni
   document.getElementById("btn-nuovo-carico")?.addEventListener("click", () => renderMovimentoForm(null, "carico"));
   document.getElementById("btn-nuovo-scarico")?.addEventListener("click", () => renderMovimentoForm(null, "scarico"));
   document.getElementById("btn-sincronizza-mag")?.addEventListener("click", sincronizzaMagazzino);
+  document.getElementById("btn-export-movimenti-csv")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    const anno = document.getElementById("filtro-mag-anno")?.value;
+    const tipo = document.getElementById("filtro-mag-tipo")?.value;
+    const causale = document.getElementById("filtro-mag-causale")?.value;
+    if (anno) params.set("anno", anno);
+    if (tipo) params.set("tipo", tipo);
+    if (causale) params.set("causale", causale);
+    scaricaCSV("magazzino", params.toString(), "Movimenti.csv");
+  });
 
   // Popola filtro anni
   try {
@@ -3250,21 +3381,24 @@ function renderTabellaGiacenze() {
 // MAGAZZINO — Movimenti
 // =============================================
 
-async function caricaMovimenti() {
+async function caricaMovimenti(page = 1) {
   try {
     const anno = document.getElementById("filtro-mag-anno")?.value || "";
     const tipo = document.getElementById("filtro-mag-tipo")?.value || "";
     const causale = document.getElementById("filtro-mag-causale")?.value || "";
 
-    let qs = [];
-    if (anno) qs.push(`anno=${anno}`);
-    if (tipo) qs.push(`tipo=${tipo}`);
-    if (causale) qs.push(`causale=${causale}`);
-    const qstr = qs.length > 0 ? `?${qs.join("&")}` : "";
+    const params = new URLSearchParams();
+    if (anno) params.set("anno", anno);
+    if (tipo) params.set("tipo", tipo);
+    if (causale) params.set("causale", causale);
+    params.set("page", page);
+    params.set("per_page", 10);
 
-    const res = await apiFetch(`${API_URL}/magazzino/${qstr}`);
-    movimentiLista = await res.json();
+    const res = await apiFetch(`${API_URL}/magazzino/?${params}`);
+    const data = await res.json();
+    movimentiLista = data.items;
     renderTabellaMovimenti();
+    renderPaginazione("movimenti-pagination", "movimenti-page-info", data.page, data.pages, data.total, caricaMovimenti);
   } catch (e) {
     console.error("Errore caricamento movimenti", e);
   }
@@ -3403,8 +3537,8 @@ async function aggiornaCodiceMovimento(anno) {
 
 async function popolaSelectConfezionamenti() {
   try {
-    const res = await apiFetch(`${API_URL}/confezionamenti/`);
-    const lista = await res.json();
+    const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
+    const lista = (await res.json()).items;
     const sel = document.getElementById("mov-confezionamento");
     if (!sel) return;
     lista.forEach(c => {
@@ -3420,8 +3554,8 @@ async function popolaSelectConfezionamenti() {
 
 async function popolaSelectClientiMov() {
   try {
-    const res = await apiFetch(`${API_URL}/clienti/`);
-    const lista = await res.json();
+    const res = await apiFetch(`${API_URL}/clienti/?per_page=100`);
+    const lista = (await res.json()).items;
     const sel = document.getElementById("mov-cliente");
     if (!sel) return;
     lista.forEach(c => {
@@ -3615,8 +3749,8 @@ async function renderVendite() {
 
   // Carica clienti per filtro
   try {
-    const res = await apiFetch(`${API_URL}/clienti/`);
-    const clienti = await res.json();
+    const res = await apiFetch(`${API_URL}/clienti/?per_page=100`);
+    const clienti = (await res.json()).items;
     const selCli = document.getElementById("filtro-vendite-cliente");
     selCli.innerHTML = '<option value="">Tutti</option>' + clienti.map(c => {
       const nome = c.tipo_cliente === "azienda" ? (c.ragione_sociale || "") : `${c.nome || ""} ${c.cognome || ""}`.trim();
@@ -3626,8 +3760,18 @@ async function renderVendite() {
 
   // Event filtri
   document.getElementById("filtro-vendite-anno")?.addEventListener("change", () => { caricaVenditeStats(); caricaVendite(); });
-  document.getElementById("filtro-vendite-stato")?.addEventListener("change", caricaVendite);
-  document.getElementById("filtro-vendite-cliente")?.addEventListener("change", caricaVendite);
+  document.getElementById("filtro-vendite-stato")?.addEventListener("change", () => caricaVendite());
+  document.getElementById("filtro-vendite-cliente")?.addEventListener("change", () => caricaVendite());
+  document.getElementById("btn-export-vendite-csv")?.addEventListener("click", () => {
+    const params = new URLSearchParams();
+    const anno = document.getElementById("filtro-vendite-anno")?.value;
+    const stato = document.getElementById("filtro-vendite-stato")?.value;
+    const clienteId = document.getElementById("filtro-vendite-cliente")?.value;
+    if (anno) params.set("anno", anno);
+    if (stato) params.set("stato", stato);
+    if (clienteId) params.set("cliente_id", clienteId);
+    scaricaCSV("vendite", params.toString(), "Vendite.csv");
+  });
 
   await caricaVenditeStats();
   await caricaVendite();
@@ -3647,20 +3791,24 @@ async function caricaVenditeStats() {
   } catch (e) { console.error(e); }
 }
 
-async function caricaVendite() {
+async function caricaVendite(page = 1) {
   const anno = document.getElementById("filtro-vendite-anno")?.value || "";
   const stato = document.getElementById("filtro-vendite-stato")?.value || "";
   const clienteId = document.getElementById("filtro-vendite-cliente")?.value || "";
 
-  let url = `${API_URL}/vendite/?`;
-  if (anno) url += `anno=${anno}&`;
-  if (stato) url += `stato=${stato}&`;
-  if (clienteId) url += `cliente_id=${clienteId}&`;
+  const params = new URLSearchParams();
+  if (anno) params.set("anno", anno);
+  if (stato) params.set("stato", stato);
+  if (clienteId) params.set("cliente_id", clienteId);
+  params.set("page", page);
+  params.set("per_page", 10);
 
   try {
-    const res = await apiFetch(url);
-    venditeLista = await res.json();
+    const res = await apiFetch(`${API_URL}/vendite/?${params}`);
+    const data = await res.json();
+    venditeLista = data.items;
     renderTabellaVendite();
+    renderPaginazione("vendite-pagination", "vendite-page-info", data.page, data.pages, data.total, caricaVendite);
   } catch (e) { console.error(e); }
 }
 
@@ -3705,15 +3853,15 @@ async function renderVenditaForm(venditaId = null) {
 
   // Carica confezionamenti per select righe
   try {
-    const res = await apiFetch(`${API_URL}/confezionamenti/`);
-    venditeConfezionamentiCache = await res.json();
+    const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
+    venditeConfezionamentiCache = (await res.json()).items;
   } catch (e) { venditeConfezionamentiCache = []; }
 
   // Carica clienti
   let clientiOptions = '<option value="">— Seleziona —</option>';
   try {
-    const res = await apiFetch(`${API_URL}/clienti/`);
-    const clienti = await res.json();
+    const res = await apiFetch(`${API_URL}/clienti/?per_page=100`);
+    const clienti = (await res.json()).items;
     clientiOptions += clienti.map(c => {
       const nome = c.tipo_cliente === "azienda" ? (c.ragione_sociale || "") : `${c.nome || ""} ${c.cognome || ""}`.trim();
       return `<option value="${c.id}" data-sconto="${c.sconto_default || 0}" data-sped-ind="${c.consegna_indirizzo || c.indirizzo || ""}" data-sped-cap="${c.consegna_cap || c.cap || ""}" data-sped-citta="${c.consegna_citta || c.citta || ""}" data-sped-prov="${c.consegna_provincia || c.provincia || ""}">${nome}</option>`;

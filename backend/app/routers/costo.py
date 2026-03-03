@@ -1,9 +1,12 @@
+import csv
+import io
 import os
 import shutil
 import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -18,6 +21,7 @@ from app.models.fornitore_sql import Fornitore
 from app.models.raccolta_sql import Raccolta
 from app.models.lotto_sql import LottoOlio
 from app.models.costo import CostoCreate, CostoUpdate, CostoOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/costi", tags=["costi"])
@@ -211,13 +215,77 @@ def costi_anni(db: Session = Depends(get_db)):
     return [a[0] for a in anni]
 
 
-@router.get("/", response_model=List[CostoOut])
+@router.get("/export/csv")
+def export_costi_csv(
+    anno: Optional[int] = Query(None),
+    tipo: Optional[str] = Query(None),
+    categoria_id: Optional[int] = Query(None),
+    stato: Optional[str] = Query(None),
+    fornitore_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Costo)
+    if anno:
+        query = query.filter(Costo.anno_campagna == anno)
+    if categoria_id:
+        query = query.filter(Costo.categoria_id == categoria_id)
+    if stato:
+        query = query.filter(Costo.stato_pagamento == stato)
+    if fornitore_id:
+        query = query.filter(Costo.fornitore_id == fornitore_id)
+    if tipo:
+        query = query.join(CategoriaCosto, Costo.categoria_id == CategoriaCosto.id).filter(CategoriaCosto.tipo_costo == tipo)
+
+    costi = query.order_by(Costo.data_fattura.desc()).all()
+
+    cat_ids = list({c.categoria_id for c in costi if c.categoria_id})
+    forn_ids = list({c.fornitore_id for c in costi if c.fornitore_id})
+    cat_map = {}
+    if cat_ids:
+        for cat in db.query(CategoriaCosto).filter(CategoriaCosto.id.in_(cat_ids)).all():
+            cat_map[cat.id] = cat
+    forn_map = {}
+    if forn_ids:
+        for f in db.query(Fornitore).filter(Fornitore.id.in_(forn_ids)).all():
+            forn_map[f.id] = f
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "Codice", "Data Fattura", "Anno", "Tipo", "Categoria", "Descrizione",
+        "Fornitore", "N. Fattura", "Imponibile", "IVA %", "Importo IVA",
+        "Importo Totale", "Stato Pagamento", "Data Pagamento", "Note",
+    ])
+    for c in costi:
+        cat = cat_map.get(c.categoria_id)
+        forn = forn_map.get(c.fornitore_id) if c.fornitore_id else None
+        writer.writerow([
+            c.codice, str(c.data_fattura) if c.data_fattura else "",
+            c.anno_campagna, cat.tipo_costo if cat else "", cat.nome if cat else "",
+            c.descrizione or "", _fornitore_denominazione(forn) or "",
+            c.numero_fattura or "", f"{float(c.imponibile):.2f}",
+            f"{float(c.iva_percentuale):.0f}", f"{float(c.importo_iva):.2f}",
+            f"{float(c.importo_totale):.2f}", c.stato_pagamento or "",
+            str(c.data_pagamento) if c.data_pagamento else "", c.note or "",
+        ])
+
+    filename = f"Costi_{anno or 'tutti'}.csv"
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/")
 def list_costi(
     anno: Optional[int] = Query(None),
     tipo: Optional[str] = Query(None),
     categoria_id: Optional[int] = Query(None),
     stato: Optional[str] = Query(None),
     fornitore_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Costo)
@@ -233,8 +301,56 @@ def list_costi(
     if tipo:
         query = query.join(CategoriaCosto, Costo.categoria_id == CategoriaCosto.id).filter(CategoriaCosto.tipo_costo == tipo)
 
-    costi = query.order_by(Costo.data_fattura.desc()).all()
-    return [_build_costo_out(c, db) for c in costi]
+    query = query.order_by(Costo.data_fattura.desc())
+    costi, total, pg, pp, pages_count = paginate(query, page, per_page)
+    if not costi:
+        return paginated_response([], total, pg, pp, pages_count)
+
+    # Pre-carica categorie e fornitori in batch
+    cat_ids = list({c.categoria_id for c in costi if c.categoria_id})
+    forn_ids = list({c.fornitore_id for c in costi if c.fornitore_id})
+
+    cat_map = {}
+    if cat_ids:
+        for cat in db.query(CategoriaCosto).filter(CategoriaCosto.id.in_(cat_ids)).all():
+            cat_map[cat.id] = cat
+
+    forn_map = {}
+    if forn_ids:
+        for f in db.query(Fornitore).filter(Fornitore.id.in_(forn_ids)).all():
+            forn_map[f.id] = f
+
+    result = []
+    for costo in costi:
+        cat = cat_map.get(costo.categoria_id)
+        forn = forn_map.get(costo.fornitore_id) if costo.fornitore_id else None
+        quota = None
+        if costo.anni_ammortamento and costo.anni_ammortamento > 0:
+            quota = round(float(costo.importo_totale) / costo.anni_ammortamento, 2)
+        result.append(CostoOut(
+            id=costo.id, codice=costo.codice,
+            categoria_id=costo.categoria_id,
+            categoria_nome=cat.nome if cat else None,
+            categoria_tipo=cat.tipo_costo if cat else None,
+            anno_campagna=costo.anno_campagna, descrizione=costo.descrizione,
+            fornitore_id=costo.fornitore_id,
+            fornitore_denominazione=_fornitore_denominazione(forn),
+            data_fattura=costo.data_fattura, numero_fattura=costo.numero_fattura,
+            tipo_documento=costo.tipo_documento,
+            imponibile=float(costo.imponibile),
+            iva_percentuale=float(costo.iva_percentuale),
+            importo_iva=float(costo.importo_iva),
+            importo_totale=float(costo.importo_totale),
+            data_pagamento=costo.data_pagamento,
+            modalita_pagamento=costo.modalita_pagamento,
+            riferimento_pagamento=costo.riferimento_pagamento,
+            stato_pagamento=costo.stato_pagamento,
+            anni_ammortamento=costo.anni_ammortamento,
+            quota_ammortamento=quota,
+            documento=costo.documento, note=costo.note,
+            created_at=costo.created_at, updated_at=costo.updated_at,
+        ))
+    return paginated_response(result, total, pg, pp, pages_count)
 
 
 @router.get("/{costo_id}", response_model=CostoOut)

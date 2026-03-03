@@ -1,12 +1,16 @@
+import csv
+import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.database import get_db
 from app.models.cliente_sql import Cliente
 from app.models.cliente import ClienteCreate, ClienteUpdate, ClienteOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/clienti", tags=["clienti"])
@@ -66,11 +70,59 @@ def clienti_stats(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/", response_model=List[ClienteOut])
+@router.get("/export/csv")
+def export_clienti_csv(
+    tipo: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    tutti: Optional[bool] = Query(False),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Cliente)
+    if not tutti:
+        query = query.filter(Cliente.attivo == True)  # noqa: E712
+    if tipo:
+        query = query.filter(Cliente.tipo_cliente == tipo)
+    if q:
+        search = f"%{q}%"
+        query = query.filter(or_(
+            Cliente.codice.ilike(search), Cliente.nome.ilike(search),
+            Cliente.cognome.ilike(search), Cliente.ragione_sociale.ilike(search),
+        ))
+
+    clienti = query.order_by(Cliente.codice).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "Codice", "Tipo", "Denominazione", "P.IVA", "Codice Fiscale",
+        "Indirizzo", "CAP", "Citta", "Provincia", "Telefono", "Email",
+        "Sconto Default %", "Attivo", "Note",
+    ])
+    for c in clienti:
+        out = _to_out(c)
+        writer.writerow([
+            c.codice, c.tipo_cliente, out.denominazione,
+            c.partita_iva or "", c.codice_fiscale or "",
+            c.indirizzo or "", c.cap or "", c.citta or "", c.provincia or "",
+            c.telefono or "", c.email or "",
+            f"{float(c.sconto_default):.1f}" if c.sconto_default else "0",
+            "Si" if c.attivo else "No", c.note or "",
+        ])
+
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="Clienti.csv"'},
+    )
+
+
+@router.get("/")
 def list_clienti(
     tipo: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     tutti: Optional[bool] = Query(False),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Cliente)
@@ -94,8 +146,9 @@ def list_clienti(
             )
         )
 
-    clienti = query.order_by(Cliente.codice).all()
-    return [_to_out(c) for c in clienti]
+    query = query.order_by(Cliente.codice)
+    items, total, pg, pp, pages = paginate(query, page, per_page)
+    return paginated_response([_to_out(c) for c in items], total, pg, pp, pages)
 
 
 @router.get("/{cliente_id}", response_model=ClienteOut)

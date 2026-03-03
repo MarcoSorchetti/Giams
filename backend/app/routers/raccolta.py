@@ -11,6 +11,7 @@ from app.models.parcella_sql import Parcella
 from app.models.raccolta import (
     RaccoltaCreate, RaccoltaUpdate, RaccoltaOut, RaccoltaParcellaOut,
 )
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/raccolte", tags=["raccolte"])
@@ -118,25 +119,74 @@ def raccolte_anni(db: Session = Depends(get_db)):
     return [a[0] for a in anni]
 
 
-@router.get("/", response_model=List[RaccoltaOut])
+@router.get("/")
 def list_raccolte(
     anno: Optional[int] = Query(None),
     parcella_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Raccolta)
     if anno:
         query = query.filter(Raccolta.anno_campagna == anno)
     if parcella_id:
-        raccolta_ids = (
+        sub_ids = (
             db.query(RaccoltaParcella.raccolta_id)
             .filter(RaccoltaParcella.parcella_id == parcella_id)
             .subquery()
         )
-        query = query.filter(Raccolta.id.in_(raccolta_ids))
+        query = query.filter(Raccolta.id.in_(sub_ids))
 
-    raccolte = query.order_by(Raccolta.data_raccolta.desc()).all()
-    return [_build_raccolta_out(r, db) for r in raccolte]
+    query = query.order_by(Raccolta.data_raccolta.desc())
+    raccolte, total, pg, pp, pages = paginate(query, page, per_page)
+    if not raccolte:
+        return paginated_response([], total, pg, pp, pages)
+
+    raccolta_ids = [r.id for r in raccolte]
+
+    # Pre-carica parcelle per tutte le raccolte
+    all_dettagli = (
+        db.query(RaccoltaParcella, Parcella.codice, Parcella.nome)
+        .join(Parcella, RaccoltaParcella.parcella_id == Parcella.id)
+        .filter(RaccoltaParcella.raccolta_id.in_(raccolta_ids))
+        .all()
+    )
+    parcelle_map = {}
+    for rp, codice, nome in all_dettagli:
+        parcelle_map.setdefault(rp.raccolta_id, []).append(
+            RaccoltaParcellaOut(
+                id=rp.id, parcella_id=rp.parcella_id,
+                kg_olive=float(rp.kg_olive),
+                parcella_codice=codice, parcella_nome=nome,
+            )
+        )
+
+    # Pre-carica lotti per tutte le raccolte
+    all_lotti = db.query(LottoOlio).filter(LottoOlio.raccolta_id.in_(raccolta_ids)).all()
+    lotti_map = {l.raccolta_id: l for l in all_lotti}
+
+    result = []
+    for r in raccolte:
+        lotto = lotti_map.get(r.id)
+        result.append(RaccoltaOut(
+            id=r.id, codice=r.codice, data_raccolta=r.data_raccolta,
+            anno_campagna=r.anno_campagna,
+            kg_olive_totali=float(r.kg_olive_totali),
+            metodo_raccolta=r.metodo_raccolta, maturazione=r.maturazione,
+            num_operai=r.num_operai,
+            ore_lavoro=float(r.ore_lavoro) if r.ore_lavoro else None,
+            costo_manodopera=float(r.costo_manodopera) if r.costo_manodopera else None,
+            costo_noleggio=float(r.costo_noleggio) if r.costo_noleggio else None,
+            costo_totale_raccolta=float(r.costo_totale_raccolta) if r.costo_totale_raccolta else None,
+            note=r.note, parcelle=parcelle_map.get(r.id, []),
+            ha_lotto=lotto is not None,
+            lotto_litri=float(lotto.litri_olio) if lotto else None,
+            lotto_kg_olio=float(lotto.kg_olio) if lotto and lotto.kg_olio else None,
+            lotto_resa=float(lotto.resa_percentuale) if lotto and lotto.resa_percentuale else None,
+            created_at=r.created_at, updated_at=r.updated_at,
+        ))
+    return paginated_response(result, total, pg, pp, pages)
 
 
 @router.get("/{raccolta_id}", response_model=RaccoltaOut)

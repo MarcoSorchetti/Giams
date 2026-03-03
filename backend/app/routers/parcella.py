@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from app.database import get_db
 from app.models.parcella_sql import Parcella
 from app.models.parcella import ParcellaCreate, ParcellaUpdate, ParcellaOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/parcelle", tags=["parcelle"])
@@ -43,11 +44,13 @@ def parcelle_stats(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/", response_model=List[ParcellaOut])
+@router.get("/")
 def list_parcelle(
     q: Optional[str] = Query(None),
     varieta: Optional[str] = Query(None),
     stato: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Parcella)
@@ -65,7 +68,9 @@ def list_parcelle(
     if stato:
         query = query.filter(Parcella.stato == stato)
 
-    return query.order_by(Parcella.codice).all()
+    query = query.order_by(Parcella.codice)
+    items, total, pg, pp, pages = paginate(query, page, per_page)
+    return paginated_response(items, total, pg, pp, pages)
 
 
 @router.get("/{parcella_id}", response_model=ParcellaOut)

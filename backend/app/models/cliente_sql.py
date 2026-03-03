@@ -18,7 +18,7 @@ class Cliente(Base):
 
     # Anagrafica azienda
     ragione_sociale = Column(String(150), nullable=True)
-    partita_iva = Column(String(11), nullable=True)
+    partita_iva = Column(String(13), nullable=True)
     codice_sdi = Column(String(7), nullable=True, server_default="0000000")
     pec = Column(String(100), nullable=True)
     referente_nome = Column(String(100), nullable=True)

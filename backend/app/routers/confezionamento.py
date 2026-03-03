@@ -14,6 +14,7 @@ from app.models.confezionamento import (
     ConfezionamentoLottoOut,
 )
 from app.routers.magazzino import _next_codice_movimento
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/confezionamenti", tags=["confezionamenti"])
@@ -112,11 +113,13 @@ def confezionamenti_anni(db: Session = Depends(get_db)):
     return [a[0] for a in anni]
 
 
-@router.get("/", response_model=List[ConfezionamentoOut])
+@router.get("/")
 def list_confezionamenti(
     anno: Optional[int] = Query(None),
     formato: Optional[str] = Query(None),
     contenitore_id: Optional[int] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Confezionamento)
@@ -127,8 +130,57 @@ def list_confezionamenti(
     if contenitore_id:
         query = query.filter(Confezionamento.contenitore_id == contenitore_id)
 
-    confs = query.order_by(Confezionamento.data_confezionamento.desc()).all()
-    return [_build_conf_out(c, db) for c in confs]
+    query = query.order_by(Confezionamento.data_confezionamento.desc())
+    confs, total, pg, pp, pages_count = paginate(query, page, per_page)
+    if not confs:
+        return paginated_response([], total, pg, pp, pages_count)
+
+    conf_ids = [c.id for c in confs]
+
+    # Pre-carica lotti per tutti i confezionamenti
+    all_cl = (
+        db.query(ConfezionamentoLotto, LottoOlio.codice_lotto)
+        .join(LottoOlio, ConfezionamentoLotto.lotto_id == LottoOlio.id)
+        .filter(ConfezionamentoLotto.confezionamento_id.in_(conf_ids))
+        .all()
+    )
+    lotti_map = {}
+    for cl, codice in all_cl:
+        lotti_map.setdefault(cl.confezionamento_id, []).append(
+            ConfezionamentoLottoOut(
+                id=cl.id, lotto_id=cl.lotto_id,
+                litri_utilizzati=float(cl.litri_utilizzati),
+                lotto_codice=codice,
+            )
+        )
+
+    # Pre-carica contenitori
+    cont_ids = list({c.contenitore_id for c in confs if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for cont in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[cont.id] = cont
+
+    result = []
+    for conf in confs:
+        cont = cont_map.get(conf.contenitore_id) if conf.contenitore_id else None
+        result.append(ConfezionamentoOut(
+            id=conf.id, codice=conf.codice,
+            data_confezionamento=conf.data_confezionamento,
+            anno_campagna=conf.anno_campagna,
+            contenitore_id=conf.contenitore_id or 0,
+            contenitore_descrizione=cont.descrizione if cont else None,
+            contenitore_foto=cont.foto if cont else None,
+            formato=conf.formato,
+            capacita_litri=float(conf.capacita_litri),
+            num_unita=conf.num_unita,
+            litri_totali=float(conf.litri_totali),
+            costo_totale=float(conf.costo_totale) if conf.costo_totale else None,
+            prezzo_unitario=float(conf.prezzo_unitario) if conf.prezzo_unitario else None,
+            note=conf.note, lotti=lotti_map.get(conf.id, []),
+            created_at=conf.created_at, updated_at=conf.updated_at,
+        ))
+    return paginated_response(result, total, pg, pp, pages_count)
 
 
 @router.get("/{conf_id}", response_model=ConfezionamentoOut)

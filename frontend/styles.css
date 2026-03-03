@@ -833,3 +833,74 @@ a:hover { color: var(--accent-hover); }
 input.flatpickr-date + .form-control {
   cursor: pointer;
 }
+
+/* =============================================
+   PAGINATION
+   ============================================= */
+.pagination-wrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.pagination-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.pagination-controls .btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.pagination-controls .btn:hover:not(:disabled) {
+  background: rgba(77, 124, 15, 0.15);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.pagination-controls .btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pagination-controls .btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* ---- CSV Export Button ---- */
+.btn-csv {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #c5cedb;
+  background: transparent;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.btn-csv:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+}

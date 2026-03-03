@@ -1,12 +1,16 @@
+import csv
+import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from app.database import get_db
 from app.models.fornitore_sql import Fornitore
 from app.models.fornitore import FornitoreCreate, FornitoreUpdate, FornitoreOut
+from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/fornitori", tags=["fornitori"])
@@ -87,12 +91,64 @@ def fornitori_stats(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/", response_model=List[FornitoreOut])
+@router.get("/export/csv")
+def export_fornitori_csv(
+    tipo: Optional[str] = Query(None),
+    categoria: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    tutti: Optional[bool] = Query(False),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Fornitore)
+    if not tutti:
+        query = query.filter(Fornitore.attivo == True)  # noqa: E712
+    if tipo:
+        query = query.filter(Fornitore.tipo_fornitore == tipo)
+    if categoria:
+        query = query.filter(Fornitore.categoria_merceologica == categoria)
+    if q:
+        search = f"%{q}%"
+        query = query.filter(or_(
+            Fornitore.codice.ilike(search), Fornitore.nome.ilike(search),
+            Fornitore.cognome.ilike(search), Fornitore.ragione_sociale.ilike(search),
+        ))
+
+    fornitori = query.order_by(Fornitore.codice).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "Codice", "Tipo", "Denominazione", "P.IVA", "Codice Fiscale",
+        "Indirizzo", "CAP", "Citta", "Provincia", "Telefono", "Email",
+        "IBAN", "Banca", "Categoria", "Cond. Pagamento", "Attivo", "Note",
+    ])
+    for f in fornitori:
+        out = _to_out(f)
+        writer.writerow([
+            f.codice, f.tipo_fornitore, out.denominazione,
+            f.partita_iva or "", f.codice_fiscale or "",
+            f.indirizzo or "", f.cap or "", f.citta or "", f.provincia or "",
+            f.telefono or "", f.email or "",
+            f.iban or "", f.banca or "",
+            f.categoria_merceologica or "", f.condizioni_pagamento or "",
+            "Si" if f.attivo else "No", f.note or "",
+        ])
+
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="Fornitori.csv"'},
+    )
+
+
+@router.get("/")
 def list_fornitori(
     tipo: Optional[str] = Query(None),
     categoria: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
     tutti: Optional[bool] = Query(False),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Fornitore)
@@ -119,8 +175,9 @@ def list_fornitori(
             )
         )
 
-    fornitori = query.order_by(Fornitore.codice).all()
-    return [_to_out(f) for f in fornitori]
+    query = query.order_by(Fornitore.codice)
+    items, total, pg, pp, pages = paginate(query, page, per_page)
+    return paginated_response([_to_out(f) for f in items], total, pg, pp, pages)
 
 
 @router.get("/{fornitore_id}", response_model=FornitoreOut)
