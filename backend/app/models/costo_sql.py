@@ -22,7 +22,7 @@ class Costo(Base):
     tipo_documento = Column(String(20), nullable=False, server_default="fattura")
 
     # Importi
-    imponibile = Column(Numeric(12, 2), nullable=False)
+    imponibile = Column(Numeric(12, 3), nullable=False)
     iva_percentuale = Column(Numeric(5, 2), nullable=False, server_default="22")
     importo_iva = Column(Numeric(12, 2), nullable=False, server_default="0")
     importo_totale = Column(Numeric(12, 2), nullable=False)

@@ -285,6 +285,8 @@ def list_costi(
     stato: Optional[str] = Query(None),
     fornitore_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    sort_by: str = Query("data_fattura"),
+    sort_dir: str = Query("desc"),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -311,7 +313,16 @@ def list_costi(
     if tipo:
         query = query.join(CategoriaCosto, Costo.categoria_id == CategoriaCosto.id).filter(CategoriaCosto.tipo_costo == tipo)
 
-    query = query.order_by(Costo.data_fattura.desc())
+    # Ordinamento dinamico
+    _sort_cols = {
+        "codice": Costo.codice,
+        "data_fattura": Costo.data_fattura,
+        "descrizione": Costo.descrizione,
+        "importo_totale": Costo.importo_totale,
+        "stato_pagamento": Costo.stato_pagamento,
+    }
+    col = _sort_cols.get(sort_by, Costo.data_fattura)
+    query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
     costi, total, pg, pp, pages_count = paginate(query, page, per_page)
     if not costi:
         return paginated_response([], total, pg, pp, pages_count)
@@ -424,6 +435,10 @@ def update_costo(costo_id: int, data: CostoUpdate, db: Session = Depends(get_db)
         forn = db.query(Fornitore).filter(Fornitore.id == update_data["fornitore_id"]).first()
         if not forn:
             raise HTTPException(status_code=400, detail="Fornitore non trovato.")
+
+    # Se l'anno campagna cambia, rigenera il codice automaticamente
+    if "anno_campagna" in update_data and update_data["anno_campagna"] != c.anno_campagna:
+        update_data["codice"] = _next_codice_costo(update_data["anno_campagna"], db)
 
     for key, value in update_data.items():
         setattr(c, key, value)

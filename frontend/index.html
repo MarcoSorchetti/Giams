@@ -17,12 +17,15 @@
 
   <div class="app-shell d-flex">
 
+    <!-- Backdrop sidebar mobile -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
     <!-- SIDEBAR -->
-    <aside id="app-sidebar" class="bg-black text-light p-3 d-flex flex-column" style="width:260px;">
-      <div class="text-center mb-4">
+    <aside id="app-sidebar" class="bg-black text-light p-3 d-flex flex-column">
+      <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.4.21</div>
+        <div class="app-version">v1.4.38</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -86,8 +89,27 @@
       </div>
     </aside>
 
-    <!-- MAIN CONTENT -->
-    <main id="main-content" class="flex-grow-1 p-4 overflow-auto"></main>
+    <!-- MAIN WRAPPER -->
+    <div class="main-wrapper flex-grow-1 d-flex flex-column">
+      <!-- Topbar -->
+      <div class="content-topbar">
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Toggle menu">
+          <span class="hamburger-box">
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+            <span class="hamburger-line"></span>
+          </span>
+        </button>
+        <div class="topbar-text">
+          <span id="topbar-title" class="topbar-title"></span>
+          <span id="topbar-subtitle" class="topbar-subtitle"></span>
+        </div>
+        <div id="topbar-actions" class="topbar-actions"></div>
+      </div>
+      <!-- MAIN CONTENT -->
+      <main id="main-content" class="flex-grow-1 p-4 overflow-auto">
+      </main>
+    </div>
 
   </div>
 
@@ -99,10 +121,6 @@
   <!-- TEMPLATE: PARCELLE LISTA -->
   <template id="template-parcelle">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Parcelle</h2>
-        <div class="module-subtitle">Terreni e oliveti · Ricerca avanzata</div>
-      </div>
       <button class="btn btn-accent" id="btn-nuova-parcella">
         <i class="fa-solid fa-plus me-1"></i> Nuova Parcella
       </button>
@@ -330,12 +348,7 @@
 
   <!-- TEMPLATE: UTENTI -->
   <template id="template-utenti">
-    <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Utenti</h2>
-        <div class="module-subtitle">Amministrazione accessi piattaforma</div>
-      </div>
-    </div>
+    <div class="module-header mb-3"></div>
 
     <div class="row g-4">
       <div class="col-lg-8">
@@ -391,12 +404,7 @@
 
   <!-- TEMPLATE: PRODUZIONE (tabs Raccolte / Lotti / Confezionamento) -->
   <template id="template-produzione">
-    <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Produzione Olio</h2>
-        <div class="module-subtitle">Raccolte, lotti e confezionamento</div>
-      </div>
-    </div>
+    <div class="module-header mb-3"></div>
 
     <!-- Tabs -->
     <ul class="nav nav-tabs produzione-tabs mb-4">
@@ -1024,10 +1032,6 @@
   <!-- TEMPLATE: CONTENITORI LISTA -->
   <template id="template-contenitori">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Contenitori</h2>
-        <div class="module-subtitle">Tipologie di contenitori per il confezionamento</div>
-      </div>
       <button class="btn btn-accent" id="btn-nuovo-contenitore">
         <i class="fa-solid fa-plus me-1"></i> Nuovo Contenitore
       </button>
@@ -1112,10 +1116,6 @@
   <!-- TEMPLATE: CLIENTI LISTA -->
   <template id="template-clienti">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Clienti</h2>
-        <div class="module-subtitle">Anagrafica clienti per fatturazione e vendite</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-csv" id="btn-export-clienti-csv" title="Scarica CSV">
           <i class="fa-solid fa-file-csv me-1"></i> CSV
@@ -1393,10 +1393,6 @@
   <!-- TEMPLATE: FORNITORI LISTA -->
   <template id="template-fornitori">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Fornitori</h2>
-        <div class="module-subtitle">Anagrafica fornitori e dati bancari</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-csv" id="btn-export-fornitori-csv" title="Scarica CSV">
           <i class="fa-solid fa-file-csv me-1"></i> CSV
@@ -1690,10 +1686,6 @@
   <!-- ═══════════════════ TEMPLATE: COSTI ═══════════════════ -->
   <template id="template-costi">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Gestione Costi</h2>
-        <div class="module-subtitle">Fatture, spese di campagna e costi strutturali</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-csv" id="btn-export-costi-csv" title="Scarica CSV">
           <i class="fa-solid fa-file-csv me-1"></i> CSV
@@ -1792,13 +1784,13 @@
         <table class="table table-dark table-hover mb-0">
           <thead>
             <tr>
-              <th>Codice</th>
-              <th>Data</th>
+              <th class="sortable" data-sort="codice">Codice <i class="fa-solid fa-sort"></i></th>
+              <th class="sortable active-sort" data-sort="data_fattura">Data <i class="fa-solid fa-sort-down"></i></th>
               <th>Categoria</th>
-              <th>Descrizione</th>
+              <th class="sortable" data-sort="descrizione">Descrizione <i class="fa-solid fa-sort"></i></th>
               <th>Fornitore</th>
-              <th class="text-end">Totale</th>
-              <th class="text-center">Stato</th>
+              <th class="text-end sortable" data-sort="importo_totale">Totale <i class="fa-solid fa-sort"></i></th>
+              <th class="text-center sortable" data-sort="stato_pagamento">Stato <i class="fa-solid fa-sort"></i></th>
               <th class="text-center">Azioni</th>
             </tr>
           </thead>
@@ -1928,7 +1920,7 @@
                   <label class="form-label">Imponibile *</label>
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">&euro;</span>
-                    <input type="number" class="form-control" id="costo-imponibile" step="0.01" min="0" required />
+                    <input type="number" class="form-control" id="costo-imponibile" step="0.001" min="0" required />
                   </div>
                 </div>
                 <div class="col-6">
@@ -2007,6 +1999,8 @@
                     <option value="6">6 anni</option>
                     <option value="7">7 anni</option>
                     <option value="8">8 anni</option>
+                    <option value="9">9 anni</option>
+                    <option value="10">10 anni</option>
                   </select>
                 </div>
                 <div class="col-6">
@@ -2077,10 +2071,6 @@
   <!-- ═══════════════════ TEMPLATE: GESTIONE CATEGORIE COSTO ═══════════════════ -->
   <template id="template-categorie-costo">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Categorie Costo</h2>
-        <div class="module-subtitle">Tipologie di spesa per campagna e strutturali</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-outline-secondary btn-sm" id="btn-torna-costi-da-cat">
           <i class="fa-solid fa-arrow-left me-1"></i> Torna ai Costi
@@ -2157,10 +2147,6 @@
   <!-- ═══════════════════ TEMPLATE: MAGAZZINO ═══════════════════ -->
   <template id="template-magazzino">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Magazzino</h2>
-        <div class="module-subtitle">Giacenze, carichi e scarichi prodotti confezionati</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-csv" id="btn-export-movimenti-csv" title="Scarica CSV">
           <i class="fa-solid fa-file-csv me-1"></i> CSV
@@ -2405,10 +2391,6 @@
   <!-- TEMPLATE: VENDITE LISTA -->
   <template id="template-vendite">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1">Vendite</h2>
-        <div class="module-subtitle">Gestione fatture, DDT, pagamenti</div>
-      </div>
       <div class="d-flex gap-2">
         <button class="btn btn-csv" id="btn-export-vendite-csv" title="Scarica CSV">
           <i class="fa-solid fa-file-csv me-1"></i> CSV
@@ -2495,10 +2477,6 @@
   <!-- TEMPLATE: VENDITA FORM (bozza) -->
   <template id="template-vendita-form">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1" id="vendita-form-title">Nuova Vendita</h2>
-        <div class="module-subtitle">Crea o modifica una vendita in bozza</div>
-      </div>
       <button class="btn btn-outline-secondary" id="btn-torna-vendite">
         <i class="fa-solid fa-arrow-left me-1"></i> Torna alla lista
       </button>
@@ -2639,10 +2617,6 @@
   <!-- TEMPLATE: VENDITA DETTAGLIO (confermata+) -->
   <template id="template-vendita-dettaglio">
     <div class="module-header mb-3">
-      <div>
-        <h2 class="module-title mb-1" id="vd-titolo">Dettaglio Vendita</h2>
-        <div class="module-subtitle" id="vd-sottotitolo"></div>
-      </div>
       <button class="btn btn-outline-secondary" id="btn-torna-vendite-det">
         <i class="fa-solid fa-arrow-left me-1"></i> Torna alla lista
       </button>

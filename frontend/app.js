@@ -184,6 +184,21 @@ async function getAppVersion() {
 // SIDEBAR NAVIGATION
 // =============================================
 
+// Mappa menu-id → { title, subtitle } per la topbar
+const _menuInfo = {
+  "menu-home":        { title: "", subtitle: "" },
+  "menu-dashboard":   { title: "Dashboard", subtitle: "Analisi e statistiche aziendali" },
+  "menu-parcelle":    { title: "Gestione Parcelle", subtitle: "Terreni e oliveti \u00b7 Ricerca avanzata" },
+  "menu-produzione":  { title: "Produzione Olio", subtitle: "Raccolte, lotti e confezionamento" },
+  "menu-contenitori": { title: "Gestione Contenitori", subtitle: "Tipologie di contenitori per il confezionamento" },
+  "menu-clienti":     { title: "Gestione Clienti", subtitle: "Anagrafica clienti per fatturazione e vendite" },
+  "menu-fornitori":   { title: "Gestione Fornitori", subtitle: "Anagrafica fornitori e dati bancari" },
+  "menu-costi":       { title: "Gestione Costi", subtitle: "Fatture, spese di campagna e costi strutturali" },
+  "menu-magazzino":   { title: "Magazzino", subtitle: "Giacenze, carichi e scarichi prodotti confezionati" },
+  "menu-vendite":     { title: "Vendite", subtitle: "Gestione fatture, DDT, pagamenti" },
+  "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma" },
+};
+
 function setActiveMenu(id) {
   document.querySelectorAll(".sidebar-link").forEach(b => b.classList.remove("active"));
   const el = document.getElementById(id);
@@ -191,6 +206,83 @@ function setActiveMenu(id) {
   // Cleanup grafici dashboard quando si naviga via
   dashboardCharts.forEach(c => c.destroy());
   dashboardCharts = [];
+  // Aggiorna titolo + sottotitolo topbar
+  const info = _menuInfo[id] || { title: "", subtitle: "" };
+  const titleEl = document.getElementById("topbar-title");
+  const subtitleEl = document.getElementById("topbar-subtitle");
+  if (titleEl) titleEl.textContent = info.title;
+  if (subtitleEl) subtitleEl.textContent = info.subtitle;
+  // Svuota azioni topbar (verranno ripopolate dal render)
+  const actionsEl = document.getElementById("topbar-actions");
+  if (actionsEl) actionsEl.innerHTML = "";
+  // Chiudi sidebar su mobile dopo click menu
+  if (window.innerWidth < 768) {
+    const shell = document.querySelector(".app-shell");
+    shell?.classList.remove("sidebar-open");
+    document.getElementById("sidebar-toggle")?.classList.remove("is-active");
+  }
+}
+
+/** Aggiorna topbar per sotto-sezioni (es. Categorie Costo) */
+function setTopbarInfo(title, subtitle) {
+  const titleEl = document.getElementById("topbar-title");
+  const subtitleEl = document.getElementById("topbar-subtitle");
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle || "";
+}
+
+/** Sposta i bottoni da .module-header (nel contenuto) alla topbar-actions */
+function promoteActionsToTopbar() {
+  const container = document.getElementById("topbar-actions");
+  if (!container) return;
+  container.innerHTML = "";
+  const header = document.querySelector("#main-content .module-header");
+  if (!header) return;
+  while (header.firstChild) {
+    container.appendChild(header.firstChild);
+  }
+  header.remove();
+}
+
+// ---- Sidebar Toggle ----
+function _updateToggleIcon() {
+  const shell = document.querySelector(".app-shell");
+  const toggle = document.getElementById("sidebar-toggle");
+  if (!shell || !toggle) return;
+  // is-active = X (sidebar aperta), hamburger = sidebar chiusa
+  if (window.innerWidth < 768) {
+    toggle.classList.toggle("is-active", shell.classList.contains("sidebar-open"));
+  } else {
+    toggle.classList.toggle("is-active", !shell.classList.contains("sidebar-collapsed"));
+  }
+}
+
+function initSidebarToggle() {
+  const shell = document.querySelector(".app-shell");
+  const toggle = document.getElementById("sidebar-toggle");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if (!shell || !toggle) return;
+
+  // Ripristina stato desktop da localStorage
+  if (window.innerWidth >= 768 && localStorage.getItem("sidebar-collapsed") === "1") {
+    shell.classList.add("sidebar-collapsed");
+  }
+  _updateToggleIcon();
+
+  toggle.addEventListener("click", () => {
+    if (window.innerWidth < 768) {
+      shell.classList.toggle("sidebar-open");
+    } else {
+      shell.classList.toggle("sidebar-collapsed");
+      localStorage.setItem("sidebar-collapsed", shell.classList.contains("sidebar-collapsed") ? "1" : "0");
+    }
+    _updateToggleIcon();
+  });
+
+  backdrop?.addEventListener("click", () => {
+    shell.classList.remove("sidebar-open");
+    _updateToggleIcon();
+  });
 }
 
 // =============================================
@@ -208,7 +300,7 @@ async function renderHome() {
       <h1 class="home-greeting mb-1">GIAMS</h1>
       <p class="home-acronym mb-4">Green Integrated Agricultural Management System</p>
       <img src="assets/LogoGiaMarHome.png" alt="Gia.Mar Green Farm" class="home-logo-img mb-3" />
-      <p class="home-greeting-user mb-4">Benvenuto, <span>${userName}</span> &middot; Ver. ${version}</p>
+      <p class="home-greeting-user mb-4">Benvenuto, <span>${escapeHtml(userName)}</span> &middot; Ver. ${version}</p>
 
       <div class="row g-3 w-100" style="max-width:750px;">
         <div class="col-6 col-md-4">
@@ -697,6 +789,7 @@ async function renderParcelle() {
   const tpl = document.getElementById("template-parcelle");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   initParcelleListUI();
   await caricaParcelleStats();
@@ -2210,6 +2303,7 @@ async function renderContenitori() {
   const tpl = document.getElementById("template-contenitori");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   document.getElementById("btn-nuovo-contenitore")?.addEventListener("click", () => renderContenitoreForm());
 
@@ -2446,6 +2540,7 @@ async function renderClienti() {
   const tpl = document.getElementById("template-clienti");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   initClientiListUI();
   await caricaClientiStats();
@@ -2753,6 +2848,7 @@ async function renderFornitori() {
   const tpl = document.getElementById("template-fornitori");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   caricaFornitoriStats();
   caricaFornitori();
@@ -3061,11 +3157,44 @@ const MODALITA_PAG_LABELS = {
 // COSTI — Lista
 // =============================================
 
+let costiSortBy = "data_fattura";
+let costiSortDir = "desc";
+
+function _aggiornaIconeSort() {
+  document.querySelectorAll("#main-content th.sortable").forEach(th => {
+    const col = th.dataset.sort;
+    const icon = th.querySelector("i");
+    if (col === costiSortBy) {
+      th.classList.add("active-sort");
+      icon.className = costiSortDir === "asc" ? "fa-solid fa-sort-up" : "fa-solid fa-sort-down";
+    } else {
+      th.classList.remove("active-sort");
+      icon.className = "fa-solid fa-sort";
+    }
+  });
+}
+
 async function renderCosti() {
   const main = document.getElementById("main-content");
   const tpl = document.getElementById("template-costi");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
+
+  // Sort colonne
+  document.querySelectorAll("#main-content th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (costiSortBy === col) {
+        costiSortDir = costiSortDir === "asc" ? "desc" : "asc";
+      } else {
+        costiSortBy = col;
+        costiSortDir = "desc";
+      }
+      _aggiornaIconeSort();
+      caricaCosti();
+    });
+  });
 
   document.getElementById("btn-nuovo-costo")?.addEventListener("click", () => renderCostoForm());
   document.getElementById("btn-gestisci-categorie")?.addEventListener("click", () => renderCategorieCosto());
@@ -3198,6 +3327,8 @@ async function caricaCosti(page = 1) {
     if (stato) params.set("stato", stato);
     if (forn) params.set("fornitore_id", forn);
     if (search) params.set("search", search);
+    params.set("sort_by", costiSortBy);
+    params.set("sort_dir", costiSortDir);
     params.set("page", page);
     params.set("per_page", 10);
 
@@ -3222,15 +3353,15 @@ function renderTabellaCosti() {
 
   tbody.innerHTML = costiLista.map(c => `
     <tr>
-      <td><code>${c.codice || "—"}</code></td>
-      <td>${c.data_fattura || "—"}</td>
+      <td class="codice-cell">${c.codice || "—"}</td>
+      <td class="data-cell">${c.data_fattura || "—"}</td>
       <td>
         <span class="badge ${c.categoria_tipo === "campagna" ? "bg-info text-dark" : "bg-secondary"}">${c.categoria_tipo || ""}</span>
         ${c.categoria_nome || "—"}
       </td>
       <td>${c.descrizione || "—"} ${c.documento ? '<i class="fa-solid fa-paperclip text-secondary ms-1" title="Documento allegato"></i>' : ""}</td>
       <td>${c.fornitore_denominazione || "—"}</td>
-      <td class="text-end fw-bold">&euro; ${Number(c.importo_totale).toLocaleString("it-IT", {minimumFractionDigits:2})}</td>
+      <td class="text-end fw-bold totale-cell">&euro; ${Number(c.importo_totale).toLocaleString("it-IT", {minimumFractionDigits:2})}</td>
       <td class="text-center">
         <span class="badge ${STATO_PAGAMENTO_BADGE[c.stato_pagamento] || "bg-secondary"}">
           ${STATO_PAGAMENTO_LABELS[c.stato_pagamento] || c.stato_pagamento}
@@ -3400,9 +3531,11 @@ async function renderCostoForm() {
     }
   });
 
-  // Auto-codice
+  // Auto-codice (change + input per catturare modifiche in tempo reale)
   aggiornaCodiciCosto();
-  document.getElementById("costo-anno")?.addEventListener("change", aggiornaCodiciCosto);
+  const annoInput = document.getElementById("costo-anno");
+  annoInput?.addEventListener("change", aggiornaCodiciCosto);
+  annoInput?.addEventListener("input", aggiornaCodiciCosto);
 }
 
 function aggiornaSelectCategorieCosto() {
@@ -3475,7 +3608,16 @@ function calcolaQuotaAmmortamento() {
 
 async function aggiornaCodiciCosto() {
   const anno = document.getElementById("costo-anno")?.value;
-  if (!anno || costoInModifica) return;
+  if (!anno || anno.length < 4) return;
+  // In modifica: rigenera codice solo se l'anno e' cambiato
+  if (costoInModifica) {
+    const annoOriginale = costoInModifica.anno_campagna;
+    if (parseInt(anno) === annoOriginale) {
+      // Anno invariato — ripristina codice originale
+      document.getElementById("costo-codice").value = costoInModifica.codice;
+      return;
+    }
+  }
   try {
     const res = await apiFetch(`${API_URL}/costi/next-codice?anno=${anno}`);
     const data = await res.json();
@@ -3624,6 +3766,8 @@ async function renderCategorieCosto() {
   const tpl = document.getElementById("template-categorie-costo");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  setTopbarInfo("Categorie Costo", "Tipologie di spesa per campagna e strutturali");
+  promoteActionsToTopbar();
 
   document.getElementById("btn-torna-costi-da-cat")?.addEventListener("click", () => renderCosti());
   document.getElementById("btn-annulla-cat")?.addEventListener("click", () => resetFormCategoria());
@@ -3683,7 +3827,7 @@ async function caricaCategorieCostoTabella(page) {
   const search = document.getElementById("search-categorie")?.value || "";
   const params = new URLSearchParams({
     page: catPage,
-    per_page: 13,
+    per_page: 10,
     sort_by: catSortBy,
     sort_dir: catSortDir,
   });
@@ -3851,6 +3995,7 @@ async function renderMagazzino() {
   const tpl = document.getElementById("template-magazzino");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   // Tab switching
   document.getElementById("mag-tab-giacenze")?.addEventListener("click", () => {
@@ -4357,6 +4502,7 @@ async function renderVendite() {
   const tpl = document.getElementById("template-vendite");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
 
   document.getElementById("btn-nuova-vendita")?.addEventListener("click", () => renderVenditaForm());
 
@@ -4475,6 +4621,8 @@ async function renderVenditaForm(venditaId = null) {
   const tpl = document.getElementById("template-vendita-form");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  setTopbarInfo(venditaId ? "Modifica Vendita" : "Nuova Vendita", "Crea o modifica una vendita in bozza");
+  promoteActionsToTopbar();
 
   venditaInModifica = null;
 
@@ -4550,7 +4698,7 @@ async function renderVenditaForm(venditaId = null) {
       const res = await apiFetch(`${API_URL}/vendite/${venditaId}`);
       const v = await res.json();
       venditaInModifica = v;
-      document.getElementById("vendita-form-title").textContent = `Modifica Vendita ${v.codice}`;
+      setTopbarInfo(`Modifica Vendita ${v.codice}`, "Modifica vendita in bozza");
       document.getElementById("vf-id").value = v.id;
       document.getElementById("vf-codice").value = v.codice;
       document.getElementById("vf-data").value = v.data_vendita;
@@ -4749,6 +4897,8 @@ async function renderVenditaDettaglio(venditaId) {
   const tpl = document.getElementById("template-vendita-dettaglio");
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
+  setTopbarInfo("Dettaglio Vendita", "");
+  promoteActionsToTopbar();
 
   document.getElementById("btn-torna-vendite-det")?.addEventListener("click", renderVendite);
 
@@ -4757,8 +4907,7 @@ async function renderVenditaDettaglio(venditaId) {
     if (!res.ok) { alert("Vendita non trovata"); renderVendite(); return; }
     const v = await res.json();
 
-    document.getElementById("vd-titolo").textContent = `Vendita ${v.codice}`;
-    document.getElementById("vd-sottotitolo").textContent = `${v.cliente_denominazione || ""} — ${v.stato.toUpperCase()}`;
+    setTopbarInfo(`Vendita ${v.codice}`, `${v.cliente_denominazione || ""} \u2014 ${v.stato.toUpperCase()}`);
     document.getElementById("vd-codice").textContent = v.codice;
     document.getElementById("vd-data").textContent = v.data_vendita || "—";
     document.getElementById("btn-modifica-data").addEventListener("click", () => modificaDataVendita(v.id, v.data_vendita));
@@ -5099,6 +5248,9 @@ async function scaricaDdtPdf(id) {
 
 document.addEventListener("DOMContentLoaded", () => {
   if (!checkAuth()) return;
+
+  // Sidebar toggle
+  initSidebarToggle();
 
   // Mostra username nella sidebar
   const usernameEl = document.getElementById("current-username");
