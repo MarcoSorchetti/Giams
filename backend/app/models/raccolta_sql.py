@@ -7,8 +7,8 @@ class Raccolta(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     codice = Column(String(20), unique=True, nullable=False, index=True)
-    data_raccolta = Column(Date, nullable=False)
-    anno_campagna = Column(Integer, nullable=False)
+    data_raccolta = Column(Date, nullable=False, index=True)
+    anno_campagna = Column(Integer, nullable=False, index=True)
     kg_olive_totali = Column(Numeric(8, 2), nullable=False)
     metodo_raccolta = Column(String(30), nullable=False)
     maturazione = Column(String(20), nullable=False)
@@ -27,5 +27,5 @@ class RaccoltaParcella(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     raccolta_id = Column(Integer, ForeignKey("raccolte.id", ondelete="CASCADE"), nullable=False)
-    parcella_id = Column(Integer, ForeignKey("parcelle.id"), nullable=False)
+    parcella_id = Column(Integer, ForeignKey("parcelle.id", ondelete="CASCADE"), nullable=False)
     kg_olive = Column(Numeric(8, 2), nullable=False)

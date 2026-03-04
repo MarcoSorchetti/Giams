@@ -120,7 +120,7 @@ def list_confezionamenti(
     contenitore_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Confezionamento)
@@ -268,6 +268,14 @@ def update_confezionamento(conf_id: int, data: ConfezionamentoUpdate, db: Sessio
         setattr(c, key, value)
 
     if lotti_data is not None:
+        # Verifica che tutti i lotti esistano
+        if lotti_data:
+            lotto_ids = [ld["lotto_id"] for ld in lotti_data]
+            existing = {row[0] for row in db.query(LottoOlio.id).filter(LottoOlio.id.in_(lotto_ids)).all()}
+            missing = set(lotto_ids) - existing
+            if missing:
+                raise HTTPException(status_code=400, detail=f"Lotti non trovati: {missing}")
+
         db.query(ConfezionamentoLotto).filter(ConfezionamentoLotto.confezionamento_id == conf_id).delete()
         for ld in lotti_data:
             cl = ConfezionamentoLotto(

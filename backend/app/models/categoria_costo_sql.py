@@ -14,3 +14,4 @@ class CategoriaCosto(Base):
     attiva = Column(Boolean, nullable=False, server_default="true")
     ordine = Column(Integer, nullable=False, server_default="0")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())

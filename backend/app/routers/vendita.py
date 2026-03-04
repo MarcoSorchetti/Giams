@@ -337,7 +337,7 @@ def list_vendite(
     cliente_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Vendita)
@@ -468,6 +468,15 @@ def create_vendita(data: VenditaCreate, db: Session = Depends(get_db)):
     vendita_dict["codice"] = codice
     vendita_dict["stato"] = "bozza"
 
+    # Ricalcolo importi (server-side, ignora valori client)
+    imponibile = float(vendita_dict.get("imponibile", 0))
+    sconto = float(vendita_dict.get("sconto_percentuale", 0) or 0)
+    imponibile_scontato = round(imponibile * (1 - sconto / 100), 2)
+    iva_pct = float(vendita_dict.get("iva_percentuale", 4))
+    vendita_dict["imponibile_scontato"] = imponibile_scontato
+    vendita_dict["importo_iva"] = round(imponibile_scontato * iva_pct / 100, 2)
+    vendita_dict["importo_totale"] = round(imponibile_scontato + vendita_dict["importo_iva"], 2)
+
     v = Vendita(**vendita_dict)
     db.add(v)
     db.flush()
@@ -510,6 +519,14 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
 
     for key, value in update_data.items():
         setattr(v, key, value)
+
+    # Ricalcolo importi (server-side, ignora valori client)
+    imponibile = float(v.imponibile or 0)
+    sconto = float(v.sconto_percentuale or 0)
+    v.imponibile_scontato = round(imponibile * (1 - sconto / 100), 2)
+    iva_pct = float(v.iva_percentuale or 4)
+    v.importo_iva = round(v.imponibile_scontato * iva_pct / 100, 2)
+    v.importo_totale = round(v.imponibile_scontato + v.importo_iva, 2)
 
     if righe_data is not None:
         # Cancella righe esistenti e ricrea

@@ -40,7 +40,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="1.4.8",
+    version="1.4.21",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 
@@ -48,12 +48,12 @@ app = FastAPI(
 # ------------------------------------------------------------------------------
 # Configurazione CORS
 # ------------------------------------------------------------------------------
-allowed_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8003,http://127.0.0.1:8003").split(",")
+allowed_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:8003,http://127.0.0.1:8003").split(",")]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

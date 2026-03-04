@@ -125,7 +125,7 @@ def list_raccolte(
     parcella_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Raccolta)
@@ -215,6 +215,15 @@ def create_raccolta(data: RaccoltaCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Codice raccolta gia' esistente.")
 
     parcelle_data = data.parcelle
+
+    # Verifica che tutte le parcelle esistano
+    if parcelle_data:
+        parcella_ids = [pd.parcella_id for pd in parcelle_data]
+        existing = {row[0] for row in db.query(Parcella.id).filter(Parcella.id.in_(parcella_ids)).all()}
+        missing = set(parcella_ids) - existing
+        if missing:
+            raise HTTPException(status_code=400, detail=f"Parcelle non trovate: {missing}")
+
     raccolta_dict = data.model_dump(exclude={"parcelle"})
     r = Raccolta(**raccolta_dict)
     db.add(r)
@@ -246,6 +255,14 @@ def update_raccolta(raccolta_id: int, data: RaccoltaUpdate, db: Session = Depend
         setattr(r, key, value)
 
     if parcelle_data is not None:
+        # Verifica che tutte le parcelle esistano
+        if parcelle_data:
+            parcella_ids = [pd["parcella_id"] for pd in parcelle_data]
+            existing = {row[0] for row in db.query(Parcella.id).filter(Parcella.id.in_(parcella_ids)).all()}
+            missing = set(parcella_ids) - existing
+            if missing:
+                raise HTTPException(status_code=400, detail=f"Parcelle non trovate: {missing}")
+
         db.query(RaccoltaParcella).filter(RaccoltaParcella.raccolta_id == raccolta_id).delete()
         for pd in parcelle_data:
             rp = RaccoltaParcella(

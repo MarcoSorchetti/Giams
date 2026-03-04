@@ -8,7 +8,7 @@ class LottoOlio(Base):
     id = Column(Integer, primary_key=True, index=True)
     codice_lotto = Column(String(30), unique=True, nullable=False, index=True)
     raccolta_id = Column(Integer, ForeignKey("raccolte.id", ondelete="CASCADE"), nullable=False, unique=True)
-    anno_campagna = Column(Integer, nullable=False)
+    anno_campagna = Column(Integer, nullable=False, index=True)
     data_molitura = Column(Date, nullable=False)
     frantoio = Column(String(100), nullable=False)
     kg_olive = Column(Numeric(8, 2), nullable=False)

@@ -510,11 +510,13 @@ a:hover { color: var(--accent-hover); }
   border: 1px solid var(--border-light);
   border-radius: 12px;
   overflow: hidden;
-  transition: transform 0.2s, border-color 0.2s;
+  transition: border-color 0.2s;
+  display: flex;
+  flex-direction: row;
+  background: var(--bg-card);
 }
 
 .ct-card:hover {
-  transform: translateY(-2px);
   border-color: var(--accent);
 }
 
@@ -522,19 +524,30 @@ a:hover { color: var(--accent-hover); }
   opacity: 0.55;
 }
 
+.ct-card-body {
+  flex: 1;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
 .ct-card-img-wrap {
-  height: 140px;
-  background: var(--card-bg);
+  width: 120px;
+  min-height: 120px;
+  background: rgba(255,255,255,0.05);
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .ct-card-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  padding: 8px;
 }
 
 .ct-card-placeholder {
@@ -542,14 +555,10 @@ a:hover { color: var(--accent-hover); }
   text-align: center;
 }
 
-.ct-card-body {
-  padding: 0.75rem;
-}
-
 .ct-card-title {
   font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-light);
+  font-size: 1rem;
+  color: var(--text-primary);
   margin-bottom: 0.3rem;
 }
 
@@ -561,18 +570,24 @@ a:hover { color: var(--accent-hover); }
 }
 
 .ct-card-cap {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--accent-light);
   font-weight: 600;
 }
 
 .ct-card-code {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
 }
 
 .ct-card-actions {
   display: flex;
   gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 575px) {
+  .ct-card { flex-direction: column; }
+  .ct-card-img-wrap { width: 100%; min-height: 140px; }
 }
 
 /* ---- Contenitore Form Foto Preview ---- */
@@ -587,7 +602,7 @@ a:hover { color: var(--accent-hover); }
   justify-content: center;
   margin: 0 auto;
   overflow: hidden;
-  background: var(--card-bg);
+  background: var(--bg-card);
 }
 
 .ct-foto-preview-img {
@@ -1040,4 +1055,29 @@ input.flatpickr-date + .form-control {
 }
 .sort-icon.active {
   color: var(--accent);
+}
+
+/* =============================================
+   Loading Overlay Globale
+   ============================================= */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.loading-overlay.show {
+  opacity: 1;
+}
+.loading-spinner {
+  text-align: center;
+}
+.loading-text {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
 }

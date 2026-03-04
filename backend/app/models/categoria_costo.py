@@ -26,5 +26,6 @@ class CategoriaCostoUpdate(BaseModel):
 class CategoriaCostoOut(CategoriaCostoBase):
     id: int
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

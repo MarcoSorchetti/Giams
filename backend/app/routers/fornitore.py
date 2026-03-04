@@ -3,7 +3,7 @@ import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -14,6 +14,34 @@ from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/fornitori", tags=["fornitori"])
+
+
+def _check_duplicato_fornitore(db: Session, tipo_fornitore: str, partita_iva: str = None,
+                                codice_fiscale: str = None, exclude_id: int = None):
+    """Controlla duplicato P.IVA (azienda) o CF (privato). Ritorna dict conflict o None."""
+    if tipo_fornitore == "azienda" and partita_iva:
+        q = db.query(Fornitore).filter(Fornitore.partita_iva == partita_iva)
+        if exclude_id:
+            q = q.filter(Fornitore.id != exclude_id)
+        dup = q.first()
+        if dup:
+            denom = dup.ragione_sociale or "" if dup.tipo_fornitore == "azienda" else " ".join(
+                p for p in [dup.nome or "", dup.cognome or ""] if p)
+            return {"detail": f"Partita IVA {partita_iva} gia' utilizzata da: {dup.codice} — {denom}",
+                    "conflict_type": "partita_iva", "existing_codice": dup.codice,
+                    "existing_denominazione": denom}
+    elif tipo_fornitore == "privato" and codice_fiscale:
+        q = db.query(Fornitore).filter(Fornitore.codice_fiscale == codice_fiscale)
+        if exclude_id:
+            q = q.filter(Fornitore.id != exclude_id)
+        dup = q.first()
+        if dup:
+            denom = dup.ragione_sociale or "" if dup.tipo_fornitore == "azienda" else " ".join(
+                p for p in [dup.nome or "", dup.cognome or ""] if p)
+            return {"detail": f"Codice Fiscale {codice_fiscale} gia' utilizzato da: {dup.codice} — {denom}",
+                    "conflict_type": "codice_fiscale", "existing_codice": dup.codice,
+                    "existing_denominazione": denom}
+    return None
 
 
 def _next_codice_fornitore(db: Session) -> str:
@@ -145,11 +173,10 @@ def export_fornitori_csv(
 def list_fornitori(
     tipo: Optional[str] = Query(None),
     categoria: Optional[str] = Query(None),
-    q: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, alias="q"),
     tutti: Optional[bool] = Query(False),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Fornitore)
@@ -163,8 +190,8 @@ def list_fornitori(
     if categoria:
         query = query.filter(Fornitore.categoria_merceologica == categoria)
 
-    if q:
-        like = f"%{q}%"
+    if search:
+        like = f"%{search}%"
         query = query.filter(
             or_(
                 Fornitore.codice.ilike(like),
@@ -173,17 +200,7 @@ def list_fornitori(
                 Fornitore.ragione_sociale.ilike(like),
                 Fornitore.email.ilike(like),
                 Fornitore.citta.ilike(like),
-            )
-        )
-    if search:
-        term = f"%{search}%"
-        query = query.filter(
-            or_(
-                Fornitore.codice.ilike(term),
-                Fornitore.ragione_sociale.ilike(term),
-                Fornitore.nome.ilike(term),
-                Fornitore.cognome.ilike(term),
-                Fornitore.email.ilike(term),
+                Fornitore.telefono.ilike(like),
             )
         )
 
@@ -201,7 +218,7 @@ def get_fornitore(fornitore_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=FornitoreOut, status_code=status.HTTP_201_CREATED)
-def create_fornitore(data: FornitoreCreate, db: Session = Depends(get_db)):
+def create_fornitore(data: FornitoreCreate, force: bool = Query(False), db: Session = Depends(get_db)):
     # Auto-genera codice
     if not data.codice or data.codice.strip() == "":
         data.codice = _next_codice_fornitore(db)
@@ -212,6 +229,11 @@ def create_fornitore(data: FornitoreCreate, db: Session = Depends(get_db)):
     if data.tipo_fornitore not in ("privato", "azienda"):
         raise HTTPException(status_code=400, detail="tipo_fornitore deve essere 'privato' o 'azienda'.")
 
+    if not force:
+        conflict = _check_duplicato_fornitore(db, data.tipo_fornitore, data.partita_iva, data.codice_fiscale)
+        if conflict:
+            return JSONResponse(status_code=409, content=conflict)
+
     f = Fornitore(**data.model_dump())
     db.add(f)
     db.commit()
@@ -220,7 +242,7 @@ def create_fornitore(data: FornitoreCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{fornitore_id}", response_model=FornitoreOut)
-def update_fornitore(fornitore_id: int, data: FornitoreUpdate, db: Session = Depends(get_db)):
+def update_fornitore(fornitore_id: int, data: FornitoreUpdate, force: bool = Query(False), db: Session = Depends(get_db)):
     f = db.query(Fornitore).filter(Fornitore.id == fornitore_id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Fornitore non trovato.")
@@ -230,6 +252,14 @@ def update_fornitore(fornitore_id: int, data: FornitoreUpdate, db: Session = Dep
     if "codice" in update_data and update_data["codice"] != f.codice:
         if db.query(Fornitore).filter(Fornitore.codice == update_data["codice"], Fornitore.id != fornitore_id).first():
             raise HTTPException(status_code=400, detail="Codice fornitore gia' esistente.")
+
+    if not force:
+        tipo = update_data.get("tipo_fornitore", f.tipo_fornitore)
+        piva = update_data.get("partita_iva", f.partita_iva)
+        cf = update_data.get("codice_fiscale", f.codice_fiscale)
+        conflict = _check_duplicato_fornitore(db, tipo, piva, cf, exclude_id=fornitore_id)
+        if conflict:
+            return JSONResponse(status_code=409, content=conflict)
 
     for key, value in update_data.items():
         setattr(f, key, value)

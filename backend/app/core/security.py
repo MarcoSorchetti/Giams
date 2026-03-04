@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -9,10 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SECRET_KEY = os.environ.get("SECRET_KEY", "giams-dev-secret-change-in-production")
+_DEFAULT_SECRET = "giams-dev-secret-change-in-production"
+SECRET_KEY = os.environ.get("SECRET_KEY", _DEFAULT_SECRET)
+if SECRET_KEY == _DEFAULT_SECRET:
+    logger.warning("ATTENZIONE: SECRET_KEY non configurata — uso chiave di sviluppo. Impostare SECRET_KEY in produzione!")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 ore
 

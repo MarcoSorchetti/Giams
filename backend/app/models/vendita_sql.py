@@ -10,8 +10,8 @@ class Vendita(Base):
     id = Column(Integer, primary_key=True, index=True)
     codice = Column(String(20), unique=True, nullable=False, index=True)
 
-    cliente_id = Column(Integer, ForeignKey("clienti.id"), nullable=False)
-    data_vendita = Column(Date, nullable=False)
+    cliente_id = Column(Integer, ForeignKey("clienti.id"), nullable=False, index=True)
+    data_vendita = Column(Date, nullable=False, index=True)
     anno_campagna = Column(Integer, nullable=False, index=True)
 
     # Stato: bozza | confermata | spedita | pagata
@@ -53,7 +53,7 @@ class VenditaRiga(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vendita_id = Column(Integer, ForeignKey("vendite.id", ondelete="CASCADE"), nullable=False)
-    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id"), nullable=False)
+    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="CASCADE"), nullable=False)
     quantita = Column(Integer, nullable=False)
     prezzo_unitario = Column(Numeric(10, 2), nullable=False)
     importo_riga = Column(Numeric(12, 2), nullable=False)

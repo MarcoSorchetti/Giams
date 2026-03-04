@@ -3,7 +3,7 @@ import io
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -14,6 +14,34 @@ from app.models.pagination import paginate, paginated_response
 
 
 router = APIRouter(prefix="/clienti", tags=["clienti"])
+
+
+def _check_duplicato_cliente(db: Session, tipo_cliente: str, partita_iva: str = None,
+                              codice_fiscale: str = None, exclude_id: int = None):
+    """Controlla duplicato P.IVA (azienda) o CF (privato). Ritorna dict conflict o None."""
+    if tipo_cliente == "azienda" and partita_iva:
+        q = db.query(Cliente).filter(Cliente.partita_iva == partita_iva)
+        if exclude_id:
+            q = q.filter(Cliente.id != exclude_id)
+        dup = q.first()
+        if dup:
+            denom = dup.ragione_sociale or "" if dup.tipo_cliente == "azienda" else " ".join(
+                p for p in [dup.nome or "", dup.cognome or ""] if p)
+            return {"detail": f"Partita IVA {partita_iva} gia' utilizzata da: {dup.codice} — {denom}",
+                    "conflict_type": "partita_iva", "existing_codice": dup.codice,
+                    "existing_denominazione": denom}
+    elif tipo_cliente == "privato" and codice_fiscale:
+        q = db.query(Cliente).filter(Cliente.codice_fiscale == codice_fiscale)
+        if exclude_id:
+            q = q.filter(Cliente.id != exclude_id)
+        dup = q.first()
+        if dup:
+            denom = dup.ragione_sociale or "" if dup.tipo_cliente == "azienda" else " ".join(
+                p for p in [dup.nome or "", dup.cognome or ""] if p)
+            return {"detail": f"Codice Fiscale {codice_fiscale} gia' utilizzato da: {dup.codice} — {denom}",
+                    "conflict_type": "codice_fiscale", "existing_codice": dup.codice,
+                    "existing_denominazione": denom}
+    return None
 
 
 def _to_out(c: Cliente) -> ClienteOut:
@@ -119,11 +147,10 @@ def export_clienti_csv(
 @router.get("/")
 def list_clienti(
     tipo: Optional[str] = Query(None),
-    q: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, alias="q"),
     tutti: Optional[bool] = Query(False),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(Cliente)
@@ -134,8 +161,8 @@ def list_clienti(
     if tipo:
         query = query.filter(Cliente.tipo_cliente == tipo)
 
-    if q:
-        like = f"%{q}%"
+    if search:
+        like = f"%{search}%"
         query = query.filter(
             or_(
                 Cliente.codice.ilike(like),
@@ -144,18 +171,7 @@ def list_clienti(
                 Cliente.ragione_sociale.ilike(like),
                 Cliente.email.ilike(like),
                 Cliente.citta.ilike(like),
-            )
-        )
-    if search:
-        term = f"%{search}%"
-        query = query.filter(
-            or_(
-                Cliente.codice.ilike(term),
-                Cliente.ragione_sociale.ilike(term),
-                Cliente.nome.ilike(term),
-                Cliente.cognome.ilike(term),
-                Cliente.email.ilike(term),
-                Cliente.telefono.ilike(term),
+                Cliente.telefono.ilike(like),
             )
         )
 
@@ -173,12 +189,17 @@ def get_cliente(cliente_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
-def create_cliente(data: ClienteCreate, db: Session = Depends(get_db)):
+def create_cliente(data: ClienteCreate, force: bool = Query(False), db: Session = Depends(get_db)):
     if db.query(Cliente).filter(Cliente.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice cliente gia' esistente.")
 
     if data.tipo_cliente not in ("privato", "azienda"):
         raise HTTPException(status_code=400, detail="tipo_cliente deve essere 'privato' o 'azienda'.")
+
+    if not force:
+        conflict = _check_duplicato_cliente(db, data.tipo_cliente, data.partita_iva, data.codice_fiscale)
+        if conflict:
+            return JSONResponse(status_code=409, content=conflict)
 
     c = Cliente(**data.model_dump())
     db.add(c)
@@ -188,7 +209,7 @@ def create_cliente(data: ClienteCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{cliente_id}", response_model=ClienteOut)
-def update_cliente(cliente_id: int, data: ClienteUpdate, db: Session = Depends(get_db)):
+def update_cliente(cliente_id: int, data: ClienteUpdate, force: bool = Query(False), db: Session = Depends(get_db)):
     c = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cliente non trovato.")
@@ -198,6 +219,14 @@ def update_cliente(cliente_id: int, data: ClienteUpdate, db: Session = Depends(g
     if "codice" in update_data and update_data["codice"] != c.codice:
         if db.query(Cliente).filter(Cliente.codice == update_data["codice"], Cliente.id != cliente_id).first():
             raise HTTPException(status_code=400, detail="Codice cliente gia' esistente.")
+
+    if not force:
+        tipo = update_data.get("tipo_cliente", c.tipo_cliente)
+        piva = update_data.get("partita_iva", c.partita_iva)
+        cf = update_data.get("codice_fiscale", c.codice_fiscale)
+        conflict = _check_duplicato_cliente(db, tipo, piva, cf, exclude_id=cliente_id)
+        if conflict:
+            return JSONResponse(status_code=409, content=conflict)
 
     for key, value in update_data.items():
         setattr(c, key, value)

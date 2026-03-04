@@ -16,6 +16,7 @@ let lottoInModifica = null;
 let confezionamentiLista = [];
 let confezionamentoInModifica = null;
 let produzioneTabAttiva = "raccolte";
+let _produzioneReqId = 0;
 let contenitoriLista = [];
 let contenitoreInModifica = null;
 let clientiLista = [];
@@ -112,9 +113,34 @@ function logout() {
 }
 
 /**
+ * Escape HTML per prevenire XSS quando si inseriscono stringhe utente in attributi HTML.
+ */
+function escapeHtml(text) {
+  if (!text) return "";
+  return String(text).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/**
  * Wrapper per fetch che aggiunge automaticamente il token JWT.
  * Gestisce 401 (token scaduto) con redirect a login.
  */
+// Loading overlay — contatore chiamate attive + delay 200ms
+let _apiFetchCount = 0;
+let _apiFetchTimer = null;
+
+function _showLoading() {
+  const el = document.getElementById("loading-overlay");
+  if (!el) return;
+  el.style.display = "flex";
+  requestAnimationFrame(() => el.classList.add("show"));
+}
+function _hideLoading() {
+  const el = document.getElementById("loading-overlay");
+  if (!el) return;
+  el.classList.remove("show");
+  setTimeout(() => { el.style.display = "none"; }, 150);
+}
+
 async function apiFetch(url, options = {}) {
   const token = getToken();
   if (token) {
@@ -123,12 +149,27 @@ async function apiFetch(url, options = {}) {
       "Authorization": `Bearer ${token}`,
     };
   }
-  const res = await fetch(url, options);
-  if (res.status === 401) {
-    logout();
-    throw new Error("Sessione scaduta");
+
+  _apiFetchCount++;
+  if (_apiFetchCount === 1) {
+    _apiFetchTimer = setTimeout(_showLoading, 200);
   }
-  return res;
+
+  try {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      logout();
+      throw new Error("Sessione scaduta");
+    }
+    return res;
+  } finally {
+    _apiFetchCount--;
+    if (_apiFetchCount === 0) {
+      clearTimeout(_apiFetchTimer);
+      _apiFetchTimer = null;
+      _hideLoading();
+    }
+  }
 }
 
 async function getAppVersion() {
@@ -666,10 +707,19 @@ function initParcelleListUI() {
   document.getElementById("btn-nuova-parcella")?.addEventListener("click", () => renderParcellaForm());
   document.getElementById("btn-filtra-parcelle")?.addEventListener("click", () => caricaParcelle());
 
-  // Enter per filtrare
-  document.getElementById("filtro-q")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") caricaParcelle();
+  // Debounce ricerca testuale (300ms)
+  let parcelleSearchTimer = null;
+  document.getElementById("filtro-q")?.addEventListener("input", () => {
+    clearTimeout(parcelleSearchTimer);
+    parcelleSearchTimer = setTimeout(() => caricaParcelle(), 300);
   });
+  document.getElementById("filtro-q")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { clearTimeout(parcelleSearchTimer); caricaParcelle(); }
+  });
+
+  // Filtro immediato al cambio select
+  document.getElementById("filtro-varieta")?.addEventListener("change", () => caricaParcelle());
+  document.getElementById("filtro-stato")?.addEventListener("change", () => caricaParcelle());
 }
 
 async function caricaParcelleStats() {
@@ -737,7 +787,7 @@ function renderTabellaParcelle() {
         <button class="btn-action btn-action-edit me-1" onclick="renderParcellaForm(${p.id})" title="Modifica">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
-        <button class="btn-action btn-action-delete" onclick="eliminaParcella(${p.id}, '${p.nome}')" title="Elimina">
+        <button class="btn-action btn-action-delete" onclick="eliminaParcella(${p.id}, '${escapeHtml(p.nome)}')" title="Elimina">
           <i class="fa-solid fa-trash"></i>
         </button>
       </td>
@@ -888,6 +938,20 @@ function mostraConferma(messaggio, onConfirm, labelConferma = "Elimina", classeC
   });
 }
 
+function mostraDuplicato(messaggio, onForza) {
+  const msgEl = document.getElementById("modal-duplicato-msg");
+  msgEl.textContent = messaggio;
+  const modal = new bootstrap.Modal(document.getElementById("modal-duplicato"));
+  const btnForza = document.getElementById("modal-duplicato-forza");
+  const handler = () => {
+    modal.hide();
+    btnForza.removeEventListener("click", handler);
+    onForza();
+  };
+  btnForza.addEventListener("click", handler);
+  modal.show();
+}
+
 // =============================================
 // UTENTI
 // =============================================
@@ -940,10 +1004,10 @@ function renderTabellaUtenti(utenti) {
         </span>
       </td>
       <td>
-        <button class="btn-action btn-action-edit me-1" onclick="modificaUtente(${u.id}, '${u.username}', ${u.is_active}, ${u.is_admin})" title="Modifica">
+        <button class="btn-action btn-action-edit me-1" onclick="modificaUtente(${u.id}, '${escapeHtml(u.username)}', ${u.is_active}, ${u.is_admin})" title="Modifica">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
-        <button class="btn-action btn-action-delete" onclick="eliminaUtente(${u.id}, '${u.username}')" title="Elimina">
+        <button class="btn-action btn-action-delete" onclick="eliminaUtente(${u.id}, '${escapeHtml(u.username)}')" title="Elimina">
           <i class="fa-solid fa-trash"></i>
         </button>
       </td>
@@ -1033,16 +1097,19 @@ async function renderProduzione() {
 
   document.getElementById("tab-raccolte")?.addEventListener("click", () => {
     produzioneTabAttiva = "raccolte";
+    _produzioneReqId++;
     aggiornaTabProduzione();
     renderRaccolteLista();
   });
   document.getElementById("tab-lotti")?.addEventListener("click", () => {
     produzioneTabAttiva = "lotti";
+    _produzioneReqId++;
     aggiornaTabProduzione();
     renderLottiLista();
   });
   document.getElementById("tab-confezionamento")?.addEventListener("click", () => {
     produzioneTabAttiva = "confezionamento";
+    _produzioneReqId++;
     aggiornaTabProduzione();
     renderConfezionamentiLista();
   });
@@ -1068,15 +1135,19 @@ function aggiornaTabProduzione() {
 // =============================================
 
 async function renderRaccolteLista() {
+  const myReq = _produzioneReqId;
   const container = document.getElementById("produzione-content");
   const tpl = document.getElementById("template-raccolte-lista");
   container.innerHTML = "";
   container.appendChild(tpl.content.cloneNode(true));
 
   await popolaFiltroAnniRaccolte();
+  if (_produzioneReqId !== myReq) return;
   await popolaFiltroParcelle();
+  if (_produzioneReqId !== myReq) return;
   initRaccolteListUI();
   await caricaRaccolteStats();
+  if (_produzioneReqId !== myReq) return;
   await caricaRaccolte();
 }
 
@@ -1086,6 +1157,7 @@ async function popolaFiltroAnniRaccolte() {
     const anni = await res.json();
     const sel = document.getElementById("filtro-raccolte-anno");
     if (sel) {
+      sel.innerHTML = '<option value="">Tutti</option>';
       anni.forEach(a => {
         const opt = document.createElement("option");
         opt.value = a;
@@ -1110,6 +1182,7 @@ async function popolaFiltroParcelle() {
     const parcelle = (await res.json()).items;
     const sel = document.getElementById("filtro-raccolte-parcella");
     if (sel) {
+      sel.innerHTML = '<option value="">Tutte</option>';
       parcelle.forEach(p => {
         const opt = document.createElement("option");
         opt.value = p.id;
@@ -1198,7 +1271,7 @@ function renderTabellaRaccolte() {
           <button class="btn-action btn-action-edit me-1" onclick="renderRaccoltaForm(${r.id})" title="Modifica">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button class="btn-action btn-action-delete" onclick="eliminaRaccolta(${r.id}, '${r.codice}')" title="Elimina">
+          <button class="btn-action btn-action-delete" onclick="eliminaRaccolta(${r.id}, '${escapeHtml(r.codice)}')" title="Elimina">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
@@ -1406,14 +1479,17 @@ function eliminaRaccolta(id, codice) {
 // =============================================
 
 async function renderLottiLista() {
+  const myReq = _produzioneReqId;
   const container = document.getElementById("produzione-content");
   const tpl = document.getElementById("template-lotti-lista");
   container.innerHTML = "";
   container.appendChild(tpl.content.cloneNode(true));
 
   await popolaFiltroAnniLotti();
+  if (_produzioneReqId !== myReq) return;
   initLottiListUI();
   await caricaLottiStats();
+  if (_produzioneReqId !== myReq) return;
   await caricaLotti();
 }
 
@@ -1423,6 +1499,7 @@ async function popolaFiltroAnniLotti() {
     const anni = await res.json();
     const sel = document.getElementById("filtro-lotti-anno");
     if (sel) {
+      sel.innerHTML = '<option value="">Tutti</option>';
       anni.forEach(a => {
         const opt = document.createElement("option");
         opt.value = a;
@@ -1512,7 +1589,7 @@ function renderTabellaLotti() {
         <button class="btn-action btn-action-edit me-1" onclick="renderLottoForm(${l.id})" title="Modifica">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
-        <button class="btn-action btn-action-delete" onclick="eliminaLotto(${l.id}, '${l.codice_lotto}')" title="Elimina">
+        <button class="btn-action btn-action-delete" onclick="eliminaLotto(${l.id}, '${escapeHtml(l.codice_lotto)}')" title="Elimina">
           <i class="fa-solid fa-trash"></i>
         </button>
       </td>
@@ -1607,6 +1684,7 @@ async function popolaSelectRaccolte() {
     const raccolte = (await res.json()).items;
     const sel = document.getElementById("l-raccolta");
     if (sel) {
+      sel.innerHTML = '<option value="">Seleziona raccolta...</option>';
       raccolte.filter(r => !r.ha_lotto).forEach(r => {
         const opt = document.createElement("option");
         opt.value = r.id;
@@ -1752,8 +1830,9 @@ let contenitoriCache = [];
 
 async function caricaContenitoriCache() {
   try {
-    const res = await apiFetch(`${API_URL}/contenitori/`);
-    contenitoriCache = await res.json();
+    const res = await apiFetch(`${API_URL}/contenitori/?per_page=100`);
+    const data = await res.json();
+    contenitoriCache = data.items || data;
   } catch (err) {
     console.error("Errore caricamento contenitori:", err);
     contenitoriCache = [];
@@ -1776,22 +1855,27 @@ function getContenitoreById(id) {
 }
 
 async function renderConfezionamentiLista() {
+  const myReq = _produzioneReqId;
   const container = document.getElementById("produzione-content");
   const tpl = document.getElementById("template-confezionamenti-lista");
   container.innerHTML = "";
   container.appendChild(tpl.content.cloneNode(true));
 
   await caricaContenitoriCache();
+  if (_produzioneReqId !== myReq) return;
   await popolaFiltroAnniConf();
+  if (_produzioneReqId !== myReq) return;
   popolaFiltroContenitori();
   initConfListUI();
   await caricaConfStats();
+  if (_produzioneReqId !== myReq) return;
   await caricaConfezionamenti();
 }
 
 function popolaFiltroContenitori() {
   const sel = document.getElementById("filtro-conf-formato");
   if (!sel) return;
+  sel.innerHTML = '<option value="">Tutti</option>';
   contenitoriCache.forEach(ct => {
     const opt = document.createElement("option");
     opt.value = ct.codice;
@@ -1806,6 +1890,7 @@ async function popolaFiltroAnniConf() {
     const anni = await res.json();
     const sel = document.getElementById("filtro-conf-anno");
     if (sel) {
+      sel.innerHTML = '<option value="">Tutti</option>';
       anni.forEach(a => {
         const opt = document.createElement("option");
         opt.value = a;
@@ -1895,7 +1980,7 @@ function renderTabellaConf() {
           <button class="btn-action btn-action-edit me-1" onclick="renderConfezionamentoForm(${c.id})" title="Modifica">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button class="btn-action btn-action-delete" onclick="eliminaConfezionamento(${c.id}, '${c.codice}')" title="Elimina">
+          <button class="btn-action btn-action-delete" onclick="eliminaConfezionamento(${c.id}, '${escapeHtml(c.codice)}')" title="Elimina">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
@@ -1932,6 +2017,7 @@ async function renderConfezionamentoForm(id) {
 function popolaContenitoriSelect() {
   const sel = document.getElementById("cf-formato");
   if (!sel) return;
+  sel.innerHTML = '<option value="">Seleziona...</option>';
   contenitoriCache.forEach(ct => {
     const opt = document.createElement("option");
     opt.value = ct.id;
@@ -2115,6 +2201,10 @@ function eliminaConfezionamento(id, codice) {
 // CONTENITORI — LISTA
 // =============================================
 
+let contenitoriPage = 1;
+let contenitoriSearch = "";
+let contenitoriTutti = false;
+
 async function renderContenitori() {
   const main = document.getElementById("main-content");
   const tpl = document.getElementById("template-contenitori");
@@ -2123,29 +2213,56 @@ async function renderContenitori() {
 
   document.getElementById("btn-nuovo-contenitore")?.addEventListener("click", () => renderContenitoreForm());
 
+  const searchInput = document.getElementById("contenitori-search");
+  let searchTimer = null;
+  searchInput?.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      contenitoriSearch = searchInput.value.trim();
+      contenitoriPage = 1;
+      caricaContenitori();
+    }, 300);
+  });
+
+  const chkTutti = document.getElementById("contenitori-mostra-tutti");
+  chkTutti?.addEventListener("change", () => {
+    contenitoriTutti = chkTutti.checked;
+    contenitoriPage = 1;
+    caricaContenitori();
+  });
+
+  contenitoriPage = 1;
+  contenitoriSearch = "";
+  contenitoriTutti = false;
   await caricaContenitori();
 }
 
 async function caricaContenitori() {
   try {
-    const res = await apiFetch(`${API_URL}/contenitori/?tutti=true`);
-    contenitoriLista = await res.json();
-    renderContenitoriGrid();
+    let url = `${API_URL}/contenitori/?page=${contenitoriPage}&per_page=10`;
+    if (contenitoriTutti) url += "&tutti=true";
+    if (contenitoriSearch) url += `&q=${encodeURIComponent(contenitoriSearch)}`;
+    const res = await apiFetch(url);
+    const data = await res.json();
+    renderContenitoriGrid(data);
   } catch (err) {
     console.error("Errore caricamento contenitori:", err);
   }
 }
 
-function renderContenitoriGrid() {
+function renderContenitoriGrid(data) {
   const grid = document.getElementById("contenitori-grid");
   if (!grid) return;
 
-  if (contenitoriLista.length === 0) {
-    grid.innerHTML = `<div class="col-12 text-center text-secondary py-5">Nessun contenitore configurato</div>`;
+  const items = data.items || [];
+
+  if (items.length === 0) {
+    grid.innerHTML = `<div class="text-center text-secondary py-5">Nessun contenitore trovato</div>`;
+    document.getElementById("contenitori-paginazione").innerHTML = "";
     return;
   }
 
-  grid.innerHTML = contenitoriLista.map(ct => {
+  grid.innerHTML = `<div class="row g-3">${items.map(ct => {
     const fotoHtml = ct.foto
       ? `<img src="/uploads/${ct.foto}" alt="${ct.descrizione}" class="ct-card-img" />`
       : `<div class="ct-card-placeholder"><i class="fa-solid fa-bottle-water fa-2x"></i></div>`;
@@ -2154,9 +2271,8 @@ function renderContenitoriGrid() {
       : `<span class="badge bg-secondary">Inattivo</span>`;
 
     return `
-      <div class="col-md-4 col-lg-3">
+      <div class="col-md-6 col-lg-4">
         <div class="card ct-card ${!ct.attivo ? 'ct-card-inattivo' : ''}">
-          <div class="ct-card-img-wrap">${fotoHtml}</div>
           <div class="ct-card-body">
             <div class="ct-card-title">${ct.descrizione}</div>
             <div class="ct-card-info">
@@ -2164,19 +2280,25 @@ function renderContenitoriGrid() {
               ${badgeAttivo}
             </div>
             <div class="ct-card-code small text-secondary">${ct.codice}</div>
-            <div class="ct-card-actions mt-2">
+            <div class="ct-card-actions">
               <button class="btn-action btn-action-edit me-1" onclick="renderContenitoreForm(${ct.id})" title="Modifica">
                 <i class="fa-solid fa-pen-to-square"></i>
               </button>
-              <button class="btn-action btn-action-delete" onclick="eliminaContenitore(${ct.id}, '${ct.descrizione}')" title="Elimina">
+              <button class="btn-action btn-action-delete" onclick="eliminaContenitore(${ct.id}, '${escapeHtml(ct.descrizione)}')" title="Elimina">
                 <i class="fa-solid fa-trash"></i>
               </button>
             </div>
           </div>
+          <div class="ct-card-img-wrap">${fotoHtml}</div>
         </div>
       </div>
     `;
-  }).join("");
+  }).join("")}</div>`;
+
+  renderPaginazione("contenitori-paginazione", null, data.page, data.pages, data.total, (p) => {
+    contenitoriPage = p;
+    caricaContenitori();
+  });
 }
 
 // =============================================
@@ -2287,10 +2409,16 @@ async function salvaContenitore() {
   }
 }
 
-function eliminaContenitore(id, descrizione) {
-  mostraConferma(`Eliminare il contenitore "${descrizione}"?`, async () => {
+function eliminaContenitore(id, descrizione, force = false) {
+  const doDelete = async () => {
     try {
-      const res = await apiFetch(`${API_URL}/contenitori/${id}`, { method: "DELETE" });
+      const forceParam = force ? "?force=true" : "";
+      const res = await apiFetch(`${API_URL}/contenitori/${id}${forceParam}`, { method: "DELETE" });
+      if (res.status === 409) {
+        const conflict = await res.json();
+        mostraDuplicato(conflict.detail, () => eliminaContenitore(id, descrizione, true));
+        return;
+      }
       if (!res.ok) {
         const err = await res.json();
         alert(err.detail || "Errore durante l'eliminazione.");
@@ -2300,7 +2428,13 @@ function eliminaContenitore(id, descrizione) {
     } catch (err) {
       console.error("Errore eliminazione contenitore:", err);
     }
-  });
+  };
+
+  if (force) {
+    doDelete();
+  } else {
+    mostraConferma(`Eliminare il contenitore "${descrizione}"?`, doDelete);
+  }
 }
 
 // =============================================
@@ -2407,7 +2541,7 @@ function renderTabellaClienti() {
           <button class="btn-action btn-action-edit me-1" onclick="renderClienteForm(${c.id})" title="Modifica">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button class="btn-action btn-action-delete" onclick="eliminaCliente(${c.id}, '${(c.denominazione || c.codice).replace(/'/g, "\\'")}')" title="Elimina">
+          <button class="btn-action btn-action-delete" onclick="eliminaCliente(${c.id}, '${escapeHtml(c.denominazione || c.codice)}')" title="Elimina">
             <i class="fa-solid fa-trash"></i>
           </button>
         </td>
@@ -2517,7 +2651,7 @@ async function popolaFormCliente(id) {
   }
 }
 
-async function salvaCliente() {
+async function salvaCliente(force = false) {
   const tipo = document.getElementById("cli-tipo").value;
 
   const data = {
@@ -2554,9 +2688,10 @@ async function salvaCliente() {
   };
 
   const method = clienteInModifica ? "PUT" : "POST";
+  const forceParam = force ? "?force=true" : "";
   const url = clienteInModifica
-    ? `${API_URL}/clienti/${clienteInModifica}`
-    : `${API_URL}/clienti/`;
+    ? `${API_URL}/clienti/${clienteInModifica}${forceParam}`
+    : `${API_URL}/clienti/${forceParam}`;
 
   try {
     const res = await apiFetch(url, {
@@ -2564,6 +2699,12 @@ async function salvaCliente() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
+
+    if (res.status === 409) {
+      const conflict = await res.json();
+      mostraDuplicato(conflict.detail, () => salvaCliente(true));
+      return;
+    }
 
     if (!res.ok) {
       const err = await res.json();
@@ -2707,7 +2848,7 @@ function renderTabellaFornitori() {
       <td>${statoBadge}</td>
       <td>
         <button class="btn btn-sm btn-outline-light me-1" onclick="editFornitore(${f.id})"><i class="fa-solid fa-pen-to-square"></i></button>
-        <button class="btn btn-sm btn-outline-danger" onclick="eliminaFornitore(${f.id}, '${(f.denominazione || f.codice).replace(/'/g, "\\'")}')"><i class="fa-solid fa-trash"></i></button>
+        <button class="btn btn-sm btn-outline-danger" onclick="eliminaFornitore(${f.id}, '${escapeHtml(f.denominazione || f.codice)}')"><i class="fa-solid fa-trash"></i></button>
       </td>
     </tr>`;
   }).join("");
@@ -2787,8 +2928,8 @@ function popolaFormFornitore(f) {
   document.getElementById("forn-note").value = f.note || "";
 }
 
-async function salvaFornitore(e) {
-  e.preventDefault();
+async function salvaFornitore(e, force = false) {
+  if (e && e.preventDefault) e.preventDefault();
 
   const body = {
     codice: document.getElementById("forn-codice").value.trim() || null,
@@ -2817,7 +2958,8 @@ async function salvaFornitore(e) {
   };
 
   const isEdit = !!fornitoreInModifica;
-  const url = isEdit ? `${API_URL}/fornitori/${fornitoreInModifica.id}` : `${API_URL}/fornitori/`;
+  const forceParam = force ? "?force=true" : "";
+  const url = isEdit ? `${API_URL}/fornitori/${fornitoreInModifica.id}${forceParam}` : `${API_URL}/fornitori/${forceParam}`;
   const method = isEdit ? "PUT" : "POST";
 
   try {
@@ -2826,6 +2968,12 @@ async function salvaFornitore(e) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
+    if (res.status === 409) {
+      const conflict = await res.json();
+      mostraDuplicato(conflict.detail, () => salvaFornitore(null, true));
+      return;
+    }
 
     if (!res.ok) {
       const err = await res.json();
@@ -2970,6 +3118,7 @@ async function popolaFiltroCosti() {
     const anni = await res.json();
     const selAnno = document.getElementById("filtro-costi-anno");
     if (selAnno) {
+      selAnno.innerHTML = '<option value="">Tutti gli anni</option>';
       anni.forEach(a => {
         const opt = document.createElement("option");
         opt.value = a;
@@ -2988,6 +3137,7 @@ async function popolaFiltroCosti() {
     const fornitori = (await res.json()).items;
     const selForn = document.getElementById("filtro-costi-fornitore");
     if (selForn) {
+      selForn.innerHTML = '<option value="">Tutti i fornitori</option>';
       fornitori.forEach(f => {
         const opt = document.createElement("option");
         opt.value = f.id;
@@ -3294,6 +3444,7 @@ async function popolaSelectFornitoriCosto() {
     const fornitori = (await res.json()).items;
     const sel = document.getElementById("costo-fornitore");
     if (!sel) return;
+    sel.innerHTML = '<option value="">\u2014 Nessuno \u2014</option>';
     fornitori.forEach(f => {
       const opt = document.createElement("option");
       opt.value = f.id;
@@ -3742,6 +3893,7 @@ async function renderMagazzino() {
     const anni = await res.json();
     const sel = document.getElementById("filtro-mag-anno");
     if (sel) {
+      sel.innerHTML = '<option value="">Tutti gli anni</option>';
       anni.forEach(a => {
         const opt = document.createElement("option");
         opt.value = a;
@@ -3903,7 +4055,7 @@ function renderTabellaMovimenti() {
           <button class="btn btn-sm btn-outline-light me-1" onclick="editMovimento(${m.id})">
             <i class="fa-solid fa-pen-to-square"></i>
           </button>
-          <button class="btn btn-sm btn-outline-danger" onclick="eliminaMovimento(${m.id}, '${m.codice}')">
+          <button class="btn btn-sm btn-outline-danger" onclick="eliminaMovimento(${m.id}, '${escapeHtml(m.codice)}')">
             <i class="fa-solid fa-trash"></i>
           </button>
         `}
@@ -4011,6 +4163,7 @@ async function popolaSelectConfezionamenti() {
     const lista = (await res.json()).items;
     const sel = document.getElementById("mov-confezionamento");
     if (!sel) return;
+    sel.innerHTML = '<option value="">\u2014 Seleziona confezionamento \u2014</option>';
     lista.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.id;
@@ -4028,6 +4181,7 @@ async function popolaSelectClientiMov() {
     const lista = (await res.json()).items;
     const sel = document.getElementById("mov-cliente");
     if (!sel) return;
+    sel.innerHTML = '<option value="">\u2014 Nessun cliente \u2014</option>';
     lista.forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.id;
@@ -4305,7 +4459,7 @@ function renderTabellaVendite() {
           ? `<button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaDettaglio(${v.id})" title="Dettaglio"><i class="fa-solid fa-eye"></i></button>
              <button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaForm(${v.id})" title="Modifica"><i class="fa-solid fa-pen"></i></button>
              <button class="btn btn-sm btn-success me-1" onclick="confermaVendita(${v.id})" title="Conferma"><i class="fa-solid fa-check"></i></button>
-             <button class="btn btn-sm btn-outline-danger" onclick="eliminaVendita(${v.id}, '${v.codice}')" title="Elimina"><i class="fa-solid fa-trash"></i></button>`
+             <button class="btn btn-sm btn-outline-danger" onclick="eliminaVendita(${v.id}, '${escapeHtml(v.codice)}')" title="Elimina"><i class="fa-solid fa-trash"></i></button>`
           : `<button class="btn btn-sm btn-outline-light me-1" onclick="renderVenditaDettaglio(${v.id})" title="Dettaglio"><i class="fa-solid fa-eye"></i></button>${v.stato === "confermata" ? `<button class="btn btn-sm btn-info me-1" onclick="spedisciVendita(${v.id}, ${v.anno_campagna})" title="Spedisci"><i class="fa-solid fa-truck"></i></button><button class="btn btn-sm btn-accent" onclick="pagaVendita(${v.id})" title="Paga"><i class="fa-solid fa-money-bill"></i></button>` : ""}${v.stato === "spedita" ? `<button class="btn btn-sm btn-accent" onclick="pagaVendita(${v.id})" title="Paga"><i class="fa-solid fa-money-bill"></i></button>` : ""}`
         }
       </td>

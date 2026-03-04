@@ -53,7 +53,7 @@ def list_categorie(
     sort_by: Optional[str] = Query("nome"),
     sort_dir: Optional[str] = Query("asc"),
     page: int = Query(1, ge=1),
-    per_page: int = Query(13, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(CategoriaCosto)

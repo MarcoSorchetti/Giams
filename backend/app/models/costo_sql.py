@@ -9,12 +9,12 @@ class Costo(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     codice = Column(String(20), unique=True, nullable=False, index=True)
-    categoria_id = Column(Integer, ForeignKey("categorie_costo.id"), nullable=False)
+    categoria_id = Column(Integer, ForeignKey("categorie_costo.id"), nullable=False, index=True)
     anno_campagna = Column(Integer, nullable=False, index=True)
     descrizione = Column(String(200), nullable=False)
 
     # Fornitore (opzionale)
-    fornitore_id = Column(Integer, ForeignKey("fornitori.id"), nullable=True)
+    fornitore_id = Column(Integer, ForeignKey("fornitori.id"), nullable=True, index=True)
 
     # Dati fattura
     data_fattura = Column(Date, nullable=False)

@@ -57,17 +57,34 @@ def _cliente_denominazione(c):
     return " ".join(p for p in parti if p)
 
 
-def _build_movimento_out(mov, db):
-    conf = db.query(Confezionamento).filter(Confezionamento.id == mov.confezionamento_id).first()
+def _build_movimento_out(mov, db=None, conf_map=None, cont_map=None, cli_map=None):
+    """Costruisce MovimentoMagOut. Se vengono passate le mappe pre-caricate
+    (conf_map, cont_map, cli_map) le usa evitando query N+1.
+    Fallback a query singole se db e' fornito (per singolo record)."""
+    if conf_map is not None:
+        conf = conf_map.get(mov.confezionamento_id)
+    elif db:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == mov.confezionamento_id).first()
+    else:
+        conf = None
+
     cont_desc = None
     if conf and conf.contenitore_id:
-        cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
+        if cont_map is not None:
+            cont = cont_map.get(conf.contenitore_id)
+        elif db:
+            cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
+        else:
+            cont = None
         if cont:
             cont_desc = cont.descrizione
 
     cli = None
     if mov.cliente_id:
-        cli = db.query(Cliente).filter(Cliente.id == mov.cliente_id).first()
+        if cli_map is not None:
+            cli = cli_map.get(mov.cliente_id)
+        elif db:
+            cli = db.query(Cliente).filter(Cliente.id == mov.cliente_id).first()
 
     return MovimentoMagOut(
         id=mov.id,
@@ -88,6 +105,30 @@ def _build_movimento_out(mov, db):
         created_at=mov.created_at,
         updated_at=mov.updated_at,
     )
+
+
+def _build_relation_maps(movimenti, db):
+    """Carica Confezionamento, Contenitore e Cliente in batch per una lista
+    di movimenti. Restituisce (conf_map, cont_map, cli_map)."""
+    conf_ids = list({m.confezionamento_id for m in movimenti if m.confezionamento_id})
+    conf_map = {}
+    if conf_ids:
+        for c in db.query(Confezionamento).filter(Confezionamento.id.in_(conf_ids)).all():
+            conf_map[c.id] = c
+
+    cont_ids = list({c.contenitore_id for c in conf_map.values() if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for c in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[c.id] = c
+
+    cli_ids = list({m.cliente_id for m in movimenti if m.cliente_id})
+    cli_map = {}
+    if cli_ids:
+        for c in db.query(Cliente).filter(Cliente.id.in_(cli_ids)).all():
+            cli_map[c.id] = c
+
+    return conf_map, cont_map, cli_map
 
 
 # ---------------------------------------------------------------------------
@@ -124,25 +165,34 @@ def giacenze(
 
     rows = q.all()
 
+    # Batch load confezionamenti e contenitori (evita N+1)
+    conf_ids = [conf_id for conf_id, _, _ in rows if conf_id]
+    conf_map = {}
+    if conf_ids:
+        for c in db.query(Confezionamento).filter(Confezionamento.id.in_(conf_ids)).all():
+            conf_map[c.id] = c
+
+    cont_ids = list({c.contenitore_id for c in conf_map.values() if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for c in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[c.id] = c
+
     risultati = []
     for conf_id, carichi, scarichi in rows:
         giacenza = int(carichi) - int(scarichi)
-        conf = db.query(Confezionamento).filter(Confezionamento.id == conf_id).first()
+        conf = conf_map.get(conf_id)
         if not conf:
             continue
 
-        cont_desc = None
-        if conf.contenitore_id:
-            cont = db.query(Contenitore).filter(Contenitore.id == conf.contenitore_id).first()
-            if cont:
-                cont_desc = cont.descrizione
+        cont = cont_map.get(conf.contenitore_id) if conf.contenitore_id else None
 
         risultati.append({
             "confezionamento_id": conf_id,
             "confezionamento_codice": conf.codice,
             "formato": conf.formato,
             "capacita_litri": float(conf.capacita_litri),
-            "contenitore_descrizione": cont_desc,
+            "contenitore_descrizione": cont.descrizione if cont else None,
             "totale_carichi": int(carichi),
             "totale_scarichi": int(scarichi),
             "giacenza_unita": giacenza,
@@ -336,7 +386,7 @@ def list_movimenti(
     confezionamento_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(25, ge=1, le=100),
+    per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = db.query(MovimentoMagazzino)
@@ -360,7 +410,11 @@ def list_movimenti(
 
     query = query.order_by(MovimentoMagazzino.data_movimento.desc())
     movimenti, total, pg, pp, pages_count = paginate(query, page, per_page)
-    return paginated_response([_build_movimento_out(m, db) for m in movimenti], total, pg, pp, pages_count)
+
+    # Batch load relazioni (evita N+1 query)
+    conf_map, cont_map, cli_map = _build_relation_maps(movimenti, db)
+    items = [_build_movimento_out(m, conf_map=conf_map, cont_map=cont_map, cli_map=cli_map) for m in movimenti]
+    return paginated_response(items, total, pg, pp, pages_count)
 
 
 @router.get("/{mov_id}", response_model=MovimentoMagOut)
