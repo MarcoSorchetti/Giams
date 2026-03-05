@@ -25,7 +25,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.8.4</div>
+        <div class="app-version">v1.9.14</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -110,6 +110,10 @@
         </div>
         <div id="topbar-actions" class="topbar-actions"></div>
       </div>
+      <!-- BREADCRUMB -->
+      <nav id="breadcrumb-nav" class="breadcrumb-bar" style="display:none">
+        <ol id="breadcrumb-list" class="breadcrumb-list"></ol>
+      </nav>
       <!-- MAIN CONTENT -->
       <main id="main-content" class="flex-grow-1 p-4 overflow-auto">
       </main>
@@ -1242,7 +1246,7 @@
             <div class="row g-3">
               <div class="col-6">
                 <label class="form-label">Codice *</label>
-                <input type="text" class="form-control form-control-sm" id="cli-codice" required placeholder="CL-001" />
+                <input type="text" class="form-control form-control-sm" id="cli-codice" required placeholder="Auto-generato" />
               </div>
               <div class="col-6">
                 <label class="form-label">Tipo Cliente *</label>
@@ -1493,6 +1497,7 @@
               <th>Codice</th>
               <th>Tipo</th>
               <th>Denominazione</th>
+              <th>P.IVA</th>
               <th>Categoria</th>
               <th>Citta'</th>
               <th>Telefono</th>
@@ -2177,6 +2182,9 @@
         <button class="btn btn-accent" id="btn-nuovo-scarico">
           <i class="fa-solid fa-arrow-up me-1"></i> Scarico
         </button>
+        <button class="btn btn-outline-info btn-sm" id="btn-gestisci-causali" title="Gestisci Causali">
+          <i class="fa-solid fa-gear me-1"></i> Causali
+        </button>
       </div>
     </div>
 
@@ -2400,6 +2408,72 @@
               <i class="fa-solid fa-trash me-1"></i> Elimina
             </button>
           </div>
+        </div>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: CAUSALI MOVIMENTO LISTA -->
+  <template id="template-causali-movimento">
+    <div class="module-header mb-3">
+      <div class="d-flex gap-2">
+        <button class="btn btn-accent" id="btn-nuova-causale">
+          <i class="fa-solid fa-plus me-1"></i> Nuova Causale
+        </button>
+      </div>
+    </div>
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Descrizione</th>
+              <th class="text-center">Tipo Movimento</th>
+              <th class="text-center">Sistema</th>
+              <th class="text-center">Stato</th>
+              <th class="text-center">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="causali-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: CAUSALE MOVIMENTO FORM -->
+  <template id="template-causale-movimento-form">
+    <form id="form-causale-movimento" novalidate>
+      <div class="card">
+        <div class="card-body">
+          <input type="hidden" id="causale-codice" />
+          <div class="row g-3">
+            <div class="col-md-5">
+              <label class="form-label">Descrizione *</label>
+              <input type="text" class="form-control form-control-sm" id="causale-label" maxlength="80" required />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Tipo Movimento *</label>
+              <select class="form-select form-select-sm" id="causale-tipo" required>
+                <option value="carico">Carico</option>
+                <option value="scarico">Scarico</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check form-switch mt-4">
+                <input class="form-check-input" type="checkbox" id="causale-attivo" checked />
+                <label class="form-check-label" for="causale-attivo">Attiva</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+          <button type="submit" class="btn btn-accent">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+          </button>
+          <button type="button" class="btn btn-outline-secondary" id="btn-annulla-causale">
+            Annulla
+          </button>
         </div>
       </div>
     </form>

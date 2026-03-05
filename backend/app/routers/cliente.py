@@ -20,6 +20,25 @@ from app.services.audit import log_audit
 router = APIRouter(prefix="/clienti", tags=["clienti"])
 
 
+def _next_codice_cliente(db: Session) -> str:
+    """Genera il prossimo codice cliente: 0001, 0002, ..."""
+    last = (
+        db.query(Cliente)
+        .order_by(Cliente.codice.desc())
+        .with_for_update()
+        .first()
+    )
+    if last:
+        try:
+            num = int(last.codice) + 1
+        except (ValueError, TypeError):
+            # Fallback: conta tutti i clienti + 1
+            num = db.query(Cliente).count() + 1
+    else:
+        num = 1
+    return f"{num:04d}"
+
+
 def _check_duplicato_cliente(db: Session, tipo_cliente: str, partita_iva: str = None,
                               codice_fiscale: str = None, exclude_id: int = None):
     """Controlla duplicato P.IVA (azienda) o CF (privato). Ritorna dict conflict o None."""
@@ -100,6 +119,11 @@ def clienti_stats(db: Session = Depends(get_db)):
         "privati": privati,
         "aziende": aziende,
     }
+
+
+@router.get("/next-codice")
+def next_codice_cliente(db: Session = Depends(get_db)):
+    return {"codice": _next_codice_cliente(db)}
 
 
 @router.get("/export/csv")
@@ -194,6 +218,10 @@ def get_cliente(cliente_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
 def create_cliente(data: ClienteCreate, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    # Auto-genera codice se non fornito
+    if not data.codice or not data.codice.strip():
+        data.codice = _next_codice_cliente(db)
+
     if db.query(Cliente).filter(Cliente.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice cliente gia' esistente.")
 

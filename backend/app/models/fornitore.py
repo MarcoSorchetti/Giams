@@ -29,9 +29,10 @@ class _FornitoreValidators:
     @classmethod
     def validate_partita_iva(cls, v):
         if v and v.strip():
-            cleaned = v.strip()
-            if not re.match(r"^\d{11}$", cleaned):
-                raise ValueError("Partita IVA deve essere di 11 cifre numeriche")
+            cleaned = v.strip().upper()
+            if not re.match(r"^(\d{11}|[A-Z]{2}\d{11})$", cleaned):
+                raise ValueError("Partita IVA: 11 cifre o codice paese + 11 cifre (es. IT12345678901)")
+            return cleaned
         return v
 
     @field_validator("codice_fiscale")

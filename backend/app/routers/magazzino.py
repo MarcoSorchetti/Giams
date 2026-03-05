@@ -16,6 +16,7 @@ from app.models.movimento_magazzino import (
     MovimentoMagCreate, MovimentoMagUpdate, MovimentoMagOut,
 )
 from app.models.pagination import paginate, paginated_response
+from app.models.causale_movimento_sql import CausaleMovimento
 from app.core.security import get_current_user
 from app.services.audit import log_audit
 
@@ -23,9 +24,14 @@ from app.services.audit import log_audit
 router = APIRouter(prefix="/magazzino", tags=["magazzino"])
 
 TIPI_VALIDI = {"carico", "scarico"}
-CAUSALI_VALIDE = {"produzione", "omaggio", "pubblicita", "scarto", "vendita"}
-# Causali utilizzabili manualmente (vendita riservata al modulo Vendite)
-CAUSALI_MANUALI = {"produzione", "omaggio", "pubblicita", "scarto"}
+
+
+def _get_causali_valide(db: Session, include_vendita: bool = False):
+    """Restituisce i codici causali attive dal DB. Esclude 'vendita' se non richiesto."""
+    query = db.query(CausaleMovimento.codice).filter(CausaleMovimento.attivo == True)  # noqa: E712
+    if not include_vendita:
+        query = query.filter(CausaleMovimento.codice != "vendita")
+    return {row[0] for row in query.all()}
 
 
 # ---------------------------------------------------------------------------
@@ -434,10 +440,11 @@ def create_movimento(data: MovimentoMagCreate, db: Session = Depends(get_db), cu
     if data.tipo_movimento not in TIPI_VALIDI:
         raise HTTPException(status_code=400, detail=f"Tipo movimento non valido. Usa: {', '.join(TIPI_VALIDI)}")
 
-    if data.causale not in CAUSALI_MANUALI:
+    causali_manuali = _get_causali_valide(db, include_vendita=False)
+    if data.causale not in causali_manuali:
         raise HTTPException(
             status_code=400,
-            detail=f"Causale non valida. Usa: {', '.join(CAUSALI_MANUALI)}. "
+            detail=f"Causale non valida. Usa: {', '.join(sorted(causali_manuali))}. "
                    "La causale 'vendita' e' riservata al modulo Vendite."
         )
 
@@ -495,8 +502,10 @@ def update_movimento(mov_id: int, data: MovimentoMagUpdate, db: Session = Depend
     if "tipo_movimento" in update_data and update_data["tipo_movimento"] not in TIPI_VALIDI:
         raise HTTPException(status_code=400, detail="Tipo movimento non valido.")
 
-    if "causale" in update_data and update_data["causale"] not in CAUSALI_MANUALI:
-        raise HTTPException(status_code=400, detail="Causale non valida.")
+    if "causale" in update_data:
+        causali_manuali = _get_causali_valide(db, include_vendita=False)
+        if update_data["causale"] not in causali_manuali:
+            raise HTTPException(status_code=400, detail="Causale non valida.")
 
     if "cliente_id" in update_data and update_data["cliente_id"]:
         cli = db.query(Cliente).filter(Cliente.id == update_data["cliente_id"]).first()

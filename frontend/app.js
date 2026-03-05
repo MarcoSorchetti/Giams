@@ -150,6 +150,57 @@ function escapeHtml(text) {
 }
 
 /**
+ * Wrappa un'azione async con loading state sul bottone submit.
+ * Disabilita il bottone, mostra spinner, ripristina al termine.
+ */
+async function withButtonLoading(form, asyncFn) {
+  const btn = form?.querySelector('button[type="submit"], input[type="submit"]')
+           || form?.querySelector('.btn-accent');
+  if (btn?.disabled) return; // Previeni doppio click
+  const originalHtml = btn ? btn.innerHTML : null;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Salvataggio...`;
+  }
+  try {
+    await asyncFn();
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+}
+
+/**
+ * Breadcrumb navigation.
+ * items: [{label: "Home", onClick: fn}, {label: "Clienti", onClick: fn}, {label: "Modifica"}]
+ * L'ultimo item non e' cliccabile (pagina corrente).
+ */
+function setBreadcrumb(items) {
+  const nav = document.getElementById("breadcrumb-nav");
+  const list = document.getElementById("breadcrumb-list");
+  if (!nav || !list) return;
+  if (!items || items.length === 0) {
+    nav.style.display = "none";
+    list.innerHTML = "";
+    return;
+  }
+  nav.style.display = "";
+  list.innerHTML = items.map((item, i) => {
+    if (i < items.length - 1 && item.onClick) {
+      return `<li><a data-bc-idx="${i}">${escapeHtml(item.label)}</a></li>`;
+    }
+    return `<li>${escapeHtml(item.label)}</li>`;
+  }).join("");
+  // Bind click handlers
+  list.querySelectorAll("a[data-bc-idx]").forEach(a => {
+    const idx = parseInt(a.dataset.bcIdx);
+    a.addEventListener("click", () => items[idx].onClick());
+  });
+}
+
+/**
  * Carica immagini protette (con token JWT) da data-foto-url in blob URL.
  */
 function _loadProtectedImages(container) {
@@ -268,6 +319,8 @@ function setActiveMenu(id) {
   // Svuota azioni topbar (verranno ripopolate dal render)
   const actionsEl = document.getElementById("topbar-actions");
   if (actionsEl) actionsEl.innerHTML = "";
+  // Reset breadcrumb (i form lo re-impostano se necessario)
+  setBreadcrumb([]);
   // Chiudi sidebar su mobile dopo click menu
   if (window.innerWidth < 768) {
     const shell = document.querySelector(".app-shell");
@@ -342,86 +395,175 @@ function initSidebarToggle() {
 // HOME
 // =============================================
 
+// --- Meteo Vetralla (Open-Meteo, gratuito, no API key) ---
+const METEO_URL = "https://api.open-meteo.com/v1/forecast?latitude=42.32&longitude=12.06&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,is_day&daily=precipitation_probability_max&timezone=Europe/Rome&forecast_days=1";
+let _meteoCache = null;
+let _meteoCacheTime = 0;
+
+function getWeatherIcon(code, isDay) {
+  if (code === 0) return isDay ? "fa-sun" : "fa-moon";
+  if (code <= 2) return isDay ? "fa-cloud-sun" : "fa-cloud-moon";
+  if (code === 3) return "fa-cloud";
+  if (code <= 48) return "fa-smog";
+  if (code <= 57) return "fa-cloud-rain";
+  if (code <= 67) return "fa-cloud-showers-heavy";
+  if (code <= 77) return "fa-snowflake";
+  if (code <= 82) return "fa-cloud-showers-heavy";
+  return "fa-bolt";
+}
+
+function getWeatherLabel(code) {
+  if (code === 0) return "Sereno";
+  if (code <= 2) return "Parz. nuvoloso";
+  if (code === 3) return "Coperto";
+  if (code <= 48) return "Nebbia";
+  if (code <= 57) return "Pioggerella";
+  if (code <= 67) return "Pioggia";
+  if (code <= 77) return "Neve";
+  if (code <= 82) return "Rovesci";
+  return "Temporale";
+}
+
+async function fetchMeteoVertralla() {
+  const now = Date.now();
+  if (_meteoCache && now - _meteoCacheTime < 900000) return _meteoCache;
+  try {
+    const res = await fetch(METEO_URL);
+    _meteoCache = await res.json();
+    _meteoCacheTime = now;
+    return _meteoCache;
+  } catch (e) {
+    console.error("Errore meteo", e);
+    return null;
+  }
+}
+
+function renderMeteoWidget(data) {
+  if (!data || !data.current) {
+    return `<div class="meteo-widget home-fade-up" style="animation-delay:0.5s">
+      <p class="meteo-error"><i class="fa-solid fa-cloud-bolt me-1"></i> Dati meteo non disponibili</p>
+    </div>`;
+  }
+  const c = data.current;
+  const icon = getWeatherIcon(c.weather_code, c.is_day);
+  const label = getWeatherLabel(c.weather_code);
+  const temp = Math.round(c.temperature_2m);
+  const feels = Math.round(c.apparent_temperature);
+  const hum = c.relative_humidity_2m;
+  const wind = Math.round(c.wind_speed_10m);
+  const rain = data.daily?.precipitation_probability_max?.[0] ?? "—";
+  const time = c.time ? c.time.split("T")[1]?.substring(0, 5) : "";
+
+  return `<div class="meteo-widget home-fade-up" style="animation-delay:0.5s">
+    <div class="meteo-header">
+      <span class="meteo-header-title">Meteo Vetralla</span>
+      <span class="meteo-header-live">Live</span>
+    </div>
+    <div class="meteo-main">
+      <i class="fa-solid ${icon} meteo-icon"></i>
+      <div>
+        <div class="meteo-temp">${temp}°C</div>
+        <div class="meteo-condition">${label}</div>
+      </div>
+    </div>
+    <div class="meteo-divider"></div>
+    <div class="meteo-details">
+      <div class="meteo-detail">
+        <span class="meteo-detail-label"><i class="fa-solid fa-temperature-half"></i> Percepita</span>
+        <span class="meteo-detail-value">${feels}°C</span>
+      </div>
+      <div class="meteo-detail">
+        <span class="meteo-detail-label"><i class="fa-solid fa-droplet"></i> Umidità</span>
+        <span class="meteo-detail-value">${hum}%</span>
+      </div>
+      <div class="meteo-detail">
+        <span class="meteo-detail-label"><i class="fa-solid fa-wind"></i> Vento</span>
+        <span class="meteo-detail-value">${wind} km/h</span>
+      </div>
+      <div class="meteo-detail">
+        <span class="meteo-detail-label"><i class="fa-solid fa-umbrella"></i> Pioggia</span>
+        <span class="meteo-detail-value">${rain}%</span>
+      </div>
+    </div>
+    <div class="meteo-location"><i class="fa-solid fa-location-dot me-1"></i>Vetralla (VT) &middot; agg. ${time}</div>
+  </div>`;
+}
+
 async function renderHome() {
   const main = document.getElementById("main-content");
   const version = await getAppVersion();
   const userName = getCurrentUserName();
 
-  main.innerHTML = `
-    <div class="d-flex flex-column align-items-center justify-content-center home-welcome"
-         style="min-height: 60vh;">
-      <h1 class="home-greeting mb-1">GIAMS</h1>
-      <p class="home-acronym mb-4">Green Integrated Agricultural Management System</p>
-      <img src="assets/LogoGiaMarHome.png" alt="Gia.Mar Green Farm" class="home-logo-img mb-3" />
-      <p class="home-greeting-user mb-4">Benvenuto, <span>${escapeHtml(userName)}</span> &middot; Ver. ${version}</p>
+  // Fetch meteo in parallelo (non blocca il rendering)
+  const meteoPromise = fetchMeteoVertralla();
 
-      <div class="row g-3 w-100" style="max-width:750px;">
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-parcelle">
-            <div class="quick-card-icon"><i class="fa-solid fa-seedling"></i></div>
-            <div class="quick-card-title">Gestione Parcelle</div>
-            <div class="quick-card-desc">Terreni e oliveti</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-produzione">
-            <div class="quick-card-icon"><i class="fa-solid fa-oil-can"></i></div>
-            <div class="quick-card-title">Produzione</div>
-            <div class="quick-card-desc">Raccolta e lotti olio</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-contenitori">
-            <div class="quick-card-icon"><i class="fa-solid fa-bottle-water"></i></div>
-            <div class="quick-card-title">Contenitori</div>
-            <div class="quick-card-desc">Tipologie e formati</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-clienti">
-            <div class="quick-card-icon"><i class="fa-solid fa-address-book"></i></div>
-            <div class="quick-card-title">Clienti</div>
-            <div class="quick-card-desc">Anagrafica e contatti</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-fornitori">
-            <div class="quick-card-icon"><i class="fa-solid fa-truck-field"></i></div>
-            <div class="quick-card-title">Fornitori</div>
-            <div class="quick-card-desc">Anagrafica e pagamenti</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-costi">
-            <div class="quick-card-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
-            <div class="quick-card-title">Costi</div>
-            <div class="quick-card-desc">Gestione spese e fatture</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-magazzino">
-            <div class="quick-card-icon"><i class="fa-solid fa-warehouse"></i></div>
-            <div class="quick-card-title">Magazzino</div>
-            <div class="quick-card-desc">Giacenze e movimenti</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-vendite">
-            <div class="quick-card-icon"><i class="fa-solid fa-cart-shopping"></i></div>
-            <div class="quick-card-title">Vendite</div>
-            <div class="quick-card-desc">Fatture, DDT, pagamenti</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-4">
-          <div class="quick-card" id="quick-utenti">
-            <div class="quick-card-icon"><i class="fa-solid fa-user-gear"></i></div>
-            <div class="quick-card-title">Gestione Utenti</div>
-            <div class="quick-card-desc">Accessi piattaforma</div>
-          </div>
-        </div>
+  const cards = [
+    { id: "quick-parcelle", icon: "fa-seedling", title: "Gestione Parcelle", desc: "Terreni e oliveti" },
+    { id: "quick-produzione", icon: "fa-oil-can", title: "Produzione", desc: "Raccolta e lotti olio" },
+    { id: "quick-contenitori", icon: "fa-bottle-water", title: "Contenitori", desc: "Tipologie e formati" },
+    { id: "quick-clienti", icon: "fa-address-book", title: "Clienti", desc: "Anagrafica e contatti" },
+    { id: "quick-fornitori", icon: "fa-truck-field", title: "Fornitori", desc: "Anagrafica e pagamenti" },
+    { id: "quick-costi", icon: "fa-file-invoice-dollar", title: "Costi", desc: "Gestione spese e fatture" },
+    { id: "quick-magazzino", icon: "fa-warehouse", title: "Magazzino", desc: "Giacenze e movimenti" },
+    { id: "quick-vendite", icon: "fa-cart-shopping", title: "Vendite", desc: "Fatture, DDT, pagamenti" },
+    { id: "quick-utenti", icon: "fa-user-gear", title: "Gestione Utenti", desc: "Accessi piattaforma" },
+  ];
+
+  const cardsHtml = cards.map((c, i) => `
+    <div class="col-6 col-md-4">
+      <div class="quick-card home-card-enter" id="${c.id}" style="animation-delay: ${(0.6 + i * 0.06).toFixed(2)}s">
+        <div class="quick-card-icon"><i class="fa-solid ${c.icon}"></i></div>
+        <div class="quick-card-title">${c.title}</div>
+        <div class="quick-card-desc">${c.desc}</div>
+      </div>
+    </div>
+  `).join("");
+
+  main.innerHTML = `
+    <div class="home-page">
+
+      <!-- Meteo in alto a destra -->
+      <div id="meteo-container" class="home-meteo-corner"></div>
+
+      <!-- Hero centrato -->
+      <div class="home-hero-center home-fade-up" style="animation-delay: 0s">
+        <h1 class="home-hero-title" aria-label="GIAMS">
+          <span class="hero-letter">G</span><span class="hero-dot">.</span><span class="hero-letter">I</span><span class="hero-dot">.</span><span class="hero-letter">A</span><span class="hero-dot">.</span><span class="hero-letter">M</span><span class="hero-dot">.</span><span class="hero-letter">S</span><span class="hero-dot">.</span>
+        </h1>
+        <p class="home-hero-subtitle">Green Integrated Agricultural Management System</p>
+        <p class="home-hero-welcome home-fade-up" style="animation-delay: 0.5s">Benvenuto, <span>${escapeHtml(userName)}</span></p>
+      </div>
+
+      <!-- Quick Cards -->
+      <div class="row g-3 home-cards-grid">
+        ${cardsHtml}
+      </div>
+
+      <!-- Footer -->
+      <div class="home-footer home-fade-up d-flex flex-column align-items-center" style="animation-delay: 1.6s">
+        <img src="assets/LogoGiaMarHome.png" alt="Gia.Mar Green Farm" />
+        <div class="home-footer-text mt-1">Gia.Mar Green Farm — Azienda Agricola</div>
+        <span class="home-footer-version">v${version}</span>
       </div>
     </div>
   `;
+
+  // Popola meteo appena pronto e adatta spazio cards
+  meteoPromise.then(data => {
+    const container = document.getElementById("meteo-container");
+    if (container) {
+      container.innerHTML = renderMeteoWidget(data);
+      // Assicura che le cards partano sotto il meteo
+      const meteoBottom = container.offsetTop + container.offsetHeight;
+      const cardsGrid = document.querySelector(".home-cards-grid");
+      if (cardsGrid) {
+        const cardsTop = cardsGrid.offsetTop;
+        if (cardsTop < meteoBottom + 16) {
+          cardsGrid.style.marginTop = (meteoBottom - cardsTop + 16) + "px";
+        }
+      }
+    }
+  });
 
   document.getElementById("quick-parcelle")?.addEventListener("click", () => {
     setActiveMenu("menu-parcelle");
@@ -1083,6 +1225,12 @@ function renderParcellaForm(id) {
 
   parcellaInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Parcelle", onClick: () => { setActiveMenu("menu-parcelle"); renderParcelle(); } },
+    { label: id ? "Modifica Parcella" : "Nuova Parcella" }
+  ]);
+
   if (id) {
     document.getElementById("form-parcella-titolo").textContent = "Modifica Parcella";
     popolaFormParcella(id);
@@ -1104,7 +1252,7 @@ function initParcellaFormUI() {
 
   document.getElementById("parcella-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaParcella();
+    await withButtonLoading(e.target, () => salvaParcella());
   });
 }
 
@@ -1245,7 +1393,7 @@ async function renderUtenti() {
 function initUtentiUI() {
   document.getElementById("utente-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaUtente();
+    await withButtonLoading(e.target, () => salvaUtente());
   });
 
   document.getElementById("btn-reset-utente")?.addEventListener("click", resetFormUtente);
@@ -1570,6 +1718,12 @@ async function renderRaccoltaForm(id) {
 
   raccoltaInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Produzione", onClick: () => { setActiveMenu("menu-produzione"); renderProduzione(); } },
+    { label: id ? "Modifica Raccolta" : "Nuova Raccolta" }
+  ]);
+
   await renderParcelleSelezione();
 
   initRaccoltaFormUI();
@@ -1646,7 +1800,7 @@ function initRaccoltaFormUI() {
   });
   document.getElementById("raccolta-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaRaccolta();
+    await withButtonLoading(e.target, () => salvaRaccolta());
   });
 }
 
@@ -1889,6 +2043,12 @@ async function renderLottoForm(id) {
 
   lottoInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Produzione", onClick: () => { setActiveMenu("menu-produzione"); renderProduzione(); } },
+    { label: id ? "Modifica Lotto" : "Nuovo Lotto" }
+  ]);
+
   await popolaSelectRaccolte();
 
   initLottoFormUI();
@@ -1918,6 +2078,12 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
   main.appendChild(tpl.content.cloneNode(true));
 
   lottoInModifica = null;
+
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Produzione", onClick: () => { setActiveMenu("menu-produzione"); renderProduzione(); } },
+    { label: "Nuovo Lotto da Raccolta" }
+  ]);
 
   await popolaSelectRaccolte();
 
@@ -1990,7 +2156,7 @@ function initLottoFormUI() {
   });
   document.getElementById("lotto-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaLotto();
+    await withButtonLoading(e.target, () => salvaLotto());
   });
 }
 
@@ -2289,6 +2455,12 @@ async function renderConfezionamentoForm(id) {
 
   confezionamentoInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Produzione", onClick: () => { setActiveMenu("menu-produzione"); renderProduzione(); } },
+    { label: id ? "Modifica Confezionamento" : "Nuovo Confezionamento" }
+  ]);
+
   await caricaContenitoriCache();
   popolaContenitoriSelect();
   await renderLottiSelezione();
@@ -2393,7 +2565,7 @@ function initConfFormUI() {
   });
   document.getElementById("conf-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaConfezionamento();
+    await withButtonLoading(e.target, () => salvaConfezionamento());
   });
 }
 
@@ -2624,6 +2796,12 @@ async function renderContenitoreForm(id) {
 
   contenitoreInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Contenitori", onClick: () => { setActiveMenu("menu-contenitori"); renderContenitori(); } },
+    { label: id ? "Modifica Contenitore" : "Nuovo Contenitore" }
+  ]);
+
   if (id) {
     document.getElementById("form-contenitore-titolo").textContent = "Modifica Contenitore";
     await popolaFormContenitore(id);
@@ -2651,7 +2829,7 @@ async function renderContenitoreForm(id) {
   });
   document.getElementById("contenitore-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaContenitore();
+    await withButtonLoading(e.target, () => salvaContenitore());
   });
 }
 
@@ -2883,11 +3061,31 @@ async function renderClienteForm(id) {
 
   clienteInModifica = id || null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Clienti", onClick: () => { setActiveMenu("menu-clienti"); renderClienti(); } },
+    { label: id ? "Modifica Cliente" : "Nuovo Cliente" }
+  ]);
+
   initClienteFormUI();
 
+  const codiceInput = document.getElementById("cli-codice");
   if (id) {
     document.getElementById("form-cliente-titolo").textContent = "Modifica Cliente";
     await popolaFormCliente(id);
+    if (codiceInput) codiceInput.readOnly = true;
+  } else {
+    // Nuovo cliente: pre-popola codice auto-generato e readonly
+    try {
+      const res = await apiFetch(`${API_URL}/clienti/next-codice`);
+      const data = await res.json();
+      if (codiceInput) {
+        codiceInput.value = data.codice;
+        codiceInput.readOnly = true;
+      }
+    } catch (err) {
+      console.error("Errore caricamento next-codice cliente:", err);
+    }
   }
 }
 
@@ -2914,7 +3112,7 @@ function initClienteFormUI() {
   });
   document.getElementById("cliente-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
-    await salvaCliente();
+    await withButtonLoading(e.target, () => salvaCliente());
   });
 }
 
@@ -3148,7 +3346,7 @@ function renderTabellaFornitori() {
   if (!tbody) return;
 
   if (fornitoriLista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Nessun fornitore trovato</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Nessun fornitore trovato</td></tr>`;
     return;
   }
 
@@ -3165,6 +3363,7 @@ function renderTabellaFornitori() {
       <td>${f.codice}</td>
       <td>${tipoBadge}</td>
       <td>${f.denominazione || "-"}</td>
+      <td>${escapeHtml(f.partita_iva) || "-"}</td>
       <td>${catLabel}</td>
       <td>${f.citta || "-"}</td>
       <td>${f.telefono || "-"}</td>
@@ -3193,12 +3392,21 @@ function renderFornitoreForm() {
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Fornitori", onClick: () => { setActiveMenu("menu-fornitori"); renderFornitori(); } },
+    { label: fornitoreInModifica ? "Modifica Fornitore" : "Nuovo Fornitore" }
+  ]);
+
   const tipoSelect = document.getElementById("forn-tipo");
   tipoSelect.addEventListener("change", toggleSezioniForn);
 
   document.getElementById("btn-torna-fornitori").addEventListener("click", renderFornitori);
   document.getElementById("btn-annulla-fornitore").addEventListener("click", renderFornitori);
-  document.getElementById("fornitore-form").addEventListener("submit", salvaFornitore);
+  document.getElementById("fornitore-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaFornitore(e));
+  });
 
   if (fornitoreInModifica) {
     document.getElementById("form-fornitore-titolo").textContent = "Modifica Fornitore";
@@ -3689,6 +3897,12 @@ async function renderCostoForm() {
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Costi", onClick: () => { setActiveMenu("menu-costi"); renderCosti(); } },
+    { label: costoInModifica ? "Modifica Costo" : "Nuovo Costo" }
+  ]);
+
   document.getElementById("btn-torna-costi")?.addEventListener("click", () => {
     costoInModifica = null;
     renderCosti();
@@ -3710,7 +3924,10 @@ async function renderCostoForm() {
   document.getElementById("costo-anni-ammortamento")?.addEventListener("change", calcolaQuotaAmmortamento);
 
   // Form submit
-  document.getElementById("form-costo")?.addEventListener("submit", salvaCosto);
+  document.getElementById("form-costo")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaCosto(e));
+  });
 
   // Carica categorie e fornitori per i dropdown
   await caricaCategorieCosto();
@@ -4009,7 +4226,10 @@ async function renderCategorieCosto() {
 
   document.getElementById("btn-torna-costi-da-cat")?.addEventListener("click", () => renderCosti());
   document.getElementById("btn-annulla-cat")?.addEventListener("click", () => resetFormCategoria());
-  document.getElementById("form-categoria")?.addEventListener("submit", salvaCategoria);
+  document.getElementById("form-categoria")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaCategoria(e));
+  });
 
   document.getElementById("search-categorie")?.addEventListener("input", debounceSearch(() => {
     catPage = 1;
@@ -4215,13 +4435,29 @@ const TIPO_MOV_BADGE = {
   carico: "bg-success",
   scarico: "bg-danger",
 };
-const CAUSALE_MOV_LABELS = {
-  produzione: "Produzione",
-  omaggio: "Omaggio / Degustazione",
-  pubblicita: "Pubblicita'",
-  scarto: "Scarto / Rottura",
-  vendita: "Vendita",
-};
+// Cache causali da DB (popolata al primo utilizzo)
+let _causaliCache = null;
+let _causaliCacheTime = 0;
+
+async function getCausaliMovimento(forceRefresh = false) {
+  const now = Date.now();
+  if (_causaliCache && !forceRefresh && now - _causaliCacheTime < 60000) return _causaliCache;
+  try {
+    const res = await apiFetch(`${API_URL}/causali-movimento/?tutti=true`);
+    _causaliCache = await res.json();
+    _causaliCacheTime = now;
+  } catch (e) {
+    console.error("Errore caricamento causali", e);
+    if (!_causaliCache) _causaliCache = [];
+  }
+  return _causaliCache;
+}
+
+function getCausaleLabel(codice) {
+  if (!_causaliCache) return codice;
+  const found = _causaliCache.find(c => c.codice === codice);
+  return found ? found.label : codice;
+}
 
 
 // =============================================
@@ -4259,6 +4495,7 @@ async function renderMagazzino() {
   document.getElementById("btn-nuovo-carico")?.addEventListener("click", () => renderMovimentoForm(null, "carico"));
   document.getElementById("btn-nuovo-scarico")?.addEventListener("click", () => renderMovimentoForm(null, "scarico"));
   document.getElementById("btn-sincronizza-mag")?.addEventListener("click", sincronizzaMagazzino);
+  document.getElementById("btn-gestisci-causali")?.addEventListener("click", renderCausaliMovimento);
   document.getElementById("btn-export-movimenti-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
     const anno = document.getElementById("filtro-mag-anno")?.value;
@@ -4285,6 +4522,9 @@ async function renderMagazzino() {
       });
     }
   } catch (e) { /* nessun anno ancora */ }
+
+  // Preload causali per le label
+  await getCausaliMovimento();
 
   caricaMagStats();
   aggiornaTabMagazzino();
@@ -4421,7 +4661,7 @@ function renderTabellaMovimenti() {
   tbody.innerHTML = movimentiLista.map(m => {
     const badgeCls = TIPO_MOV_BADGE[m.tipo_movimento] || "bg-secondary";
     const tipoLabel = TIPO_MOV_LABELS[m.tipo_movimento] || m.tipo_movimento;
-    const causaleLabel = CAUSALE_MOV_LABELS[m.causale] || m.causale;
+    const causaleLabel = getCausaleLabel(m.causale);
     const isVendita = m.causale === "vendita";
     const clienteNote = m.cliente_denominazione || m.note || "—";
 
@@ -4458,6 +4698,12 @@ async function renderMovimentoForm(id, tipoDefault) {
   main.innerHTML = "";
   main.appendChild(tpl.content.cloneNode(true));
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Magazzino", onClick: () => { setActiveMenu("menu-magazzino"); renderMagazzino(); } },
+    { label: id ? "Modifica Movimento" : "Nuovo Movimento" }
+  ]);
+
   // Bottone indietro
   document.getElementById("btn-torna-magazzino")?.addEventListener("click", renderMagazzino);
 
@@ -4478,11 +4724,11 @@ async function renderMovimentoForm(id, tipoDefault) {
   const tipoEl = document.getElementById("mov-tipo");
   if (tipoEl && tipoDefault && !id) {
     tipoEl.value = tipoDefault;
-    aggiornaCausaliPerTipo(tipoDefault);
+    await aggiornaCausaliPerTipo(tipoDefault);
   }
 
   // Aggiorna causali quando cambia tipo
-  tipoEl?.addEventListener("change", () => aggiornaCausaliPerTipo(tipoEl.value));
+  tipoEl?.addEventListener("change", async () => await aggiornaCausaliPerTipo(tipoEl.value));
 
   // Mostra giacenza quando cambia confezionamento
   document.getElementById("mov-confezionamento")?.addEventListener("change", aggiornaGiacenzaInfo);
@@ -4509,24 +4755,22 @@ async function renderMovimentoForm(id, tipoDefault) {
   }
 
   // Submit
-  document.getElementById("form-movimento")?.addEventListener("submit", salvaMovimento);
+  document.getElementById("form-movimento")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaMovimento(e));
+  });
 }
 
-function aggiornaCausaliPerTipo(tipo) {
+async function aggiornaCausaliPerTipo(tipo) {
   const causaleEl = document.getElementById("mov-causale");
   if (!causaleEl) return;
 
-  causaleEl.innerHTML = "";
+  const causali = await getCausaliMovimento();
+  const filtrate = causali.filter(c => c.attivo && c.tipo_movimento === tipo && c.codice !== "vendita");
 
-  if (tipo === "carico") {
-    causaleEl.innerHTML = '<option value="produzione">Produzione</option>';
-  } else {
-    causaleEl.innerHTML = `
-      <option value="omaggio">Omaggio / Degustazione</option>
-      <option value="pubblicita">Pubblicita</option>
-      <option value="scarto">Scarto / Rottura</option>
-    `;
-  }
+  causaleEl.innerHTML = filtrate.map(c =>
+    `<option value="${escapeHtml(c.codice)}">${escapeHtml(c.label)}</option>`
+  ).join("");
 }
 
 async function aggiornaCodiceMovimento(anno) {
@@ -4609,7 +4853,7 @@ async function popolaFormMovimento(id) {
     document.getElementById("mov-codice").value = m.codice || "";
     document.getElementById("mov-anno").value = m.anno_campagna || "";
     document.getElementById("mov-tipo").value = m.tipo_movimento || "carico";
-    aggiornaCausaliPerTipo(m.tipo_movimento);
+    await aggiornaCausaliPerTipo(m.tipo_movimento);
     document.getElementById("mov-causale").value = m.causale || "";
     document.getElementById("mov-quantita").value = m.quantita || "";
     document.getElementById("mov-confezionamento").value = m.confezionamento_id || "";
@@ -4711,6 +4955,176 @@ function eliminaMovimento(id, codice) {
       renderMagazzino();
     } catch (e) {
       console.error("Errore eliminazione movimento", e);
+    }
+  });
+}
+
+
+// =============================================
+// CAUSALI MOVIMENTO — Gestione
+// =============================================
+
+async function renderCausaliMovimento() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-causali-movimento");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setBreadcrumb([
+    { label: "Magazzino", onClick: () => { setActiveMenu("menu-magazzino"); renderMagazzino(); } },
+    { label: "Gestione Causali" }
+  ]);
+
+  document.getElementById("btn-nuova-causale")?.addEventListener("click", () => renderCausaleMovimentoForm(null));
+
+  await caricaCausaliMovimento();
+}
+
+async function caricaCausaliMovimento() {
+  try {
+    const res = await apiFetch(`${API_URL}/causali-movimento/?tutti=true`);
+    const causali = await res.json();
+    const tbody = document.getElementById("causali-tbody");
+    if (!tbody) return;
+
+    if (causali.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">Nessuna causale configurata</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = causali.map(c => {
+      const tipoLabel = c.tipo_movimento === "carico" ? "Carico" : "Scarico";
+      const tipoBadge = c.tipo_movimento === "carico" ? "bg-success" : "bg-danger";
+      const sistemaBadge = c.sistema ? '<span class="badge bg-warning text-dark">Sistema</span>' : '';
+      const statoBadge = c.attivo ? '<span class="badge bg-success">Attiva</span>' : '<span class="badge bg-secondary">Inattiva</span>';
+
+      return `<tr>
+        <td><code>${escapeHtml(c.codice)}</code></td>
+        <td>${escapeHtml(c.label)}</td>
+        <td class="text-center"><span class="badge ${tipoBadge}">${tipoLabel}</span></td>
+        <td class="text-center">${sistemaBadge}</td>
+        <td class="text-center">${statoBadge}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-light me-1" onclick="renderCausaleMovimentoForm(${c.id})" title="Modifica">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          ${!c.sistema ? `<button class="btn btn-sm btn-outline-danger" onclick="eliminaCausaleMovimento(${c.id}, '${escapeHtml(c.label)}')" title="Elimina">
+            <i class="fa-solid fa-trash"></i>
+          </button>` : ''}
+        </td>
+      </tr>`;
+    }).join("");
+  } catch (e) {
+    console.error("Errore caricamento causali", e);
+  }
+}
+
+async function renderCausaleMovimentoForm(id) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-causale-movimento-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setBreadcrumb([
+    { label: "Magazzino", onClick: () => { setActiveMenu("menu-magazzino"); renderMagazzino(); } },
+    { label: "Causali", onClick: () => renderCausaliMovimento() },
+    { label: id ? "Modifica Causale" : "Nuova Causale" }
+  ]);
+
+  document.getElementById("btn-annulla-causale")?.addEventListener("click", renderCausaliMovimento);
+
+  if (id) {
+    try {
+      const causali = await getCausaliMovimento(true);
+      const c = causali.find(x => x.id === id);
+      if (c) {
+        document.getElementById("causale-label").value = c.label;
+        document.getElementById("causale-tipo").value = c.tipo_movimento;
+        document.getElementById("causale-attivo").checked = c.attivo;
+
+        // Se causale di sistema, blocca tipo
+        if (c.sistema) {
+          document.getElementById("causale-tipo").disabled = true;
+        }
+      }
+    } catch (e) {
+      console.error("Errore caricamento causale", e);
+    }
+  }
+
+  document.getElementById("form-causale-movimento")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaCausaleMovimento(id));
+  });
+}
+
+async function salvaCausaleMovimento(id) {
+  const label = document.getElementById("causale-label")?.value?.trim();
+  const tipoEl = document.getElementById("causale-tipo");
+  const tipo = tipoEl?.disabled ? undefined : tipoEl?.value;
+  const attivo = document.getElementById("causale-attivo")?.checked;
+
+  if (!label) {
+    showToast("Compila la descrizione.", "error");
+    return;
+  }
+
+  // Auto-genera codice dal label (slug: lowercase, spazi → underscore, solo alfanumerici)
+  const codiceAuto = label.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, "_").substring(0, 30);
+
+  const body = { label, attivo };
+  if (!id) {
+    body.codice = codiceAuto;
+    body.tipo_movimento = tipoEl?.value;
+  } else {
+    if (tipo !== undefined) body.tipo_movimento = tipo;
+  }
+
+  try {
+    const url = id ? `${API_URL}/causali-movimento/${id}` : `${API_URL}/causali-movimento/`;
+    const method = id ? "PUT" : "POST";
+    const res = await apiFetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(err.detail || "Errore salvataggio.", "error");
+      return;
+    }
+
+    _causaliCache = null; // Invalida cache
+    showToast(id ? "Causale aggiornata." : "Causale creata.", "success");
+    renderCausaliMovimento();
+  } catch (e) {
+    console.error("Errore salvataggio causale", e);
+    showToast("Errore di rete.", "error");
+  }
+}
+
+function eliminaCausaleMovimento(id, label) {
+  mostraConferma(`Eliminare la causale "${label}"?`, async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/causali-movimento/${id}`, { method: "DELETE" });
+      if (res.status === 409) {
+        const err = await res.json();
+        showToast(err.detail || "Causale in uso, non eliminabile.", "error");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore eliminazione.", "error");
+        return;
+      }
+      _causaliCache = null;
+      showToast("Causale eliminata.", "success");
+      caricaCausaliMovimento();
+    } catch (e) {
+      console.error("Errore eliminazione causale", e);
     }
   });
 }
@@ -4868,6 +5282,12 @@ async function renderVenditaForm(venditaId = null) {
 
   venditaInModifica = null;
 
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Vendite", onClick: () => { setActiveMenu("menu-vendite"); renderVendite(); } },
+    { label: venditaId ? "Modifica Vendita" : "Nuova Vendita" }
+  ]);
+
   // Carica confezionamenti per select righe
   try {
     const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
@@ -4936,7 +5356,10 @@ async function renderVenditaForm(venditaId = null) {
   document.getElementById("btn-torna-vendite").addEventListener("click", renderVendite);
 
   // Submit
-  document.getElementById("vendita-form").addEventListener("submit", salvaVendita);
+  document.getElementById("vendita-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaVendita(e));
+  });
 
   // Se modifica, carica dati
   if (venditaId) {
@@ -5166,6 +5589,12 @@ async function renderVenditaDettaglio(venditaId) {
   main.appendChild(tpl.content.cloneNode(true));
   setTopbarInfo("Dettaglio Vendita", "");
   promoteActionsToTopbar();
+
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Vendite", onClick: () => { setActiveMenu("menu-vendite"); renderVendite(); } },
+    { label: "Dettaglio Vendita" }
+  ]);
 
   document.getElementById("btn-torna-vendite-det")?.addEventListener("click", renderVendite);
 

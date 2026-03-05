@@ -569,17 +569,20 @@ def upload_documento(costo_id: int, file: UploadFile = File(...), db: Session = 
     if not c:
         raise HTTPException(status_code=404, detail="Costo non trovato.")
 
-    allowed = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
-    if file.content_type not in allowed:
+    allowed_mime = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+    if file.content_type not in allowed_mime:
         raise HTTPException(status_code=400, detail="Tipo file non supportato. Usa JPG, PNG o PDF.")
+
+    allowed_ext = {"pdf", "jpg", "jpeg", "png", "webp"}
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail=f"Estensione .{ext} non consentita. Usa: {', '.join(sorted(allowed_ext))}")
 
     # Rimuovi vecchio documento se presente
     if c.documento:
         old_path = os.path.join(UPLOADS_DIR, c.documento)
         if os.path.exists(old_path):
             os.remove(old_path)
-
-    ext = file.filename.rsplit(".", 1)[-1] if "." in file.filename else "pdf"
     codice_safe = (c.codice or "").replace("/", "_")
     filename = f"{codice_safe}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(COSTI_DIR, filename)
