@@ -295,6 +295,7 @@ const _menuInfo = {
   "menu-costi":       { title: "Gestione Costi", subtitle: "Fatture, spese di campagna e costi strutturali" },
   "menu-magazzino":   { title: "Magazzino", subtitle: "Giacenze, carichi e scarichi prodotti confezionati" },
   "menu-vendite":     { title: "Vendite", subtitle: "Gestione fatture, DDT, pagamenti" },
+  "menu-listino":     { title: "Listino Prezzi", subtitle: "Prezzi per campagna · Esportazione PDF per i clienti" },
   "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma" },
   "menu-audit":       { title: "Log Attivita'", subtitle: "Registro operazioni utenti sulla piattaforma" },
 };
@@ -6380,6 +6381,189 @@ const _AZIONE_BADGE = {
   logout:     "badge bg-secondary",
 };
 
+// ===========================================================================
+// LISTINO PREZZI
+// ===========================================================================
+
+let _listinoAnno = null;
+
+async function renderListinoPrezzo() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-listino");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+  promoteActionsToTopbar();
+
+  // Carica anni disponibili
+  try {
+    const res = await apiFetch(`${API_URL}/confezionamenti/anni`);
+    const anni = await res.json();
+    const sel = document.getElementById("listino-anno");
+    sel.innerHTML = anni.map(a => `<option value="${a}">${a}/${a + 1}</option>`).join("");
+    if (anni.length > 0) {
+      _listinoAnno = _listinoAnno && anni.includes(_listinoAnno) ? _listinoAnno : anni[0];
+      sel.value = _listinoAnno;
+    }
+    sel.addEventListener("change", () => {
+      _listinoAnno = parseInt(sel.value);
+      caricaListino();
+    });
+  } catch (e) {
+    console.error("Errore caricamento anni listino:", e);
+  }
+
+  // Bottone esporta PDF
+  document.getElementById("btn-listino-pdf")?.addEventListener("click", () => esportaListinoPdf());
+
+  await caricaListino();
+}
+
+async function caricaListino() {
+  if (!_listinoAnno) return;
+  try {
+    const res = await apiFetch(`${API_URL}/confezionamenti/listino?anno=${_listinoAnno}`);
+    const items = await res.json();
+    renderListinoTabella(items);
+  } catch (e) {
+    console.error("Errore caricamento listino:", e);
+  }
+}
+
+function renderListinoTabella(items) {
+  const tbody = document.getElementById("listino-tbody");
+  if (!tbody) return;
+
+  // Stats
+  const prezzi = items.filter(p => p.prezzo_listino).map(p => p.prezzo_listino);
+  document.getElementById("listino-stat-prodotti").textContent = items.length;
+  if (prezzi.length > 0) {
+    const media = prezzi.reduce((a, b) => a + b, 0) / prezzi.length;
+    document.getElementById("listino-stat-medio").textContent = fmtEuro(media);
+    document.getElementById("listino-stat-min").textContent = fmtEuro(Math.min(...prezzi));
+    document.getElementById("listino-stat-max").textContent = fmtEuro(Math.max(...prezzi));
+  } else {
+    document.getElementById("listino-stat-medio").textContent = "-";
+    document.getElementById("listino-stat-min").textContent = "-";
+    document.getElementById("listino-stat-max").textContent = "-";
+  }
+
+  if (items.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-secondary py-4">Nessun prodotto con prezzo per questa campagna</td></tr>`;
+    document.getElementById("listino-info").textContent = "";
+    return;
+  }
+
+  tbody.innerHTML = items.map(p => {
+    const giacBadge = p.giacenza_unita > 0
+      ? `<span class="badge bg-success">${p.giacenza_unita}</span>`
+      : `<span class="badge bg-secondary">0</span>`;
+    return `
+      <tr>
+        <td class="text-secondary small">${escapeHtml(p.codice)}</td>
+        <td>${escapeHtml(p.formato)}</td>
+        <td>${escapeHtml(p.contenitore || "-")}</td>
+        <td class="text-center">${p.capacita_litri} L</td>
+        <td class="text-end fw-bold">${p.prezzo_listino ? fmtEuro(p.prezzo_listino) : "-"}</td>
+        <td class="text-end">${p.prezzo_imponibile ? fmtEuro(p.prezzo_imponibile) : "-"}</td>
+        <td class="text-center">${p.iva_percentuale}%</td>
+        <td class="text-center">${giacBadge}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-light" onclick="apriModificaPrezzo(${p.id}, ${p.prezzo_listino || 0})" title="Modifica prezzo">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  document.getElementById("listino-info").textContent = `${items.length} prodotti nel listino`;
+}
+
+// Modifica rapida prezzo dal listino
+function apriModificaPrezzo(confId, prezzoAttuale) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-confirm-overlay";
+  overlay.innerHTML = `
+    <div class="modal-confirm-box" style="max-width:350px;text-align:left">
+      <h6 class="mb-3"><i class="fa-solid fa-tag me-2"></i>Modifica Prezzo Listino</h6>
+      <div class="mb-3">
+        <label class="form-label">Prezzo Listino Ivato (EUR)</label>
+        <input type="number" step="0.01" min="0" class="form-control" id="mod-prezzo-listino" value="${prezzoAttuale.toFixed(2)}" />
+      </div>
+      <div class="mb-3">
+        <label class="form-label text-secondary small">Imponibile calcolato</label>
+        <input type="text" class="form-control" id="mod-prezzo-imponibile" readonly />
+      </div>
+      <div class="d-flex gap-2 justify-content-end">
+        <button class="btn btn-secondary btn-sm" id="mod-prezzo-annulla">Annulla</button>
+        <button class="btn btn-success btn-sm" id="mod-prezzo-salva">Salva</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const inputPrezzo = overlay.querySelector("#mod-prezzo-listino");
+  const inputImponibile = overlay.querySelector("#mod-prezzo-imponibile");
+
+  // Calcola imponibile iniziale
+  function ricalcola() {
+    const v = parseFloat(inputPrezzo.value) || 0;
+    const imp = +(v / 1.04).toFixed(2);
+    inputImponibile.value = v > 0 ? fmtEuro(imp) : "";
+  }
+  ricalcola();
+  inputPrezzo.addEventListener("input", ricalcola);
+  inputPrezzo.focus();
+  inputPrezzo.select();
+
+  overlay.querySelector("#mod-prezzo-annulla").addEventListener("click", () => overlay.remove());
+
+  overlay.querySelector("#mod-prezzo-salva").addEventListener("click", async () => {
+    const nuovoPrezzo = parseFloat(inputPrezzo.value);
+    if (isNaN(nuovoPrezzo) || nuovoPrezzo < 0) {
+      showToast("Inserire un prezzo valido.", "error");
+      return;
+    }
+    try {
+      const res = await apiFetch(`${API_URL}/confezionamenti/${confId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prezzo_listino: nuovoPrezzo }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore aggiornamento prezzo.", "error");
+        return;
+      }
+      showToast("Prezzo aggiornato.", "success");
+      overlay.remove();
+      caricaListino();
+    } catch (e) {
+      console.error("Errore aggiornamento prezzo:", e);
+    }
+  });
+}
+
+// Esporta PDF listino
+async function esportaListinoPdf() {
+  if (!_listinoAnno) return;
+  try {
+    const res = await apiFetch(`${API_URL}/confezionamenti/listino/pdf?anno=${_listinoAnno}`);
+    if (!res.ok) {
+      showToast("Errore generazione PDF.", "error");
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Listino_Prezzi_${_listinoAnno}_${_listinoAnno + 1}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("Errore download PDF listino:", e);
+  }
+}
+
+
 async function renderAuditLog(page) {
   _auditPage = page || 1;
   const main = document.getElementById("main-content");
@@ -6584,6 +6768,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-vendite")?.addEventListener("click", () => {
     setActiveMenu("menu-vendite");
     renderVendite();
+  });
+
+  document.getElementById("menu-listino")?.addEventListener("click", () => {
+    setActiveMenu("menu-listino");
+    renderListinoPrezzo();
   });
 
   document.getElementById("menu-utenti")?.addEventListener("click", () => {

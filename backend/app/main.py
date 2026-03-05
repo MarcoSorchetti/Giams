@@ -2,7 +2,7 @@
 ================================================================================
 GIAMS — Green Integrated Agricultural Management System
 File: main.py
-Versione: 2.1.1
+Versione: 2.2.0
 Autore: Team Gia.Mar Srl
 Responsabile Progetto: Marco Sorchetti
 ================================================================================
@@ -43,7 +43,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="2.1.1",
+    version="2.2.0",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 

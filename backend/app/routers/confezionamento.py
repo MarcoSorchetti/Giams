@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import case, func, or_
 
@@ -185,6 +186,116 @@ def confezionamenti_anni(db: Session = Depends(get_db)):
         .all()
     )
     return [a[0] for a in anni]
+
+
+# ---------------------------------------------------------------------------
+# Listino Prezzi
+# ---------------------------------------------------------------------------
+
+@router.get("/listino")
+def get_listino(
+    anno: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Restituisce il listino prezzi per una campagna (tutti i confezionamenti con prezzo)."""
+    query = db.query(Confezionamento).filter(Confezionamento.prezzo_listino.isnot(None))
+    if anno:
+        query = query.filter(Confezionamento.anno_campagna == anno)
+    query = query.order_by(Confezionamento.formato, Confezionamento.capacita_litri)
+
+    confs = query.all()
+
+    # Contenitori
+    cont_ids = list({c.contenitore_id for c in confs if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for ct in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[ct.id] = ct.descrizione
+
+    # Giacenza per confezionamento
+    conf_ids = [c.id for c in confs]
+    giacenza_map = {}
+    if conf_ids:
+        mov_rows = (
+            db.query(
+                MovimentoMagazzino.confezionamento_id,
+                func.sum(case(
+                    (MovimentoMagazzino.tipo_movimento == "carico", MovimentoMagazzino.quantita),
+                    else_=0,
+                )),
+                func.sum(case(
+                    (MovimentoMagazzino.tipo_movimento == "scarico", MovimentoMagazzino.quantita),
+                    else_=0,
+                )),
+            )
+            .filter(MovimentoMagazzino.confezionamento_id.in_(conf_ids))
+            .group_by(MovimentoMagazzino.confezionamento_id)
+            .all()
+        )
+        for cid, carichi, scarichi in mov_rows:
+            giacenza_map[cid] = int(carichi) - int(scarichi)
+
+    result = []
+    for c in confs:
+        result.append({
+            "id": c.id,
+            "codice": c.codice,
+            "formato": c.formato,
+            "contenitore": cont_map.get(c.contenitore_id, c.formato),
+            "contenitore_id": c.contenitore_id,
+            "capacita_litri": float(c.capacita_litri),
+            "prezzo_listino": float(c.prezzo_listino) if c.prezzo_listino else None,
+            "prezzo_imponibile": float(c.prezzo_imponibile) if c.prezzo_imponibile else None,
+            "iva_percentuale": float(c.iva_percentuale) if c.iva_percentuale is not None else 4,
+            "importo_iva": float(c.importo_iva) if c.importo_iva else None,
+            "anno_campagna": c.anno_campagna,
+            "giacenza_unita": giacenza_map.get(c.id, 0),
+        })
+    return result
+
+
+@router.get("/listino/pdf")
+def download_listino_pdf(
+    anno: int = Query(..., description="Anno campagna"),
+    db: Session = Depends(get_db),
+):
+    """Genera e scarica il PDF del listino prezzi per la campagna indicata."""
+    from app.services.pdf_listino import genera_listino_pdf
+
+    query = (
+        db.query(Confezionamento)
+        .filter(Confezionamento.anno_campagna == anno)
+        .filter(Confezionamento.prezzo_listino.isnot(None))
+        .order_by(Confezionamento.formato, Confezionamento.capacita_litri)
+    )
+    confs = query.all()
+
+    cont_ids = list({c.contenitore_id for c in confs if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for ct in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[ct.id] = ct.descrizione
+
+    prodotti = []
+    for c in confs:
+        prodotti.append({
+            "codice": c.codice,
+            "formato": c.formato,
+            "contenitore": cont_map.get(c.contenitore_id, c.formato),
+            "capacita_litri": float(c.capacita_litri),
+            "prezzo_listino": float(c.prezzo_listino) if c.prezzo_listino else None,
+            "prezzo_imponibile": float(c.prezzo_imponibile) if c.prezzo_imponibile else None,
+            "iva_percentuale": float(c.iva_percentuale) if c.iva_percentuale is not None else 4,
+            "importo_iva": float(c.importo_iva) if c.importo_iva else None,
+        })
+
+    pdf_bytes = genera_listino_pdf(anno, prodotti)
+    filename = f"Listino_Prezzi_{anno}_{anno + 1}.pdf"
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/")
