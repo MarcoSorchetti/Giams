@@ -1240,6 +1240,19 @@ a:hover { color: var(--accent-hover); }
 
 
 /* =============================================
+   Listino Prezzi - Righe alternate
+   ============================================= */
+
+.listino-row-even {
+  background-color: rgba(77, 124, 15, 0.08) !important;
+}
+
+.listino-row-odd {
+  background-color: rgba(77, 124, 15, 0.22) !important;
+}
+
+
+/* =============================================
    Utility
    ============================================= */
 

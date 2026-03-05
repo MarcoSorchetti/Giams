@@ -25,7 +25,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.2.0</div>
+        <div class="app-version">v2.2.6</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -2934,67 +2934,66 @@
 
   <!-- ===================== TEMPLATE LISTINO PREZZI ===================== -->
   <template id="template-listino">
-    <div class="p-4">
-      <div class="d-flex justify-content-between align-items-center mb-3 topbar-actions">
-        <div class="d-flex align-items-center gap-3">
-          <select id="listino-anno" class="form-select form-select-sm" style="width:160px;"></select>
-        </div>
-        <div class="d-flex gap-2">
-          <button class="btn btn-success btn-sm" id="btn-listino-pdf">
-            <i class="fa-solid fa-file-pdf me-1"></i> Esporta PDF
-          </button>
-        </div>
+    <div class="d-flex justify-content-between align-items-center mb-3 topbar-actions">
+      <div class="d-flex align-items-center gap-3">
+        <select id="listino-anno" class="form-select form-select-sm" style="width:160px;"></select>
       </div>
-
-      <!-- Stats riassuntive -->
-      <div class="row g-3 mb-4" id="listino-stats">
-        <div class="col-md-3">
-          <div class="card text-center p-3">
-            <div class="text-secondary small">Prodotti</div>
-            <div class="fs-4 fw-bold" id="listino-stat-prodotti">0</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center p-3">
-            <div class="text-secondary small">Prezzo Medio</div>
-            <div class="fs-4 fw-bold" id="listino-stat-medio">-</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center p-3">
-            <div class="text-secondary small">Prezzo Min</div>
-            <div class="fs-4 fw-bold" id="listino-stat-min">-</div>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="card text-center p-3">
-            <div class="text-secondary small">Prezzo Max</div>
-            <div class="fs-4 fw-bold" id="listino-stat-max">-</div>
-          </div>
-        </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-success btn-sm" id="btn-listino-pdf">
+          <i class="fa-solid fa-file-pdf me-1"></i> Visualizza PDF
+        </button>
       </div>
-
-      <!-- Tabella listino -->
-      <div class="table-responsive">
-        <table class="table table-dark table-hover align-middle">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Prodotto</th>
-              <th>Contenitore</th>
-              <th class="text-center">Capacita'</th>
-              <th class="text-end">Prezzo Listino</th>
-              <th class="text-end">Imponibile</th>
-              <th class="text-center">IVA %</th>
-              <th class="text-center">Giacenza</th>
-              <th class="text-center" style="width:80px">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="listino-tbody"></tbody>
-        </table>
-      </div>
-      <div class="text-secondary small mt-2" id="listino-info"></div>
     </div>
+
+    <!-- Stats riassuntive -->
+    <div class="row g-3 mb-4" id="listino-stats">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value" id="listino-stat-prodotti">0</div>
+          <div class="stat-label">Prodotti</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value stat-value-sm" id="listino-stat-medio">-</div>
+          <div class="stat-label">Prezzo Medio</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value stat-value-sm" id="listino-stat-min">-</div>
+          <div class="stat-label">Prezzo Min</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-value stat-value-sm" id="listino-stat-max">-</div>
+          <div class="stat-label">Prezzo Max</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabella listino -->
+    <div class="table-responsive">
+      <table class="table table-dark table-hover mb-0">
+        <thead>
+          <tr id="listino-thead-row">
+            <th class="sortable" data-sort="codice" style="cursor:pointer">Codice <i class="fa-solid fa-sort-down ms-1"></i></th>
+            <th class="sortable" data-sort="formato" style="cursor:pointer">Prodotto <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable" data-sort="contenitore" style="cursor:pointer">Contenitore <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-center" data-sort="capacita_litri" style="cursor:pointer">Capacita' <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-end" data-sort="prezzo_imponibile" style="cursor:pointer">Imponibile <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-center" data-sort="iva_percentuale" style="cursor:pointer">IVA % <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-end" data-sort="importo_iva" style="cursor:pointer">Importo IVA <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-end" data-sort="prezzo_listino" style="cursor:pointer">Prezzo Listino <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-center" data-sort="giacenza_unita" style="cursor:pointer">Giacenza <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="text-center" style="width:80px">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="listino-tbody"></tbody>
+      </table>
+    </div>
+    <div class="text-secondary small mt-2" id="listino-info"></div>
   </template>
 
   <!-- ===================== TEMPLATE DASHBOARD ===================== -->

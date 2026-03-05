@@ -261,6 +261,7 @@ def download_listino_pdf(
 ):
     """Genera e scarica il PDF del listino prezzi per la campagna indicata."""
     from app.services.pdf_listino import genera_listino_pdf
+    from app.models.campagna_sql import Campagna
 
     query = (
         db.query(Confezionamento)
@@ -289,7 +290,17 @@ def download_listino_pdf(
             "importo_iva": float(c.importo_iva) if c.importo_iva else None,
         })
 
-    pdf_bytes = genera_listino_pdf(anno, prodotti)
+    # Recupera info campagna per l'intestazione PDF
+    campagna_info = {}
+    camp = db.query(Campagna).filter(Campagna.anno == anno).first()
+    if camp:
+        campagna_info = {
+            "stato": camp.stato,
+            "data_inizio": camp.data_inizio.strftime("%d/%m/%Y") if camp.data_inizio else None,
+            "data_fine": camp.data_fine.strftime("%d/%m/%Y") if camp.data_fine else None,
+        }
+
+    pdf_bytes = genera_listino_pdf(anno, prodotti, campagna_info=campagna_info)
     filename = f"Listino_Prezzi_{anno}_{anno + 1}.pdf"
     return StreamingResponse(
         iter([pdf_bytes]),

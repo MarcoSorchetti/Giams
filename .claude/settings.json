@@ -160,7 +160,16 @@
       "Bash(/Users/marcos.orchetti/.local/share/virtualenvs/backend-WRJo4bs4/bin/python -m uvicorn --version)",
       "Bash(/Users/marcos.orchetti/.local/share/virtualenvs/backend-HbhTxEWn/bin/python -m uvicorn --version)",
       "Bash(/Users/marcos.orchetti/.local/share/virtualenvs/backend-WRJo4bs4/bin/python -c \"from app.main import app; print\\(''OK''\\)\")",
-      "Bash(git add backend/alembic/env.py backend/app/main.py backend/app/models/__init__.py backend/app/models/campagna.py backend/app/models/campagna_sql.py backend/app/routers/campagna.py backend/app/routers/magazzino.py backend/app/routers/vendita.py frontend/app.js frontend/index.html frontend/styles.css frontend/version.json CLAUDE.md .claude/)"
+      "Bash(git add backend/alembic/env.py backend/app/main.py backend/app/models/__init__.py backend/app/models/campagna.py backend/app/models/campagna_sql.py backend/app/routers/campagna.py backend/app/routers/magazzino.py backend/app/routers/vendita.py frontend/app.js frontend/index.html frontend/styles.css frontend/version.json CLAUDE.md .claude/)",
+      "Bash(grep -n \"sconto\" /Users/marcos.orchetti/giams/backend/app/models/cliente*)",
+      "Bash(/Users/marcos.orchetti/.local/share/virtualenvs/backend-HbhTxEWn/bin/python -c \"from app.services.pdf_listino import genera_listino_pdf; print\\(''OK: pdf_listino importato''\\)\")",
+      "Bash(/Users/marcos.orchetti/.local/share/virtualenvs/backend-HbhTxEWn/bin/python -c \"from app.routers.confezionamento import router; print\\(''OK: router confezionamento importato''\\)\")",
+      "Bash(git add backend/app/main.py backend/app/routers/confezionamento.py backend/app/services/pdf_listino.py frontend/app.js frontend/index.html frontend/version.json)",
+      "Bash(pgrep -f \"uvicorn app.main\")",
+      "Bash(kill 46566 46568)",
+      "Bash(curl -s http://localhost:8003/api/confezionamenti/listino?anno=2025)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" 'http://localhost:8003/docs')",
+      "Bash(curl -s -w \"\\\\nHTTP_CODE: %{http_code}\" 'http://localhost:8003/api/confezionamenti/listino/pdf?anno=2025' -H \"Authorization: Bearer test\")"
     ]
   }
 }
