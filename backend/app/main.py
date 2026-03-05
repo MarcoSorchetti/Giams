@@ -2,7 +2,7 @@
 ================================================================================
 GIAMS — Green Integrated Agricultural Management System
 File: main.py
-Versione: 1.8.4
+Versione: 2.1.1
 Autore: Team Gia.Mar Srl
 Responsabile Progetto: Marco Sorchetti
 ================================================================================
@@ -30,6 +30,7 @@ from app.routers.costo import router as costo_router
 from app.routers.magazzino import router as magazzino_router
 from app.routers.causale_movimento import router as causale_movimento_router
 from app.routers.vendita import router as vendita_router
+from app.routers.campagna import router as campagna_router
 from app.routers.audit import router as audit_router
 from app.api.v1.endpoints import users as users_router
 
@@ -42,7 +43,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="1.9.14",
+    version="2.1.1",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 
@@ -82,6 +83,7 @@ app.include_router(costo_router, prefix="/api", dependencies=_protected)
 app.include_router(magazzino_router, prefix="/api", dependencies=_protected)
 app.include_router(causale_movimento_router, prefix="/api", dependencies=_protected)
 app.include_router(vendita_router, prefix="/api", dependencies=_protected)
+app.include_router(campagna_router, prefix="/api", dependencies=_protected)
 app.include_router(audit_router, prefix="/api", dependencies=_protected)
 
 
@@ -94,6 +96,7 @@ Base.metadata.create_all(bind=engine)
 from app.database import SessionLocal
 from app.routers.categoria_costo import seed_categorie
 from app.models.causale_movimento_sql import CausaleMovimento
+from app.models.campagna_sql import Campagna
 
 def _seed_causali(db):
     """Popola le causali di default se la tabella e' vuota."""
@@ -110,10 +113,19 @@ def _seed_causali(db):
         db.add(CausaleMovimento(codice=codice, label=label, tipo_movimento=tipo, sistema=sistema))
     db.commit()
 
+def _seed_campagne(db):
+    """Crea campagna 2025 se la tabella e' vuota."""
+    if db.query(Campagna).first():
+        return
+    from datetime import date
+    db.add(Campagna(anno=2025, stato="aperta", data_inizio=date(2025, 10, 1)))
+    db.commit()
+
 _db = SessionLocal()
 try:
     seed_categorie(_db)
     _seed_causali(_db)
+    _seed_campagne(_db)
 finally:
     _db.close()
 

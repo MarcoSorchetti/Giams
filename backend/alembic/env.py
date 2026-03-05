@@ -24,6 +24,7 @@ from app.models.costo_sql import Costo  # noqa: F401
 from app.models.movimento_magazzino_sql import MovimentoMagazzino  # noqa: F401
 from app.models.vendita_sql import Vendita, VenditaRiga  # noqa: F401
 from app.models.causale_movimento_sql import CausaleMovimento  # noqa: F401
+from app.models.campagna_sql import Campagna  # noqa: F401
 
 config = context.config
 

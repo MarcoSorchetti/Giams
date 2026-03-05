@@ -25,7 +25,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.9.14</div>
+        <div class="app-version">v2.1.1</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -59,6 +59,10 @@
 
         <button id="menu-costi" class="btn btn-dark text-start sidebar-link" type="button">
           <i class="fa-solid fa-file-invoice-dollar me-2"></i> Costi
+        </button>
+
+        <button id="menu-campagne" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-calendar-days me-2"></i> Campagne
         </button>
 
         <button id="menu-magazzino" class="btn btn-dark text-start sidebar-link" type="button">
@@ -548,7 +552,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Anno Campagna *</label>
-                <input type="number" class="form-control form-control-sm" id="r-anno" required value="2026" />
+                <select class="form-select form-select-sm" id="r-anno" required><option value="">— Seleziona —</option></select>
               </div>
               <div class="col-6">
                 <label class="form-label">Kg Olive Totali *</label>
@@ -763,7 +767,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Anno Campagna *</label>
-                <input type="number" class="form-control form-control-sm" id="l-anno" required value="2026" />
+                <select class="form-select form-select-sm" id="l-anno" required><option value="">— Seleziona —</option></select>
               </div>
               <div class="col-6">
                 <label class="form-label">Data Molitura *</label>
@@ -994,7 +998,7 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Anno Campagna *</label>
-                <input type="number" class="form-control form-control-sm" id="cf-anno" required />
+                <select class="form-select form-select-sm" id="cf-anno" required><option value="">— Seleziona —</option></select>
               </div>
               <div class="col-6">
                 <label class="form-label">Contenitore *</label>
@@ -1870,7 +1874,7 @@
                 </div>
                 <div class="col-6">
                   <label class="form-label">Anno campagna *</label>
-                  <input type="number" class="form-control form-control-sm" id="costo-anno" required />
+                  <select class="form-select form-select-sm" id="costo-anno" required><option value="">— Seleziona —</option></select>
                 </div>
                 <div class="col-12">
                   <label class="form-label">Tipo costo</label>
@@ -2240,11 +2244,13 @@
     <div class="card p-3 mb-3">
       <div class="row g-2 align-items-end">
         <div class="col-md-3">
+          <label class="form-label small mb-1">Anno Campagna</label>
           <select class="form-select form-select-sm" id="filtro-mag-anno">
             <option value="">Tutti gli anni</option>
           </select>
         </div>
         <div class="col-md-3" id="filtro-mag-tipo-wrap">
+          <label class="form-label small mb-1">Tipo Movimento</label>
           <select class="form-select form-select-sm" id="filtro-mag-tipo">
             <option value="">Tutti i tipi</option>
             <option value="carico">Carichi</option>
@@ -2252,13 +2258,9 @@
           </select>
         </div>
         <div class="col-md-3" id="filtro-mag-causale-wrap">
+          <label class="form-label small mb-1">Causale</label>
           <select class="form-select form-select-sm" id="filtro-mag-causale">
             <option value="">Tutte le causali</option>
-            <option value="produzione">Produzione</option>
-            <option value="omaggio">Omaggio</option>
-            <option value="pubblicita">Pubblicita</option>
-            <option value="scarto">Scarto</option>
-            <option value="vendita">Vendita</option>
           </select>
         </div>
       </div>
@@ -2273,6 +2275,7 @@
           <table class="table table-dark table-hover mb-0">
             <thead>
               <tr>
+                <th>Campagna</th>
                 <th>Confezionamento</th>
                 <th>Contenitore</th>
                 <th class="text-end">Capacita</th>
@@ -2339,7 +2342,9 @@
               </div>
               <div class="col-6">
                 <label class="form-label">Anno campagna *</label>
-                <input type="number" class="form-control form-control-sm" id="mov-anno" required />
+                <select class="form-select form-select-sm" id="mov-anno" required>
+                  <option value="">— Seleziona —</option>
+                </select>
               </div>
               <div class="col-6">
                 <label class="form-label">Tipo *</label>
@@ -2479,6 +2484,94 @@
     </form>
   </template>
 
+  <!-- TEMPLATE: CAMPAGNE LISTA -->
+  <template id="template-campagne">
+    <div class="module-header mb-3">
+      <button class="btn btn-accent" id="btn-nuova-campagna">
+        <i class="fa-solid fa-plus me-1"></i> Nuova Campagna
+      </button>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-campagne-totale">0</div>
+          <div class="stat-label">Totale Campagne</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-value text-success" id="stat-campagne-aperte">0</div>
+          <div class="stat-label">Aperte</div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="stat-card">
+          <div class="stat-value text-secondary" id="stat-campagne-chiuse">0</div>
+          <div class="stat-label">Chiuse</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-0">
+      <div class="table-responsive">
+        <table class="table table-dark table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Anno</th>
+              <th>Stato</th>
+              <th>Data Inizio</th>
+              <th>Data Fine</th>
+              <th>Note</th>
+              <th class="text-center">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="campagne-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mt-3">
+      <small class="text-secondary" id="campagne-page-info"></small>
+      <div id="campagne-pagination"></div>
+    </div>
+  </template>
+
+  <!-- TEMPLATE: CAMPAGNA FORM -->
+  <template id="template-campagna-form">
+    <form id="form-campagna" novalidate>
+      <div class="card">
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Anno *</label>
+              <input type="number" class="form-control form-control-sm" id="campagna-anno" min="2020" max="2099" required />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Data Inizio</label>
+              <input type="text" class="form-control form-control-sm" id="campagna-data-inizio" placeholder="GG/MM/AAAA" />
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Data Fine</label>
+              <input type="text" class="form-control form-control-sm" id="campagna-data-fine" placeholder="GG/MM/AAAA" />
+            </div>
+            <div class="col-md-12">
+              <label class="form-label">Note</label>
+              <textarea class="form-control form-control-sm" id="campagna-note" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer d-flex gap-2">
+          <button type="submit" class="btn btn-accent">
+            <i class="fa-solid fa-floppy-disk me-1"></i> Salva
+          </button>
+          <button type="button" class="btn btn-outline-secondary" id="btn-annulla-campagna">
+            Annulla
+          </button>
+        </div>
+      </div>
+    </form>
+  </template>
+
   <!-- TEMPLATE: VENDITE LISTA -->
   <template id="template-vendite">
     <div class="module-header mb-3">
@@ -2552,13 +2645,13 @@
     <div class="table-responsive">
       <table class="table table-dark table-hover align-middle">
         <thead>
-          <tr>
-            <th>Codice</th>
-            <th>Data</th>
-            <th>Cliente</th>
-            <th>Stato</th>
-            <th>Fattura</th>
-            <th class="text-end">Totale</th>
+          <tr id="vendite-thead-row">
+            <th class="sortable" data-sort="codice" style="cursor:pointer">Codice <i class="fa-solid fa-sort-down ms-1"></i></th>
+            <th class="sortable" data-sort="data_vendita" style="cursor:pointer">Data <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable" data-sort="cliente_denominazione" style="cursor:pointer">Cliente <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable" data-sort="stato" style="cursor:pointer">Stato <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable" data-sort="numero_fattura" style="cursor:pointer">Fattura <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="sortable text-end" data-sort="importo_totale" style="cursor:pointer">Totale <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
             <th class="text-center">Azioni</th>
           </tr>
         </thead>
@@ -2595,7 +2688,9 @@
             </div>
             <div class="col-md-3">
               <label class="form-label">Anno Campagna</label>
-              <input type="number" id="vf-anno" class="form-control" required />
+              <select id="vf-anno" class="form-select" required>
+                <option value="">— Seleziona —</option>
+              </select>
             </div>
             <div class="col-md-3">
               <label class="form-label">Cliente *</label>
@@ -2826,6 +2921,9 @@
       </button>
       <button class="btn btn-warning" id="btn-modifica-vendita" style="display:none;">
         <i class="fa-solid fa-pen me-1"></i> Modifica
+      </button>
+      <button class="btn btn-outline-warning" id="btn-riporta-bozza" style="display:none;">
+        <i class="fa-solid fa-rotate-left me-1"></i> Riporta in Bozza
       </button>
     </div>
   </template>

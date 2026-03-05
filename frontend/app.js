@@ -1733,7 +1733,7 @@ async function renderRaccoltaForm(id) {
     document.getElementById("form-raccolta-titolo").textContent = "Modifica Raccolta";
     await popolaFormRaccolta(id);
   } else {
-    // Auto-genera codice per la nuova raccolta
+    await popolaSelectCampagne("r-anno");
     const anno = document.getElementById("r-anno").value;
     if (anno) await aggiornaCodicRaccolta(anno);
   }
@@ -1813,7 +1813,7 @@ async function popolaFormRaccolta(id) {
     const rDataEl = document.getElementById("r-data");
     if (rDataEl._flatpickr) rDataEl._flatpickr.setDate(r.data_raccolta);
     else rDataEl.value = r.data_raccolta || "";
-    document.getElementById("r-anno").value = r.anno_campagna || "";
+    await popolaSelectCampagne("r-anno", r.anno_campagna);
     document.getElementById("r-kg-totali").value = r.kg_olive_totali || "";
     document.getElementById("r-metodo").value = r.metodo_raccolta || "";
     document.getElementById("r-maturazione").value = r.maturazione || "";
@@ -2058,6 +2058,7 @@ async function renderLottoForm(id) {
     document.getElementById("form-lotto-titolo").textContent = "Modifica Lotto Olio";
     await popolaFormLotto(id);
   } else {
+    await popolaSelectCampagne("l-anno");
     const anno = document.getElementById("l-anno").value;
     if (anno) await aggiornaCodiceLotto(anno);
   }
@@ -2098,9 +2099,10 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
     const res = await apiFetch(`${API_URL}/raccolte/${raccoltaId}`);
     const r = await res.json();
     document.getElementById("l-kg").value = r.kg_olive_totali || "";
-    document.getElementById("l-anno").value = r.anno_campagna || "2026";
+    await popolaSelectCampagne("l-anno", r.anno_campagna);
     // Auto-genera codice con anno della raccolta
-    await aggiornaCodiceLotto(r.anno_campagna || 2026);
+    const annoSel = document.getElementById("l-anno").value;
+    if (annoSel) await aggiornaCodiceLotto(annoSel);
   } catch (err) {
     console.error("Errore precompilazione:", err);
   }
@@ -2183,7 +2185,7 @@ async function popolaFormLotto(id) {
       sel.value = l.raccolta_id;
     }
 
-    document.getElementById("l-anno").value = l.anno_campagna || "";
+    await popolaSelectCampagne("l-anno", l.anno_campagna);
     const lDataEl = document.getElementById("l-data");
     if (lDataEl._flatpickr) lDataEl._flatpickr.setDate(l.data_molitura);
     else lDataEl.value = l.data_molitura || "";
@@ -2471,6 +2473,8 @@ async function renderConfezionamentoForm(id) {
   if (id) {
     document.getElementById("form-conf-titolo").textContent = "Modifica Confezionamento";
     await popolaFormConf(id);
+  } else {
+    await popolaSelectCampagne("cf-anno");
   }
 }
 
@@ -2578,7 +2582,7 @@ async function popolaFormConf(id) {
     const cfDataEl = document.getElementById("cf-data");
     if (cfDataEl._flatpickr) cfDataEl._flatpickr.setDate(c.data_confezionamento);
     else cfDataEl.value = c.data_confezionamento || "";
-    document.getElementById("cf-anno").value = c.anno_campagna || "";
+    await popolaSelectCampagne("cf-anno", c.anno_campagna);
     document.getElementById("cf-formato").value = c.contenitore_id || "";
     document.getElementById("cf-num-unita").value = c.num_unita || "";
     document.getElementById("cf-litri-totali").value = c.litri_totali || "";
@@ -3933,9 +3937,9 @@ async function renderCostoForm() {
   await caricaCategorieCosto();
   await popolaSelectFornitoriCosto();
 
-  // Anno default
+  // Anno campagna - popola select
   if (!costoInModifica) {
-    document.getElementById("costo-anno").value = new Date().getFullYear();
+    await popolaSelectCampagne("costo-anno");
   }
 
   aggiornaSelectCategorieCosto();
@@ -4078,11 +4082,11 @@ async function aggiornaCodiciCosto() {
   } catch (err) { /* ignore */ }
 }
 
-function popolaFormCosto(c) {
+async function popolaFormCosto(c) {
   document.getElementById("costo-form-title").textContent = "Modifica Costo";
   document.getElementById("costo-id").value = c.id;
   document.getElementById("costo-codice").value = c.codice || "";
-  document.getElementById("costo-anno").value = c.anno_campagna;
+  await popolaSelectCampagne("costo-anno", c.anno_campagna);
   document.getElementById("costo-descrizione").value = c.descrizione || "";
 
   // Tipo radio
@@ -4523,8 +4527,18 @@ async function renderMagazzino() {
     }
   } catch (e) { /* nessun anno ancora */ }
 
-  // Preload causali per le label
-  await getCausaliMovimento();
+  // Preload causali per le label e popola filtro
+  const causali = await getCausaliMovimento();
+  const selCausale = document.getElementById("filtro-mag-causale");
+  if (selCausale && causali.length) {
+    selCausale.innerHTML = '<option value="">Tutte le causali</option>';
+    causali.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.codice;
+      opt.textContent = c.label;
+      selCausale.appendChild(opt);
+    });
+  }
 
   caricaMagStats();
   aggiornaTabMagazzino();
@@ -4586,37 +4600,45 @@ async function caricaMagStats() {
 
 async function caricaGiacenze() {
   try {
-    const anno = document.getElementById("filtro-mag-anno")?.value || "";
-    const qs = anno ? `?anno=${anno}` : "";
-    const res = await apiFetch(`${API_URL}/magazzino/giacenze${qs}`);
-    giacenzeLista = await res.json();
-    renderTabellaGiacenze();
+    const res = await apiFetch(`${API_URL}/magazzino/giacenze-per-campagna`);
+    const data = await res.json();
+    renderTabellaGiacenze(data);
   } catch (e) {
     console.error("Errore caricamento giacenze", e);
   }
 }
 
-function renderTabellaGiacenze() {
+function renderTabellaGiacenze(data) {
   const tbody = document.getElementById("giacenze-tbody");
   if (!tbody) return;
 
-  if (giacenzeLista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4">Nessuna giacenza registrata</td></tr>';
+  const campagne = data.campagne || [];
+  if (campagne.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-secondary py-4">Nessuna giacenza registrata</td></tr>';
     return;
   }
 
-  tbody.innerHTML = giacenzeLista.map(g => {
-    const cls = g.giacenza_unita > 0 ? "text-success" : (g.giacenza_unita === 0 ? "text-secondary" : "text-danger");
-    return `<tr>
-      <td>${g.confezionamento_codice || ""}</td>
-      <td>${g.contenitore_descrizione || "—"}</td>
-      <td class="text-end">${g.capacita_litri} L</td>
-      <td class="text-end text-success">${g.totale_carichi}</td>
-      <td class="text-end text-danger">${g.totale_scarichi}</td>
-      <td class="text-end fw-bold ${cls}">${g.giacenza_unita}</td>
-      <td class="text-end">${g.giacenza_litri} L</td>
-    </tr>`;
-  }).join("");
+  let html = "";
+  for (const camp of campagne) {
+    // Header campagna
+    html += `<tr class="table-active"><td colspan="8" class="fw-bold text-accent py-2"><i class="fa-solid fa-calendar-days me-1"></i> Campagna ${camp.anno_campagna} — <span class="text-info">${camp.totale_unita} unita</span> · <span class="text-secondary">${camp.totale_litri} L</span></td></tr>`;
+    for (const g of camp.giacenze) {
+      const cls = g.giacenza_unita > 0 ? "text-success" : (g.giacenza_unita === 0 ? "text-secondary" : "text-danger");
+      html += `<tr>
+        <td></td>
+        <td>${g.confezionamento_codice || ""}</td>
+        <td>${g.contenitore_descrizione || "—"}</td>
+        <td class="text-end">${g.capacita_litri} L</td>
+        <td class="text-end text-success">${g.totale_carichi}</td>
+        <td class="text-end text-danger">${g.totale_scarichi}</td>
+        <td class="text-end fw-bold ${cls}">${g.giacenza_unita}</td>
+        <td class="text-end">${g.giacenza_litri} L</td>
+      </tr>`;
+    }
+  }
+  // Totale generale
+  html += `<tr class="table-active border-top"><td colspan="6" class="fw-bold text-end">TOTALE GENERALE</td><td class="text-end fw-bold text-info">${data.totale_generale_unita}</td><td class="text-end fw-bold">${data.totale_generale_litri} L</td></tr>`;
+  tbody.innerHTML = html;
 }
 
 
@@ -4716,9 +4738,9 @@ async function renderMovimentoForm(id, tipoDefault) {
   // Popola select clienti
   await popolaSelectClientiMov();
 
-  // Anno default
+  // Popola select campagne aperte
   const annoEl = document.getElementById("mov-anno");
-  if (annoEl && !id) annoEl.value = new Date().getFullYear();
+  if (!id) await popolaSelectCampagne("mov-anno");
 
   // Tipo default
   const tipoEl = document.getElementById("mov-tipo");
@@ -4727,8 +4749,11 @@ async function renderMovimentoForm(id, tipoDefault) {
     await aggiornaCausaliPerTipo(tipoDefault);
   }
 
-  // Aggiorna causali quando cambia tipo
-  tipoEl?.addEventListener("change", async () => await aggiornaCausaliPerTipo(tipoEl.value));
+  // Aggiorna causali e confezionamenti quando cambia tipo
+  tipoEl?.addEventListener("change", async () => {
+    await aggiornaCausaliPerTipo(tipoEl.value);
+    await popolaSelectConfezionamenti();
+  });
 
   // Mostra giacenza quando cambia confezionamento
   document.getElementById("mov-confezionamento")?.addEventListener("change", aggiornaGiacenzaInfo);
@@ -4786,15 +4811,28 @@ async function aggiornaCodiceMovimento(anno) {
 
 async function popolaSelectConfezionamenti() {
   try {
-    const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
-    const lista = (await res.json()).items;
+    const tipo = document.getElementById("mov-tipo")?.value;
+    let lista;
+    if (tipo === "scarico") {
+      // Solo confezionamenti con giacenza > 0
+      const res = await apiFetch(`${API_URL}/magazzino/confezionamenti-disponibili`);
+      lista = await res.json();
+    } else {
+      // Carico: tutti i confezionamenti
+      const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
+      lista = (await res.json()).items;
+    }
     const sel = document.getElementById("mov-confezionamento");
     if (!sel) return;
     sel.innerHTML = '<option value="">\u2014 Seleziona confezionamento \u2014</option>';
     lista.forEach(c => {
       const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = `${c.codice} — ${c.formato} (${c.num_unita} x ${c.capacita_litri}L)`;
+      opt.value = tipo === "scarico" ? c.confezionamento_id : c.id;
+      if (tipo === "scarico") {
+        opt.textContent = `${c.codice} — ${c.formato} [Camp. ${c.anno_campagna}] (disp: ${c.giacenza_unita})`;
+      } else {
+        opt.textContent = `${c.codice} — ${c.formato} (${c.num_unita} x ${c.capacita_litri}L)`;
+      }
       sel.appendChild(opt);
     });
   } catch (e) {
@@ -4851,7 +4889,7 @@ async function popolaFormMovimento(id) {
 
     document.getElementById("mov-id").value = m.id;
     document.getElementById("mov-codice").value = m.codice || "";
-    document.getElementById("mov-anno").value = m.anno_campagna || "";
+    await popolaSelectCampagne("mov-anno", m.anno_campagna);
     document.getElementById("mov-tipo").value = m.tipo_movimento || "carico";
     await aggiornaCausaliPerTipo(m.tipo_movimento);
     document.getElementById("mov-causale").value = m.causale || "";
@@ -5131,6 +5169,274 @@ function eliminaCausaleMovimento(id, label) {
 
 
 // =============================================
+// CAMPAGNE
+// =============================================
+
+let _campagnePage = 1;
+let _campagneAttiveCache = null;
+
+async function getCampagneAttive() {
+  if (_campagneAttiveCache) return _campagneAttiveCache;
+  try {
+    const res = await apiFetch(`${API_URL}/campagne/attive`);
+    _campagneAttiveCache = await res.json();
+    return _campagneAttiveCache;
+  } catch (e) {
+    console.error("Errore caricamento campagne attive", e);
+    return [];
+  }
+}
+
+async function popolaSelectCampagne(selectId, selectedValue = null) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const campagne = await getCampagneAttive();
+  const currentYear = new Date().getFullYear();
+  sel.innerHTML = '<option value="">— Seleziona campagna —</option>';
+  campagne.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.anno;
+    opt.textContent = `Campagna ${c.anno}`;
+    sel.appendChild(opt);
+  });
+  if (selectedValue) {
+    sel.value = selectedValue;
+  } else {
+    const hasCurrentYear = campagne.some(c => c.anno === currentYear);
+    if (hasCurrentYear) sel.value = currentYear;
+  }
+}
+
+async function renderCampagne() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-campagne");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setTopbarInfo("Campagne", "Gestione campagne produttive");
+  setBreadcrumb([{ label: "Campagne" }]);
+
+  document.getElementById("btn-nuova-campagna")?.addEventListener("click", () => renderCampagnaForm(null));
+
+  await caricaCampagne();
+}
+
+async function caricaCampagne() {
+  try {
+    const res = await apiFetch(`${API_URL}/campagne/?page=${_campagnePage}&per_page=10`);
+    const data = await res.json();
+    const items = data.items || [];
+    const total = data.total || 0;
+    const tbody = document.getElementById("campagne-tbody");
+    if (!tbody) return;
+
+    // Stats
+    const aperte = items.filter(c => c.stato === "aperta").length;
+    const chiuse = items.filter(c => c.stato === "chiusa").length;
+    const stTot = document.getElementById("stat-campagne-totale");
+    const stAp = document.getElementById("stat-campagne-aperte");
+    const stCh = document.getElementById("stat-campagne-chiuse");
+    if (stTot) stTot.textContent = total;
+    if (stAp) stAp.textContent = aperte;
+    if (stCh) stCh.textContent = chiuse;
+
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">Nessuna campagna registrata</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = items.map(c => {
+      const statoBadge = c.stato === "aperta"
+        ? '<span class="badge bg-success">Aperta</span>'
+        : '<span class="badge bg-secondary">Chiusa</span>';
+      const dataInizio = c.data_inizio ? new Date(c.data_inizio).toLocaleDateString("it-IT") : "—";
+      const dataFine = c.data_fine ? new Date(c.data_fine).toLocaleDateString("it-IT") : "—";
+      const toggleBtn = c.stato === "aperta"
+        ? `<button class="btn btn-sm btn-outline-warning" onclick="chiudiCampagna(${c.id})" title="Chiudi"><i class="fa-solid fa-lock"></i></button>`
+        : `<button class="btn btn-sm btn-outline-success" onclick="riapriCampagna(${c.id})" title="Riapri"><i class="fa-solid fa-lock-open"></i></button>`;
+
+      return `<tr>
+        <td class="fw-bold">${c.anno}</td>
+        <td>${statoBadge}</td>
+        <td>${dataInizio}</td>
+        <td>${dataFine}</td>
+        <td>${escapeHtml(c.note || "")}</td>
+        <td class="text-center">
+          <button class="btn btn-sm btn-outline-light me-1" onclick="renderCampagnaForm(${c.id})" title="Modifica"><i class="fa-solid fa-pen-to-square"></i></button>
+          ${toggleBtn}
+          <button class="btn btn-sm btn-outline-danger ms-1" onclick="eliminaCampagna(${c.id}, ${c.anno})" title="Elimina"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`;
+    }).join("");
+
+    // Pagination
+    const totalPages = Math.ceil(total / 10);
+    renderPaginazione("campagne-pagination", "campagne-page-info", _campagnePage, totalPages, total, (p) => {
+      _campagnePage = p;
+      caricaCampagne();
+    });
+  } catch (e) {
+    console.error("Errore caricamento campagne", e);
+  }
+}
+
+async function renderCampagnaForm(id) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-campagna-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setBreadcrumb([
+    { label: "Campagne", onClick: () => { setActiveMenu("menu-campagne"); renderCampagne(); } },
+    { label: id ? "Modifica Campagna" : "Nuova Campagna" }
+  ]);
+  setTopbarInfo(id ? "Modifica Campagna" : "Nuova Campagna", "");
+
+  document.getElementById("btn-annulla-campagna")?.addEventListener("click", () => {
+    setActiveMenu("menu-campagne");
+    renderCampagne();
+  });
+
+  // Init flatpickr
+  if (typeof flatpickr === "function") {
+    flatpickr("#campagna-data-inizio", { dateFormat: "d/m/Y", allowInput: true });
+    flatpickr("#campagna-data-fine", { dateFormat: "d/m/Y", allowInput: true });
+  }
+
+  if (id) {
+    try {
+      const res = await apiFetch(`${API_URL}/campagne/${id}`);
+      const c = await res.json();
+      document.getElementById("campagna-anno").value = c.anno;
+      if (c.data_inizio) {
+        const d = new Date(c.data_inizio);
+        document.getElementById("campagna-data-inizio").value = d.toLocaleDateString("it-IT");
+      }
+      if (c.data_fine) {
+        const d = new Date(c.data_fine);
+        document.getElementById("campagna-data-fine").value = d.toLocaleDateString("it-IT");
+      }
+      document.getElementById("campagna-note").value = c.note || "";
+    } catch (e) {
+      console.error("Errore caricamento campagna", e);
+    }
+  } else {
+    // Default: anno corrente
+    document.getElementById("campagna-anno").value = new Date().getFullYear();
+  }
+
+  document.getElementById("form-campagna")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await withButtonLoading(e.target, () => salvaCampagna(id));
+  });
+}
+
+function _parseDataIT(str) {
+  if (!str) return null;
+  const parts = str.trim().split("/");
+  if (parts.length !== 3) return null;
+  return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+}
+
+async function salvaCampagna(id) {
+  const anno = parseInt(document.getElementById("campagna-anno")?.value);
+  const dataInizio = _parseDataIT(document.getElementById("campagna-data-inizio")?.value);
+  const dataFine = _parseDataIT(document.getElementById("campagna-data-fine")?.value);
+  const note = document.getElementById("campagna-note")?.value?.trim() || null;
+
+  if (!anno || anno < 2020 || anno > 2099) {
+    showToast("Inserisci un anno valido (2020-2099).", "error");
+    return;
+  }
+
+  const body = { anno, data_inizio: dataInizio, data_fine: dataFine, note };
+
+  try {
+    const url = id ? `${API_URL}/campagne/${id}` : `${API_URL}/campagne/`;
+    const method = id ? "PUT" : "POST";
+    const res = await apiFetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(err.detail || "Errore salvataggio.", "error");
+      return;
+    }
+
+    _campagneAttiveCache = null;
+    showToast(id ? "Campagna aggiornata." : "Campagna creata.", "success");
+    setActiveMenu("menu-campagne");
+    renderCampagne();
+  } catch (e) {
+    console.error("Errore salvataggio campagna", e);
+    showToast("Errore di rete.", "error");
+  }
+}
+
+function eliminaCampagna(id, anno) {
+  mostraConferma(`Eliminare la campagna ${anno}?`, async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/campagne/${id}`, { method: "DELETE" });
+      if (res.status === 409) {
+        const err = await res.json();
+        showToast(err.detail || "Campagna in uso, non eliminabile.", "error");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore eliminazione.", "error");
+        return;
+      }
+      _campagneAttiveCache = null;
+      showToast("Campagna eliminata.", "success");
+      caricaCampagne();
+    } catch (e) {
+      console.error("Errore eliminazione campagna", e);
+    }
+  });
+}
+
+function chiudiCampagna(id) {
+  mostraConferma("Chiudere questa campagna? Non sara' possibile creare nuovi carichi.", async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/campagne/${id}/chiudi`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore chiusura.", "error");
+        return;
+      }
+      _campagneAttiveCache = null;
+      showToast("Campagna chiusa.", "success");
+      caricaCampagne();
+    } catch (e) {
+      console.error("Errore chiusura campagna", e);
+    }
+  });
+}
+
+function riapriCampagna(id) {
+  mostraConferma("Riaprire questa campagna?", async () => {
+    try {
+      const res = await apiFetch(`${API_URL}/campagne/${id}/riapri`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore riapertura.", "error");
+        return;
+      }
+      _campagneAttiveCache = null;
+      showToast("Campagna riaperta.", "success");
+      caricaCampagne();
+    } catch (e) {
+      console.error("Errore riapertura campagna", e);
+    }
+  });
+}
+
+
+// =============================================
 // VENDITE
 // =============================================
 
@@ -5147,6 +5453,57 @@ function statoBadge(stato) {
     pagata: '<span class="badge bg-success">Pagata</span>',
   };
   return map[stato] || `<span class="badge bg-secondary">${stato}</span>`;
+}
+
+let _venditeSortCol = "codice";
+let _venditeSortDir = "desc";
+
+function initVenditeSort() {
+  const row = document.getElementById("vendite-thead-row");
+  if (!row) return;
+  row.querySelectorAll("th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (_venditeSortCol === col) {
+        _venditeSortDir = _venditeSortDir === "asc" ? "desc" : "asc";
+      } else {
+        _venditeSortCol = col;
+        _venditeSortDir = "asc";
+      }
+      aggiornaIconeSort();
+      ordinaVendite();
+    });
+  });
+}
+
+function aggiornaIconeSort() {
+  const row = document.getElementById("vendite-thead-row");
+  if (!row) return;
+  row.querySelectorAll("th.sortable").forEach(th => {
+    const icon = th.querySelector("i");
+    if (!icon) return;
+    if (th.dataset.sort === _venditeSortCol) {
+      icon.className = _venditeSortDir === "asc" ? "fa-solid fa-sort-up ms-1" : "fa-solid fa-sort-down ms-1";
+      icon.classList.remove("text-secondary");
+    } else {
+      icon.className = "fa-solid fa-sort ms-1 text-secondary";
+    }
+  });
+}
+
+function ordinaVendite() {
+  if (!venditeLista || !venditeLista.length) return;
+  const col = _venditeSortCol;
+  const dir = _venditeSortDir === "asc" ? 1 : -1;
+  venditeLista.sort((a, b) => {
+    let va = a[col], vb = b[col];
+    if (va == null) va = "";
+    if (vb == null) vb = "";
+    if (col === "importo_totale") return (parseFloat(va) - parseFloat(vb)) * dir;
+    if (typeof va === "string") return va.localeCompare(vb, "it") * dir;
+    return (va - vb) * dir;
+  });
+  renderTabellaVendite();
 }
 
 // ---- LISTA VENDITE ----
@@ -5198,6 +5555,7 @@ async function renderVendite() {
     scaricaCSV("vendite", params.toString(), "Vendite.csv");
   });
 
+  initVenditeSort();
   await caricaVenditeStats();
   await caricaVendite();
 }
@@ -5236,7 +5594,8 @@ async function caricaVendite(page = 1) {
     const res = await apiFetch(`${API_URL}/vendite/?${params}`);
     const data = await res.json();
     venditeLista = data.items;
-    renderTabellaVendite();
+    ordinaVendite();
+    aggiornaIconeSort();
     renderPaginazione("vendite-pagination", "vendite-page-info", data.page, data.pages, data.total, caricaVendite);
   } catch (e) { console.error(e); }
 }
@@ -5288,10 +5647,10 @@ async function renderVenditaForm(venditaId = null) {
     { label: venditaId ? "Modifica Vendita" : "Nuova Vendita" }
   ]);
 
-  // Carica confezionamenti per select righe
+  // Carica confezionamenti disponibili (giacenza > 0) per select righe
   try {
-    const res = await apiFetch(`${API_URL}/confezionamenti/?per_page=100`);
-    venditeConfezionamentiCache = (await res.json()).items;
+    const res = await apiFetch(`${API_URL}/magazzino/confezionamenti-disponibili`);
+    venditeConfezionamentiCache = await res.json();
   } catch (e) { venditeConfezionamentiCache = []; }
 
   // Carica clienti
@@ -5306,8 +5665,9 @@ async function renderVenditaForm(venditaId = null) {
   } catch (e) { console.error(e); }
   document.getElementById("vf-cliente").innerHTML = clientiOptions;
 
-  const currentYear = new Date().getFullYear();
-  document.getElementById("vf-anno").value = currentYear;
+  // Popola select campagne aperte
+  await popolaSelectCampagne("vf-anno");
+  const currentYear = parseInt(document.getElementById("vf-anno").value) || new Date().getFullYear();
 
   // Flatpickr sulla data
   const fpData = flatpickr("#vf-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
@@ -5405,8 +5765,11 @@ function aggiungiRigaVendita(rigaData = null) {
 
   let confOptions = '<option value="">— Seleziona —</option>';
   confOptions += venditeConfezionamentiCache.map(c => {
-    const label = `${c.codice} — ${c.formato} (${c.contenitore_descrizione || "N/A"})`;
-    return `<option value="${c.id}" data-prezzo="${c.prezzo_imponibile || 0}" data-anno="${c.anno_campagna}">${label}</option>`;
+    const cId = c.confezionamento_id || c.id;
+    const disp = c.giacenza_unita != null ? ` (disp: ${c.giacenza_unita})` : "";
+    const campLabel = c.anno_campagna ? ` [Camp. ${c.anno_campagna}]` : "";
+    const label = `${c.codice} — ${c.formato}${campLabel}${disp}`;
+    return `<option value="${cId}" data-prezzo="${c.prezzo_imponibile || 0}" data-anno="${c.anno_campagna}" data-giacenza="${c.giacenza_unita || 0}">${label}</option>`;
   }).join("");
 
   // Sconto default dal cliente selezionato
@@ -5436,16 +5799,11 @@ function aggiungiRigaVendita(rigaData = null) {
     tr.querySelector(".riga-conf").value = rigaData.confezionamento_id;
   }
 
-  // Quando si seleziona un confezionamento → auto-compila prezzo listino e anno campagna
+  // Quando si seleziona un confezionamento → auto-compila prezzo listino
   tr.querySelector(".riga-conf").addEventListener("change", (e) => {
     const opt = e.target.selectedOptions[0];
     const prezzo = parseFloat(opt?.dataset.prezzo || 0);
     tr.querySelector(".riga-prezzo-listino").value = prezzo.toFixed(2);
-    // Auto-imposta anno campagna dal confezionamento (prima riga vince)
-    const annoConf = opt?.dataset.anno;
-    if (annoConf) {
-      document.getElementById("vf-anno").value = annoConf;
-    }
     calcolaImportoRiga(tr);
   });
 
@@ -5672,15 +6030,26 @@ async function renderVenditaDettaglio(venditaId) {
 
     if (v.stato === "confermata") {
       document.getElementById("btn-spedisci-vendita").style.display = "";
-      document.getElementById("btn-spedisci-vendita").addEventListener("click", () => spedisciVendita(v.id, v.anno_campagna));
+      document.getElementById("btn-spedisci-vendita").addEventListener("click", () => spedisciVendita(v.id, v.anno_campagna, v));
 
       document.getElementById("btn-paga-vendita").style.display = "";
-      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id));
+      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id, v));
+
+      document.getElementById("btn-riporta-bozza").style.display = "";
+      document.getElementById("btn-riporta-bozza").addEventListener("click", () => riportaInBozza(v.id));
     }
 
     if (v.stato === "spedita") {
       document.getElementById("btn-paga-vendita").style.display = "";
-      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id));
+      document.getElementById("btn-paga-vendita").addEventListener("click", () => pagaVendita(v.id, v));
+
+      document.getElementById("btn-riporta-bozza").style.display = "";
+      document.getElementById("btn-riporta-bozza").addEventListener("click", () => riportaInBozza(v.id));
+    }
+
+    if (v.stato === "pagata") {
+      document.getElementById("btn-riporta-bozza").style.display = "";
+      document.getElementById("btn-riporta-bozza").addEventListener("click", () => riportaInBozza(v.id));
     }
 
     // PDF sempre disponibili per confermata+
@@ -5754,6 +6123,29 @@ function modificaDataVendita(id, dataAttuale) {
   });
 }
 
+// Riporta una vendita confermata/spedita in bozza (ricarica magazzino)
+function riportaInBozza(id) {
+  mostraConferma(
+    "Riportare la vendita in bozza? La fattura verra' annullata e il magazzino ricaricato. I dati di spedizione e pagamento verranno mantenuti per la ri-conferma.",
+    async () => {
+      try {
+        const res = await apiFetch(`${API_URL}/vendite/${id}/riporta-bozza`, { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json();
+          showToast(err.detail || "Errore nel riportare in bozza.", "error");
+          return;
+        }
+        showToast("Vendita riportata in bozza. Magazzino ricaricato.", "success");
+        _afterVenditaTransition(id);
+      } catch (e) {
+        console.error("Errore riporta in bozza:", e);
+      }
+    },
+    "Riporta in Bozza",
+    "btn-warning"
+  );
+}
+
 function confermaVendita(id) {
   mostraConferma("Confermare la vendita? Il magazzino verra' scalato automaticamente.", async () => {
     try {
@@ -5770,24 +6162,30 @@ function confermaVendita(id) {
   }, "Conferma e Scarica Magazzino", "btn-success");
 }
 
-function spedisciVendita(id, anno) {
+function spedisciVendita(id, anno, vendita) {
+  // Precompila con dati precedenti se disponibili (es. dopo riporta in bozza)
+  const prevData = vendita?.data_spedizione || "";
+  const prevDdt = vendita?.numero_ddt || "";
+  const prevNote = vendita?.note_spedizione || "";
+
   // Modal per inserire dati spedizione
   const overlay = document.createElement("div");
   overlay.className = "modal-confirm-overlay";
   overlay.innerHTML = `
     <div class="modal-confirm-box" style="max-width:450px;">
       <h5 class="mb-3">Segna come Spedita</h5>
+      ${prevDdt ? '<div class="alert alert-info small py-1 px-2 mb-2"><i class="fa-solid fa-info-circle me-1"></i>Dati precompilati dalla spedizione precedente</div>' : ''}
       <div class="mb-2">
         <label class="form-label form-label-sm">Data Spedizione *</label>
         <input type="text" id="modal-sped-data" class="form-control form-control-sm" required />
       </div>
       <div class="mb-2">
         <label class="form-label form-label-sm">Numero DDT (auto se vuoto)</label>
-        <input type="text" id="modal-sped-ddt" class="form-control form-control-sm" />
+        <input type="text" id="modal-sped-ddt" class="form-control form-control-sm" value="${prevDdt}" />
       </div>
       <div class="mb-3">
         <label class="form-label form-label-sm">Note Spedizione</label>
-        <textarea id="modal-sped-note" class="form-control form-control-sm" rows="2"></textarea>
+        <textarea id="modal-sped-note" class="form-control form-control-sm" rows="2">${prevNote}</textarea>
       </div>
       <div class="d-flex gap-2 justify-content-end">
         <button class="btn btn-outline-secondary btn-sm" id="modal-sped-annulla">Annulla</button>
@@ -5797,7 +6195,7 @@ function spedisciVendita(id, anno) {
   `;
   document.body.appendChild(overlay);
 
-  flatpickr("#modal-sped-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
+  flatpickr("#modal-sped-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: prevData || "today" });
 
   overlay.querySelector("#modal-sped-annulla").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#modal-sped-conferma").addEventListener("click", async () => {
@@ -5829,12 +6227,22 @@ function spedisciVendita(id, anno) {
   });
 }
 
-function pagaVendita(id) {
+function pagaVendita(id, vendita) {
+  // Precompila con dati precedenti se disponibili (es. dopo riporta in bozza)
+  const prevData = vendita?.data_pagamento || "";
+  const prevModalita = vendita?.modalita_pagamento || "";
+  const prevRif = vendita?.riferimento_pagamento || "";
+
+  const modalitaOptions = ["Bonifico", "Contanti", "Assegno", "Carta di credito", "Altro"]
+    .map(m => `<option value="${m}" ${m === prevModalita ? "selected" : ""}>${m}</option>`)
+    .join("");
+
   const overlay = document.createElement("div");
   overlay.className = "modal-confirm-overlay";
   overlay.innerHTML = `
     <div class="modal-confirm-box" style="max-width:450px;">
       <h5 class="mb-3">Registra Pagamento</h5>
+      ${prevModalita ? '<div class="alert alert-info small py-1 px-2 mb-2"><i class="fa-solid fa-info-circle me-1"></i>Dati precompilati dal pagamento precedente</div>' : ''}
       <div class="mb-2">
         <label class="form-label form-label-sm">Data Pagamento *</label>
         <input type="text" id="modal-pag-data" class="form-control form-control-sm" required />
@@ -5843,16 +6251,12 @@ function pagaVendita(id) {
         <label class="form-label form-label-sm">Modalita'</label>
         <select id="modal-pag-modalita" class="form-select form-select-sm">
           <option value="">— Seleziona —</option>
-          <option value="Bonifico">Bonifico</option>
-          <option value="Contanti">Contanti</option>
-          <option value="Assegno">Assegno</option>
-          <option value="Carta di credito">Carta di credito</option>
-          <option value="Altro">Altro</option>
+          ${modalitaOptions}
         </select>
       </div>
       <div class="mb-3">
         <label class="form-label form-label-sm">Riferimento</label>
-        <input type="text" id="modal-pag-rif" class="form-control form-control-sm" placeholder="N. bonifico, CRO, ecc." />
+        <input type="text" id="modal-pag-rif" class="form-control form-control-sm" placeholder="N. bonifico, CRO, ecc." value="${prevRif}" />
       </div>
       <div class="d-flex gap-2 justify-content-end">
         <button class="btn btn-outline-secondary btn-sm" id="modal-pag-annulla">Annulla</button>
@@ -5862,7 +6266,7 @@ function pagaVendita(id) {
   `;
   document.body.appendChild(overlay);
 
-  flatpickr("#modal-pag-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: "today" });
+  flatpickr("#modal-pag-data", { locale: "it", dateFormat: "Y-m-d", defaultDate: prevData || "today" });
 
   overlay.querySelector("#modal-pag-annulla").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#modal-pag-conferma").addEventListener("click", async () => {
@@ -6165,6 +6569,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-costi")?.addEventListener("click", () => {
     setActiveMenu("menu-costi");
     renderCosti();
+  });
+
+  document.getElementById("menu-campagne")?.addEventListener("click", () => {
+    setActiveMenu("menu-campagne");
+    renderCampagne();
   });
 
   document.getElementById("menu-magazzino")?.addEventListener("click", () => {

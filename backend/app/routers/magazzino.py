@@ -212,6 +212,155 @@ def giacenze(
 
 
 # ---------------------------------------------------------------------------
+# Giacenze raggruppate per campagna
+# ---------------------------------------------------------------------------
+
+@router.get("/giacenze-per-campagna")
+def giacenze_per_campagna(db: Session = Depends(get_db)):
+    """Giacenze raggruppate per anno_campagna — vista magazzino multi-campagna."""
+    q = db.query(
+        MovimentoMagazzino.anno_campagna,
+        MovimentoMagazzino.confezionamento_id,
+        func.sum(
+            case(
+                (MovimentoMagazzino.tipo_movimento == "carico", MovimentoMagazzino.quantita),
+                else_=0,
+            )
+        ).label("totale_carichi"),
+        func.sum(
+            case(
+                (MovimentoMagazzino.tipo_movimento == "scarico", MovimentoMagazzino.quantita),
+                else_=0,
+            )
+        ).label("totale_scarichi"),
+    ).group_by(MovimentoMagazzino.anno_campagna, MovimentoMagazzino.confezionamento_id)
+
+    rows = q.all()
+
+    # Batch load
+    conf_ids = list({r[1] for r in rows if r[1]})
+    conf_map = {}
+    if conf_ids:
+        for c in db.query(Confezionamento).filter(Confezionamento.id.in_(conf_ids)).all():
+            conf_map[c.id] = c
+
+    cont_ids = list({c.contenitore_id for c in conf_map.values() if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for c in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[c.id] = c
+
+    # Raggruppa per anno
+    per_anno = {}
+    totale_gen_unita = 0
+    totale_gen_litri = 0.0
+
+    for anno_camp, conf_id, carichi, scarichi in rows:
+        giacenza = int(carichi) - int(scarichi)
+        conf = conf_map.get(conf_id)
+        if not conf:
+            continue
+        cont = cont_map.get(conf.contenitore_id) if conf.contenitore_id else None
+        litri = round(giacenza * float(conf.capacita_litri), 2)
+
+        if anno_camp not in per_anno:
+            per_anno[anno_camp] = {"anno_campagna": anno_camp, "giacenze": [], "totale_unita": 0, "totale_litri": 0.0}
+
+        per_anno[anno_camp]["giacenze"].append({
+            "confezionamento_id": conf_id,
+            "confezionamento_codice": conf.codice,
+            "formato": conf.formato,
+            "capacita_litri": float(conf.capacita_litri),
+            "contenitore_descrizione": cont.descrizione if cont else None,
+            "totale_carichi": int(carichi),
+            "totale_scarichi": int(scarichi),
+            "giacenza_unita": giacenza,
+            "giacenza_litri": litri,
+        })
+        per_anno[anno_camp]["totale_unita"] += giacenza
+        per_anno[anno_camp]["totale_litri"] = round(per_anno[anno_camp]["totale_litri"] + litri, 2)
+        totale_gen_unita += giacenza
+        totale_gen_litri = round(totale_gen_litri + litri, 2)
+
+    campagne = sorted(per_anno.values(), key=lambda x: x["anno_campagna"], reverse=True)
+    return {
+        "campagne": campagne,
+        "totale_generale_unita": totale_gen_unita,
+        "totale_generale_litri": totale_gen_litri,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Confezionamenti disponibili (giacenza > 0) — per dropdown
+# ---------------------------------------------------------------------------
+
+@router.get("/confezionamenti-disponibili")
+def confezionamenti_disponibili(
+    anno: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Restituisce solo confezionamenti con giacenza > 0, con info giacenza."""
+    q = db.query(
+        MovimentoMagazzino.confezionamento_id,
+        func.sum(
+            case(
+                (MovimentoMagazzino.tipo_movimento == "carico", MovimentoMagazzino.quantita),
+                else_=0,
+            )
+        ).label("carichi"),
+        func.sum(
+            case(
+                (MovimentoMagazzino.tipo_movimento == "scarico", MovimentoMagazzino.quantita),
+                else_=0,
+            )
+        ).label("scarichi"),
+    ).group_by(MovimentoMagazzino.confezionamento_id)
+
+    rows = q.all()
+
+    # Filtra giacenza > 0
+    disponibili_ids = {}
+    for conf_id, carichi, scarichi in rows:
+        giac = int(carichi) - int(scarichi)
+        if giac > 0:
+            disponibili_ids[conf_id] = giac
+
+    if not disponibili_ids:
+        return []
+
+    # Batch load confezionamenti
+    confs = db.query(Confezionamento).filter(Confezionamento.id.in_(list(disponibili_ids.keys()))).all()
+
+    # Filtro anno se richiesto
+    if anno:
+        confs = [c for c in confs if c.anno_campagna == anno]
+
+    cont_ids = list({c.contenitore_id for c in confs if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for ct in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[ct.id] = ct
+
+    risultati = []
+    for c in confs:
+        giac = disponibili_ids.get(c.id, 0)
+        cont = cont_map.get(c.contenitore_id) if c.contenitore_id else None
+        risultati.append({
+            "confezionamento_id": c.id,
+            "codice": c.codice,
+            "formato": c.formato,
+            "anno_campagna": c.anno_campagna,
+            "giacenza_unita": giac,
+            "capacita_litri": float(c.capacita_litri),
+            "prezzo_imponibile": float(c.prezzo_imponibile) if c.prezzo_imponibile else None,
+            "contenitore_descrizione": cont.descrizione if cont else None,
+        })
+
+    risultati.sort(key=lambda x: (-x["anno_campagna"], x["codice"]))
+    return risultati
+
+
+# ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
 
@@ -274,6 +423,7 @@ def sincronizza_da_confezionamenti(
 
     confezionamenti = query.all()
     creati = 0
+    aggiornati = 0
 
     for conf in confezionamenti:
         # Verifica se esiste gia' un carico produzione per questo confezionamento
@@ -287,6 +437,11 @@ def sincronizza_da_confezionamenti(
             .first()
         )
         if esistente:
+            # Aggiorna quantita' se diversa dall'imbottigliamento
+            if esistente.quantita != conf.num_unita:
+                esistente.quantita = conf.num_unita
+                esistente.anno_campagna = conf.anno_campagna
+                aggiornati += 1
             continue
 
         mov = MovimentoMagazzino(
@@ -300,11 +455,18 @@ def sincronizza_da_confezionamenti(
             note=f"Carico automatico da imbottigliamento {conf.codice}",
         )
         db.add(mov)
-        db.flush()  # flush per generare codice sequenziale corretto
+        db.flush()
         creati += 1
 
     db.commit()
-    return {"sincronizzati": creati, "messaggio": f"{creati} confezionamenti caricati in magazzino."}
+    msg_parts = []
+    if creati:
+        msg_parts.append(f"{creati} nuovi carichi creati")
+    if aggiornati:
+        msg_parts.append(f"{aggiornati} carichi aggiornati")
+    if not msg_parts:
+        msg_parts.append("Magazzino gia' allineato")
+    return {"sincronizzati": creati + aggiornati, "messaggio": ". ".join(msg_parts) + "."}
 
 
 @router.get("/next-codice")
@@ -494,7 +656,7 @@ def update_movimento(mov_id: int, data: MovimentoMagUpdate, db: Session = Depend
         raise HTTPException(status_code=404, detail="Movimento non trovato.")
 
     # Non permettere modifica di movimenti di vendita (generati dal modulo Vendite)
-    if m.causale == "vendita":
+    if m.causale in ("vendita", "annullo_vendita"):
         raise HTTPException(status_code=400, detail="I movimenti di vendita non possono essere modificati da qui.")
 
     update_data = data.model_dump(exclude_unset=True)
@@ -529,7 +691,7 @@ def delete_movimento(mov_id: int, db: Session = Depends(get_db), current_user=De
         raise HTTPException(status_code=404, detail="Movimento non trovato.")
 
     # Non permettere eliminazione di movimenti di vendita
-    if m.causale == "vendita":
+    if m.causale in ("vendita", "annullo_vendita"):
         raise HTTPException(status_code=400, detail="I movimenti di vendita non possono essere eliminati da qui.")
 
     log_audit(db, user_id=current_user.id, username=current_user.username,

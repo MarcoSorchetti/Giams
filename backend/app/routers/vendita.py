@@ -472,19 +472,17 @@ def create_vendita(data: VenditaCreate, db: Session = Depends(get_db), current_u
     if db.query(Vendita).filter(Vendita.codice == codice).first():
         raise HTTPException(status_code=400, detail="Codice vendita gia' esistente.")
 
-    # Verifica confezionamenti e auto-deriva anno_campagna dal primo confezionamento
-    anno_da_conf = None
+    # Verifica confezionamenti esistenti
     for riga in data.righe:
         conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
         if not conf:
             raise HTTPException(status_code=400, detail=f"Confezionamento {riga.confezionamento_id} non trovato.")
-        if anno_da_conf is None:
-            anno_da_conf = conf.anno_campagna
 
     vendita_dict = data.model_dump(exclude={"righe"})
-    # anno_campagna = quello del confezionamento (campagna produttiva)
-    if anno_da_conf is not None:
-        vendita_dict["anno_campagna"] = anno_da_conf
+    # anno_campagna viene dal frontend (anno commerciale); default anno corrente
+    if not vendita_dict.get("anno_campagna"):
+        from datetime import date as _date
+        vendita_dict["anno_campagna"] = _date.today().year
     # Auto-genera codice con anno campagna corretto
     if not codice:
         codice = _next_codice_vendita(vendita_dict["anno_campagna"], db)
@@ -564,13 +562,10 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
         # Cancella righe esistenti e ricrea con ricalcolo sconto per riga
         db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
         imponibile_totale = 0.0
-        anno_da_conf = None
         for riga in righe_data:
             conf = db.query(Confezionamento).filter(Confezionamento.id == riga["confezionamento_id"]).first()
             if not conf:
                 raise HTTPException(status_code=400, detail=f"Confezionamento {riga['confezionamento_id']} non trovato.")
-            if anno_da_conf is None:
-                anno_da_conf = conf.anno_campagna
             prezzo_listino = float(riga.get("prezzo_listino") or 0) or (float(conf.prezzo_imponibile) if conf and conf.prezzo_imponibile else 0)
             sconto_pct = float(riga.get("sconto_percentuale", 0) or 0)
             prezzo_unitario = round(prezzo_listino * (1 - sconto_pct / 100), 2)
@@ -588,9 +583,6 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
             )
             db.add(r)
 
-        # Auto-deriva anno_campagna dal confezionamento
-        if anno_da_conf is not None:
-            v.anno_campagna = anno_da_conf
         # Ricalcolo totali header dalle righe
         v.imponibile = round(imponibile_totale, 2)
         v.sconto_percentuale = 0
@@ -648,6 +640,55 @@ def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = De
 # Transizioni di stato
 # ---------------------------------------------------------------------------
 
+@router.post("/{vendita_id}/riporta-bozza", response_model=VenditaOut)
+def riporta_bozza(vendita_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Riporta una vendita confermata, spedita o pagata in bozza, ricaricando il magazzino."""
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).with_for_update().first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendita non trovata.")
+
+    if v.stato not in ("confermata", "spedita", "pagata"):
+        raise HTTPException(status_code=400, detail="Solo le vendite confermate, spedite o pagate possono essere riportate in bozza.")
+
+    righe = db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).all()
+
+    # 1. Ricarica magazzino: crea movimenti di carico per annullare gli scarichi
+    for riga in righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+        anno_conf = conf.anno_campagna if conf else v.anno_campagna
+        mov = MovimentoMagazzino(
+            codice=_next_codice_movimento(anno_conf, db),
+            confezionamento_id=riga.confezionamento_id,
+            tipo_movimento="carico",
+            causale="annullo_vendita",
+            quantita=riga.quantita,
+            data_movimento=date.today(),
+            anno_campagna=anno_conf,
+            cliente_id=v.cliente_id,
+            riferimento_documento=v.codice,
+            note=f"Ricarico annullo vendita {v.codice} — {conf.codice if conf else ''}",
+        )
+        db.add(mov)
+        db.flush()
+
+    # 2. Salva dati precedenti nei campi "memoria" (prev_*)
+    # I dati DDT e pagamento restano sui campi originali come memoria
+    # Li azzeriamo solo: numero_fattura, data_conferma, stato
+
+    # 3. Libera numero fattura e riporta in bozza
+    numero_fattura_annullata = v.numero_fattura
+    v.numero_fattura = None
+    v.data_conferma = None
+    v.stato = "bozza"
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="riportato_in_bozza", entita="vendita", entita_id=v.id, codice_entita=v.codice,
+              dettagli=f"Fattura annullata: {numero_fattura_annullata or '—'}, magazzino ricaricato")
+    db.commit()
+    db.refresh(v)
+    return _build_vendita_out(v, db)
+
+
 @router.post("/{vendita_id}/conferma", response_model=VenditaOut)
 def conferma_vendita(vendita_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).with_for_update().first()
@@ -672,17 +713,18 @@ def conferma_vendita(vendita_id: int, db: Session = Depends(get_db), current_use
                 detail=f"Giacenza insufficiente per {codice_conf}: richieste {riga.quantita} unita', disponibili {giacenza}."
             )
 
-    # 2. Crea scarichi magazzino per ogni riga
+    # 2. Crea scarichi magazzino per ogni riga (anno_campagna dal confezionamento)
     for riga in righe:
         conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+        anno_conf = conf.anno_campagna if conf else v.anno_campagna
         mov = MovimentoMagazzino(
-            codice=_next_codice_movimento(v.anno_campagna, db),
+            codice=_next_codice_movimento(anno_conf, db),
             confezionamento_id=riga.confezionamento_id,
             tipo_movimento="scarico",
             causale="vendita",
             quantita=riga.quantita,
             data_movimento=v.data_vendita or date.today(),
-            anno_campagna=v.anno_campagna,
+            anno_campagna=anno_conf,
             cliente_id=v.cliente_id,
             riferimento_documento=v.codice,
             note=f"Scarico vendita {v.codice} — {conf.codice if conf else ''}",

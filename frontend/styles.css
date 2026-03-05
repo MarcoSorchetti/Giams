@@ -544,11 +544,12 @@ a:hover { color: var(--accent-hover); }
 }
 
 .form-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  font-size: 0.88rem;
+  color: #a8c8a8;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.35rem;
+  font-weight: 500;
 }
 
 .form-check-input:checked {
@@ -579,6 +580,18 @@ a:hover { color: var(--accent-hover); }
   padding: 0.6rem 0.75rem;
   font-size: 0.88rem;
   vertical-align: middle;
+}
+
+.table-dark tbody tr:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.table-dark tbody tr:nth-child(even) {
+  background: rgba(77, 124, 15, 0.03);
+}
+
+.table-dark tbody tr:hover {
+  background: rgba(77, 124, 15, 0.1) !important;
 }
 
 /* ---- Badges ---- */
