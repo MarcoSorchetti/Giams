@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from sqlalchemy import or_
@@ -13,6 +13,8 @@ from app.database import get_db
 from app.models.contenitore_sql import Contenitore
 from app.models.contenitore import ContenitoreCreate, ContenitoreUpdate, ContenitoreOut
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "../../../uploads")
 CONTENITORI_DIR = os.path.join(UPLOADS_DIR, "contenitori")
@@ -69,19 +71,22 @@ def get_contenitore(cont_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=ContenitoreOut, status_code=status.HTTP_201_CREATED)
-def create_contenitore(data: ContenitoreCreate, db: Session = Depends(get_db)):
+def create_contenitore(data: ContenitoreCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if db.query(Contenitore).filter(Contenitore.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice contenitore gia' esistente.")
 
     c = Contenitore(**data.model_dump())
     db.add(c)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="contenitore", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _to_out(c)
 
 
 @router.put("/{cont_id}", response_model=ContenitoreOut)
-def update_contenitore(cont_id: int, data: ContenitoreUpdate, db: Session = Depends(get_db)):
+def update_contenitore(cont_id: int, data: ContenitoreUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Contenitore).filter(Contenitore.id == cont_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Contenitore non trovato.")
@@ -95,13 +100,15 @@ def update_contenitore(cont_id: int, data: ContenitoreUpdate, db: Session = Depe
     for key, value in update_data.items():
         setattr(c, key, value)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="contenitore", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _to_out(c)
 
 
 @router.delete("/{cont_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_contenitore(cont_id: int, force: bool = Query(False), db: Session = Depends(get_db)):
+def delete_contenitore(cont_id: int, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     from app.models.confezionamento_sql import Confezionamento
 
     c = db.query(Contenitore).filter(Contenitore.id == cont_id).first()
@@ -128,6 +135,8 @@ def delete_contenitore(cont_id: int, force: bool = Query(False), db: Session = D
                                   "data": u.data_confezionamento.strftime("%d/%m/%Y")} for u in utilizzi],
         })
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="contenitore", entita_id=cont_id, codice_entita=c.codice)
     if c.foto:
         foto_path = os.path.join(UPLOADS_DIR, c.foto)
         if os.path.exists(foto_path):
@@ -163,3 +172,14 @@ def upload_foto(cont_id: int, file: UploadFile = File(...), db: Session = Depend
     db.commit()
     db.refresh(c)
     return _to_out(c)
+
+
+@router.get("/{cont_id}/foto/download")
+def download_foto(cont_id: int, db: Session = Depends(get_db)):
+    c = db.query(Contenitore).filter(Contenitore.id == cont_id).first()
+    if not c or not c.foto:
+        raise HTTPException(status_code=404, detail="Foto non trovata.")
+    filepath = os.path.join(UPLOADS_DIR, c.foto)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="File non trovato sul disco.")
+    return FileResponse(filepath)

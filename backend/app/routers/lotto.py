@@ -9,6 +9,8 @@ from app.models.lotto_sql import LottoOlio
 from app.models.raccolta_sql import Raccolta
 from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/lotti", tags=["lotti"])
@@ -20,6 +22,7 @@ def _next_codice_lotto(anno: int, db: Session) -> str:
         db.query(LottoOlio)
         .filter(LottoOlio.codice_lotto.like(f"O/%/{anno}"))
         .order_by(LottoOlio.codice_lotto.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -189,7 +192,7 @@ def get_lotto(lotto_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=LottoOut, status_code=status.HTTP_201_CREATED)
-def create_lotto(data: LottoCreate, db: Session = Depends(get_db)):
+def create_lotto(data: LottoCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Auto-genera codice se non fornito
     if not data.codice_lotto or data.codice_lotto.strip() == "":
         data.codice_lotto = _next_codice_lotto(data.anno_campagna, db)
@@ -211,13 +214,16 @@ def create_lotto(data: LottoCreate, db: Session = Depends(get_db)):
 
     l = LottoOlio(**lotto_data)
     db.add(l)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="lotto", entita_id=l.id, codice_entita=l.codice_lotto)
     db.commit()
     db.refresh(l)
     return _build_lotto_out(l, db)
 
 
 @router.put("/{lotto_id}", response_model=LottoOut)
-def update_lotto(lotto_id: int, data: LottoUpdate, db: Session = Depends(get_db)):
+def update_lotto(lotto_id: int, data: LottoUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     l = db.query(LottoOlio).filter(LottoOlio.id == lotto_id).first()
     if not l:
         raise HTTPException(status_code=404, detail="Lotto non trovato.")
@@ -234,15 +240,19 @@ def update_lotto(lotto_id: int, data: LottoUpdate, db: Session = Depends(get_db)
     if l.kg_olive and l.litri_olio:
         l.resa_percentuale = round(float(l.litri_olio) / float(l.kg_olive) * 100, 2)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="lotto", entita_id=l.id, codice_entita=l.codice_lotto)
     db.commit()
     db.refresh(l)
     return _build_lotto_out(l, db)
 
 
 @router.delete("/{lotto_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_lotto(lotto_id: int, db: Session = Depends(get_db)):
+def delete_lotto(lotto_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     l = db.query(LottoOlio).filter(LottoOlio.id == lotto_id).first()
     if not l:
         raise HTTPException(status_code=404, detail="Lotto non trovato.")
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="lotto", entita_id=lotto_id, codice_entita=l.codice_lotto)
     db.delete(l)
     db.commit()

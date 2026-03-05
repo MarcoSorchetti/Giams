@@ -11,6 +11,10 @@ from app.database import get_db
 from app.models.cliente_sql import Cliente
 from app.models.cliente import ClienteCreate, ClienteUpdate, ClienteOut
 from app.models.pagination import paginate, paginated_response
+from app.models.vendita_sql import Vendita
+from app.models.movimento_magazzino_sql import MovimentoMagazzino
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/clienti", tags=["clienti"])
@@ -74,7 +78,7 @@ def _to_out(c: Cliente) -> ClienteOut:
         consegna_provincia=c.consegna_provincia,
         email=c.email,
         telefono=c.telefono,
-        sconto_default=float(c.sconto_default) if c.sconto_default else None,
+        sconto_default=float(c.sconto_default) if c.sconto_default is not None else 0,
         attivo=c.attivo,
         note=c.note,
         denominazione=denominazione,
@@ -133,7 +137,7 @@ def export_clienti_csv(
             c.partita_iva or "", c.codice_fiscale or "",
             c.indirizzo or "", c.cap or "", c.citta or "", c.provincia or "",
             c.telefono or "", c.email or "",
-            f"{float(c.sconto_default):.1f}" if c.sconto_default else "0",
+            f"{float(c.sconto_default):.3f}" if c.sconto_default else "0",
             "Si" if c.attivo else "No", c.note or "",
         ])
 
@@ -189,7 +193,7 @@ def get_cliente(cliente_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
-def create_cliente(data: ClienteCreate, force: bool = Query(False), db: Session = Depends(get_db)):
+def create_cliente(data: ClienteCreate, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if db.query(Cliente).filter(Cliente.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice cliente gia' esistente.")
 
@@ -203,13 +207,16 @@ def create_cliente(data: ClienteCreate, force: bool = Query(False), db: Session 
 
     c = Cliente(**data.model_dump())
     db.add(c)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="cliente", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _to_out(c)
 
 
 @router.put("/{cliente_id}", response_model=ClienteOut)
-def update_cliente(cliente_id: int, data: ClienteUpdate, force: bool = Query(False), db: Session = Depends(get_db)):
+def update_cliente(cliente_id: int, data: ClienteUpdate, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cliente non trovato.")
@@ -231,15 +238,26 @@ def update_cliente(cliente_id: int, data: ClienteUpdate, force: bool = Query(Fal
     for key, value in update_data.items():
         setattr(c, key, value)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="cliente", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _to_out(c)
 
 
 @router.delete("/{cliente_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_cliente(cliente_id: int, db: Session = Depends(get_db)):
+def delete_cliente(cliente_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cliente non trovato.")
+
+    # Verifica dipendenze
+    if db.query(Vendita).filter(Vendita.cliente_id == cliente_id).first():
+        raise HTTPException(status_code=400, detail="Impossibile eliminare: il cliente ha vendite associate.")
+    if db.query(MovimentoMagazzino).filter(MovimentoMagazzino.cliente_id == cliente_id).first():
+        raise HTTPException(status_code=400, detail="Impossibile eliminare: il cliente ha movimenti magazzino associati.")
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="cliente", entita_id=cliente_id, codice_entita=c.codice)
     db.delete(c)
     db.commit()

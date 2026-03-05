@@ -26,6 +26,6 @@ class RaccoltaParcella(Base):
     __tablename__ = "raccolta_parcelle"
 
     id = Column(Integer, primary_key=True, index=True)
-    raccolta_id = Column(Integer, ForeignKey("raccolte.id", ondelete="CASCADE"), nullable=False)
-    parcella_id = Column(Integer, ForeignKey("parcelle.id", ondelete="CASCADE"), nullable=False)
+    raccolta_id = Column(Integer, ForeignKey("raccolte.id", ondelete="CASCADE"), nullable=False, index=True)
+    parcella_id = Column(Integer, ForeignKey("parcelle.id", ondelete="CASCADE"), nullable=False, index=True)
     kg_olive = Column(Numeric(8, 2), nullable=False)

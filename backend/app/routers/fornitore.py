@@ -11,6 +11,9 @@ from app.database import get_db
 from app.models.fornitore_sql import Fornitore
 from app.models.fornitore import FornitoreCreate, FornitoreUpdate, FornitoreOut
 from app.models.pagination import paginate, paginated_response
+from app.models.costo_sql import Costo
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/fornitori", tags=["fornitori"])
@@ -49,6 +52,7 @@ def _next_codice_fornitore(db: Session) -> str:
     last = (
         db.query(Fornitore)
         .order_by(Fornitore.codice.desc())
+        .with_for_update()
         .first()
     )
     if last and last.codice:
@@ -218,7 +222,7 @@ def get_fornitore(fornitore_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=FornitoreOut, status_code=status.HTTP_201_CREATED)
-def create_fornitore(data: FornitoreCreate, force: bool = Query(False), db: Session = Depends(get_db)):
+def create_fornitore(data: FornitoreCreate, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Auto-genera codice
     if not data.codice or data.codice.strip() == "":
         data.codice = _next_codice_fornitore(db)
@@ -236,13 +240,16 @@ def create_fornitore(data: FornitoreCreate, force: bool = Query(False), db: Sess
 
     f = Fornitore(**data.model_dump())
     db.add(f)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="fornitore", entita_id=f.id, codice_entita=f.codice)
     db.commit()
     db.refresh(f)
     return _to_out(f)
 
 
 @router.put("/{fornitore_id}", response_model=FornitoreOut)
-def update_fornitore(fornitore_id: int, data: FornitoreUpdate, force: bool = Query(False), db: Session = Depends(get_db)):
+def update_fornitore(fornitore_id: int, data: FornitoreUpdate, force: bool = Query(False), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     f = db.query(Fornitore).filter(Fornitore.id == fornitore_id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Fornitore non trovato.")
@@ -264,15 +271,24 @@ def update_fornitore(fornitore_id: int, data: FornitoreUpdate, force: bool = Que
     for key, value in update_data.items():
         setattr(f, key, value)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="fornitore", entita_id=f.id, codice_entita=f.codice)
     db.commit()
     db.refresh(f)
     return _to_out(f)
 
 
 @router.delete("/{fornitore_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_fornitore(fornitore_id: int, db: Session = Depends(get_db)):
+def delete_fornitore(fornitore_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     f = db.query(Fornitore).filter(Fornitore.id == fornitore_id).first()
     if not f:
         raise HTTPException(status_code=404, detail="Fornitore non trovato.")
+
+    # Verifica dipendenze
+    if db.query(Costo).filter(Costo.fornitore_id == fornitore_id).first():
+        raise HTTPException(status_code=400, detail="Impossibile eliminare: il fornitore ha costi associati.")
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="fornitore", entita_id=fornitore_id, codice_entita=f.codice)
     db.delete(f)
     db.commit()

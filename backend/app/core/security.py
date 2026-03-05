@@ -1,5 +1,6 @@
 import logging
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
@@ -15,10 +16,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-_DEFAULT_SECRET = "giams-dev-secret-change-in-production"
-SECRET_KEY = os.environ.get("SECRET_KEY", _DEFAULT_SECRET)
-if SECRET_KEY == _DEFAULT_SECRET:
-    logger.warning("ATTENZIONE: SECRET_KEY non configurata — uso chiave di sviluppo. Impostare SECRET_KEY in produzione!")
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    SECRET_KEY = secrets.token_hex(32)
+    logger.warning(
+        "SECRET_KEY non configurata — generata chiave random. "
+        "I token JWT verranno invalidati al prossimo riavvio. "
+        "Impostare SECRET_KEY come variabile d'ambiente per persistenza."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))  # 8 ore
 

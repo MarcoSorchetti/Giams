@@ -1,9 +1,69 @@
+import re
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
+# ---------------------------------------------------------------------------
+# Validator mixin — usato solo da Create e Update (NON da Out)
+# ---------------------------------------------------------------------------
+class _FornitoreValidators:
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v):
+        if v and v.strip():
+            if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", v.strip()):
+                raise ValueError("Formato email non valido")
+        return v
+
+    @field_validator("pec")
+    @classmethod
+    def validate_pec(cls, v):
+        if v and v.strip():
+            if not re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", v.strip()):
+                raise ValueError("Formato PEC non valido")
+        return v
+
+    @field_validator("partita_iva")
+    @classmethod
+    def validate_partita_iva(cls, v):
+        if v and v.strip():
+            cleaned = v.strip()
+            if not re.match(r"^\d{11}$", cleaned):
+                raise ValueError("Partita IVA deve essere di 11 cifre numeriche")
+        return v
+
+    @field_validator("codice_fiscale")
+    @classmethod
+    def validate_codice_fiscale(cls, v):
+        if v and v.strip():
+            cleaned = v.strip().upper()
+            if not re.match(r"^[A-Z0-9]{16}$", cleaned):
+                raise ValueError("Codice Fiscale deve essere di 16 caratteri alfanumerici")
+        return v
+
+    @field_validator("cap")
+    @classmethod
+    def validate_cap(cls, v):
+        if v and v.strip():
+            if not re.match(r"^\d{5}$", v.strip()):
+                raise ValueError("CAP deve essere di 5 cifre numeriche")
+        return v
+
+    @field_validator("iban")
+    @classmethod
+    def validate_iban(cls, v):
+        if v and v.strip():
+            cleaned = v.strip().upper().replace(" ", "")
+            if not re.match(r"^[A-Z]{2}\d{2}[A-Z0-9]{1,30}$", cleaned):
+                raise ValueError("Formato IBAN non valido (es. IT60X0542811101000000123456)")
+        return v
+
+
+# ---------------------------------------------------------------------------
+# Base — campi condivisi (senza validator, usato anche da Out)
+# ---------------------------------------------------------------------------
 class FornitoreBase(BaseModel):
     codice: Optional[str] = Field(None, max_length=20)
     tipo_fornitore: str = Field(..., max_length=10)
@@ -43,11 +103,11 @@ class FornitoreBase(BaseModel):
     note: Optional[str] = None
 
 
-class FornitoreCreate(FornitoreBase):
+class FornitoreCreate(_FornitoreValidators, FornitoreBase):
     pass
 
 
-class FornitoreUpdate(BaseModel):
+class FornitoreUpdate(_FornitoreValidators, BaseModel):
     codice: Optional[str] = Field(None, max_length=20)
     tipo_fornitore: Optional[str] = Field(None, max_length=10)
 

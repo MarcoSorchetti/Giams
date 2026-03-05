@@ -25,7 +25,8 @@ class CostoBase(BaseModel):
 
 
 class CostoCreate(CostoBase):
-    pass
+    imponibile: float = Field(..., ge=0)
+    iva_percentuale: float = Field(22.0, ge=0, le=100)
 
 
 class CostoUpdate(BaseModel):
@@ -36,8 +37,8 @@ class CostoUpdate(BaseModel):
     data_fattura: Optional[date] = None
     numero_fattura: Optional[str] = Field(None, max_length=50)
     tipo_documento: Optional[str] = Field(None, max_length=20)
-    imponibile: Optional[float] = None
-    iva_percentuale: Optional[float] = None
+    imponibile: Optional[float] = Field(None, ge=0)
+    iva_percentuale: Optional[float] = Field(None, ge=0, le=100)
     importo_iva: Optional[float] = None
     importo_totale: Optional[float] = None
     data_pagamento: Optional[date] = None

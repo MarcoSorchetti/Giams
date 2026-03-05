@@ -14,8 +14,10 @@ class Confezionamento(Base):
     capacita_litri = Column(Numeric(5, 2), nullable=False)
     num_unita = Column(Integer, nullable=False)
     litri_totali = Column(Numeric(8, 2), nullable=False)
-    costo_totale = Column(Numeric(8, 2), nullable=True)
-    prezzo_unitario = Column(Numeric(10, 2), nullable=True)
+    prezzo_imponibile = Column(Numeric(10, 2), nullable=True)
+    iva_percentuale = Column(Numeric(5, 2), nullable=False, server_default="4")
+    importo_iva = Column(Numeric(10, 2), nullable=True)
+    prezzo_listino = Column(Numeric(10, 2), nullable=True)
     note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=True, onupdate=func.now())
@@ -25,6 +27,6 @@ class ConfezionamentoLotto(Base):
     __tablename__ = "confezionamento_lotti"
 
     id = Column(Integer, primary_key=True, index=True)
-    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="CASCADE"), nullable=False)
-    lotto_id = Column(Integer, ForeignKey("lotti_olio.id", ondelete="CASCADE"), nullable=False)
+    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="CASCADE"), nullable=False, index=True)
+    lotto_id = Column(Integer, ForeignKey("lotti_olio.id", ondelete="CASCADE"), nullable=False, index=True)
     litri_utilizzati = Column(Numeric(8, 2), nullable=False)

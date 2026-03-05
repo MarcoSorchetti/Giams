@@ -2,7 +2,7 @@
 ================================================================================
 GIAMS — Green Integrated Agricultural Management System
 File: main.py
-Versione: 1.0.0
+Versione: 1.7.9
 Autore: Team Gia.Mar Srl
 Responsabile Progetto: Marco Sorchetti
 ================================================================================
@@ -29,6 +29,7 @@ from app.routers.categoria_costo import router as categoria_costo_router
 from app.routers.costo import router as costo_router
 from app.routers.magazzino import router as magazzino_router
 from app.routers.vendita import router as vendita_router
+from app.routers.audit import router as audit_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -40,7 +41,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="1.4.38",
+    version="1.7.9",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 
@@ -79,6 +80,7 @@ app.include_router(categoria_costo_router, prefix="/api", dependencies=_protecte
 app.include_router(costo_router, prefix="/api", dependencies=_protected)
 app.include_router(magazzino_router, prefix="/api", dependencies=_protected)
 app.include_router(vendita_router, prefix="/api", dependencies=_protected)
+app.include_router(audit_router, prefix="/api", dependencies=_protected)
 
 
 # ------------------------------------------------------------------------------
@@ -107,9 +109,9 @@ def health_check():
 # ------------------------------------------------------------------------------
 # Servire Frontend come file statici
 # ------------------------------------------------------------------------------
+# Upload directory (creata ma NON servita come static — accesso via endpoint protetti)
 uploads_dir = os.path.join(os.path.dirname(__file__), "../../uploads")
 os.makedirs(uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 frontend_dir = os.path.join(os.path.dirname(__file__), "../../frontend")
 if os.path.isdir(frontend_dir):

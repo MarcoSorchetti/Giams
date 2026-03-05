@@ -6,7 +6,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -22,6 +22,8 @@ from app.models.raccolta_sql import Raccolta
 from app.models.lotto_sql import LottoOlio
 from app.models.costo import CostoCreate, CostoUpdate, CostoOut
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/costi", tags=["costi"])
@@ -33,6 +35,7 @@ def _next_codice_costo(anno: int, db: Session) -> str:
         db.query(Costo)
         .filter(Costo.codice.like(f"C/%/{anno}"))
         .order_by(Costo.codice.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -128,6 +131,89 @@ def costi_stats(
         "totale_da_pagare": float(da_pagare),
         "totale_campagna": float(totale_campagna),
         "totale_strutturale": float(totale_strutturale),
+    }
+
+
+@router.get("/stats/per-categoria")
+def costi_per_categoria(
+    anno: int = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Dettaglio costi per categoria con ammortamento strutturale."""
+    categorie = []
+
+    # Raccolta (voce campagna)
+    costo_raccolta = float(
+        db.query(func.sum(Raccolta.costo_totale_raccolta))
+        .filter(Raccolta.anno_campagna == anno)
+        .scalar() or 0
+    )
+    if costo_raccolta > 0:
+        categorie.append({"nome": "Raccolta", "tipo": "campagna", "importo": round(costo_raccolta, 2)})
+
+    # Molitura (voce campagna)
+    costo_molitura = float(
+        db.query(func.sum(LottoOlio.costo_totale_molitura))
+        .filter(LottoOlio.anno_campagna == anno)
+        .scalar() or 0
+    )
+    if costo_molitura > 0:
+        categorie.append({"nome": "Molitura", "tipo": "campagna", "importo": round(costo_molitura, 2)})
+
+    # Costi campagna per categoria
+    camp_rows = (
+        db.query(CategoriaCosto.nome, func.sum(Costo.importo_totale))
+        .join(Costo, Costo.categoria_id == CategoriaCosto.id)
+        .filter(Costo.anno_campagna == anno, CategoriaCosto.tipo_costo == "campagna")
+        .group_by(CategoriaCosto.nome)
+        .all()
+    )
+    for nome, tot in camp_rows:
+        categorie.append({"nome": nome, "tipo": "campagna", "importo": round(float(tot), 2)})
+
+    # Costi strutturali con ammortamento (competenza per anno)
+    strutturali = (
+        db.query(Costo, CategoriaCosto.nome.label("cat_nome"))
+        .join(CategoriaCosto, Costo.categoria_id == CategoriaCosto.id)
+        .filter(CategoriaCosto.tipo_costo == "strutturale")
+        .all()
+    )
+    strut_map = {}
+    for s, cat_nome in strutturali:
+        competenza = 0.0
+        if s.anni_ammortamento and s.anni_ammortamento > 0:
+            anno_inizio = s.anno_campagna
+            anno_fine = anno_inizio + s.anni_ammortamento - 1
+            if anno_inizio <= anno <= anno_fine:
+                competenza = float(s.importo_totale) / s.anni_ammortamento
+        elif s.anno_campagna == anno:
+            competenza = float(s.importo_totale)
+        if competenza > 0:
+            if cat_nome not in strut_map:
+                strut_map[cat_nome] = 0.0
+            strut_map[cat_nome] += competenza
+
+    for nome, importo in strut_map.items():
+        categorie.append({"nome": nome, "tipo": "strutturale", "importo": round(importo, 2)})
+
+    # Totali
+    tot_camp = sum(c["importo"] for c in categorie if c["tipo"] == "campagna")
+    tot_strut = sum(c["importo"] for c in categorie if c["tipo"] == "strutturale")
+    totale = tot_camp + tot_strut
+
+    # Percentuali
+    for c in categorie:
+        c["percentuale"] = round(c["importo"] / totale * 100, 1) if totale > 0 else 0
+
+    # Ordina per importo decrescente
+    categorie.sort(key=lambda x: x["importo"], reverse=True)
+
+    return {
+        "anno": anno,
+        "costi_campagna": round(tot_camp, 2),
+        "costi_strutturali": round(tot_strut, 2),
+        "totale": round(totale, 2),
+        "categorie": categorie,
     }
 
 
@@ -383,7 +469,7 @@ def get_costo(costo_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=CostoOut, status_code=status.HTTP_201_CREATED)
-def create_costo(data: CostoCreate, db: Session = Depends(get_db)):
+def create_costo(data: CostoCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Auto-genera codice
     if not data.codice or data.codice.strip() == "":
         data.codice = _next_codice_costo(data.anno_campagna, db)
@@ -411,13 +497,16 @@ def create_costo(data: CostoCreate, db: Session = Depends(get_db)):
 
     c = Costo(**costo_data)
     db.add(c)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="costo", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _build_costo_out(c, db)
 
 
 @router.put("/{costo_id}", response_model=CostoOut)
-def update_costo(costo_id: int, data: CostoUpdate, db: Session = Depends(get_db)):
+def update_costo(costo_id: int, data: CostoUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Costo).filter(Costo.id == costo_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Costo non trovato.")
@@ -449,13 +538,15 @@ def update_costo(costo_id: int, data: CostoUpdate, db: Session = Depends(get_db)
     c.importo_iva = round(imponibile * iva_pct / 100, 2)
     c.importo_totale = round(imponibile + float(c.importo_iva), 2)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="costo", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _build_costo_out(c, db)
 
 
 @router.delete("/{costo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_costo(costo_id: int, db: Session = Depends(get_db)):
+def delete_costo(costo_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Costo).filter(Costo.id == costo_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Costo non trovato.")
@@ -464,6 +555,8 @@ def delete_costo(costo_id: int, db: Session = Depends(get_db)):
         old_path = os.path.join(UPLOADS_DIR, c.documento)
         if os.path.exists(old_path):
             os.remove(old_path)
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="costo", entita_id=costo_id, codice_entita=c.codice)
     db.delete(c)
     db.commit()
 
@@ -513,3 +606,14 @@ def delete_documento(costo_id: int, db: Session = Depends(get_db)):
         db.refresh(c)
 
     return _build_costo_out(c, db)
+
+
+@router.get("/{costo_id}/documento/download")
+def download_documento(costo_id: int, db: Session = Depends(get_db)):
+    c = db.query(Costo).filter(Costo.id == costo_id).first()
+    if not c or not c.documento:
+        raise HTTPException(status_code=404, detail="Documento non trovato.")
+    filepath = os.path.join(UPLOADS_DIR, c.documento)
+    if not os.path.isfile(filepath):
+        raise HTTPException(status_code=404, detail="File non trovato sul disco.")
+    return FileResponse(filepath)

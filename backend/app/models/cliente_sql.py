@@ -41,7 +41,7 @@ class Cliente(Base):
     telefono = Column(String(20), nullable=True)
 
     # Commerciale
-    sconto_default = Column(Numeric(5, 2), nullable=True)
+    sconto_default = Column(Numeric(6, 3), nullable=False, server_default="0")
 
     attivo = Column(Boolean, nullable=False, server_default="true")
     note = Column(Text, nullable=True)

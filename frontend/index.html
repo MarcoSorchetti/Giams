@@ -25,7 +25,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v1.4.38</div>
+        <div class="app-version">v1.7.9</div>
       </div>
 
       <nav class="nav flex-column gap-2">
@@ -71,6 +71,10 @@
 
         <button id="menu-utenti" class="btn btn-dark text-start sidebar-link" type="button">
           <i class="fa-solid fa-user-gear me-2"></i> Gestione Utenti
+        </button>
+
+        <button id="menu-audit" class="btn btn-dark text-start sidebar-link" type="button">
+          <i class="fa-solid fa-clock-rotate-left me-2"></i> Log Attivita'
         </button>
       </nav>
 
@@ -874,7 +878,7 @@
       </button>
     </div>
 
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-3">
       <div class="col">
         <div class="stat-card">
           <div class="stat-value" id="stat-conf-totale">0</div>
@@ -895,8 +899,14 @@
       </div>
       <div class="col">
         <div class="stat-card">
-          <div class="stat-value" id="stat-conf-costo">0</div>
-          <div class="stat-label">Costo Totale</div>
+          <div class="stat-value" id="stat-conf-val-prod">&euro; 0</div>
+          <div class="stat-label">Valore Produzione</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-conf-val-giac">&euro; 0</div>
+          <div class="stat-label">Valore Giacenza</div>
         </div>
       </div>
     </div>
@@ -936,8 +946,11 @@
               <th>Unita'</th>
               <th>Litri Tot.</th>
               <th>Lotti</th>
-              <th>Costo</th>
-              <th class="text-end">Prezzo Listino</th>
+              <th class="text-end">Listino Ivato</th>
+              <th class="text-end">Imponibile</th>
+              <th class="text-end">Val. Prod.</th>
+              <th class="text-end">Giacenza</th>
+              <th class="text-end">Val. Giacenza</th>
               <th>Azioni</th>
             </tr>
           </thead>
@@ -993,13 +1006,17 @@
                 <label class="form-label">Litri Totali</label>
                 <input type="number" step="0.01" class="form-control form-control-sm" id="cf-litri-totali" readonly />
               </div>
-              <div class="col-6">
-                <label class="form-label">Costo Totale (&euro;)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm" id="cf-costo" />
+              <div class="col-4">
+                <label class="form-label">Prezzo Listino Ivato (&euro;)</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="cf-prezzo-listino" placeholder="0.00" />
               </div>
-              <div class="col-6">
-                <label class="form-label">Prezzo Listino (&euro;/unita')</label>
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm" id="cf-prezzo-unitario" placeholder="0.00" />
+              <div class="col-4">
+                <label class="form-label">IVA (4%)</label>
+                <input type="text" class="form-control form-control-sm" id="cf-importo-iva" readonly />
+              </div>
+              <div class="col-4">
+                <label class="form-label">Imponibile (&euro;)</label>
+                <input type="text" class="form-control form-control-sm" id="cf-prezzo-imponibile" readonly />
               </div>
               <div class="col-12">
                 <label class="form-label">Note</label>
@@ -1362,7 +1379,7 @@
             <div class="row g-3">
               <div class="col-6">
                 <label class="form-label">Sconto Default (%)</label>
-                <input type="number" step="0.01" class="form-control form-control-sm" id="cli-sconto" min="0" max="100" />
+                <input type="number" step="0.001" class="form-control form-control-sm" id="cli-sconto" min="0" max="100" value="0" />
               </div>
               <div class="col-6 d-flex align-items-end">
                 <div class="form-check">
@@ -2407,7 +2424,13 @@
         <div class="stat-card text-center p-3"><div class="stat-value" id="stat-vendite-totale">0</div><div class="stat-label">Vendite</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-success" id="stat-vendite-fatturato">€ 0</div><div class="stat-label">Fatturato</div></div>
+        <div class="stat-card text-center p-3"><div class="stat-value" id="stat-vendite-imponibile">€ 0</div><div class="stat-label">Imponibile</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-warning" id="stat-vendite-iva">€ 0</div><div class="stat-label">IVA</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card text-center p-3"><div class="stat-value text-success" id="stat-vendite-fatturato">€ 0</div><div class="stat-label">Totale</div></div>
       </div>
       <div class="col-sm-6 col-md">
         <div class="stat-card text-center p-3"><div class="stat-value text-warning" id="stat-vendite-bozze">0</div><div class="stat-label">Bozze</div></div>
@@ -2550,10 +2573,12 @@
             <table class="table table-dark align-middle mb-0">
               <thead>
                 <tr>
-                  <th style="width:35%">Prodotto</th>
-                  <th style="width:15%" class="text-center">Qty</th>
-                  <th style="width:18%" class="text-end">Prezzo Unit.</th>
-                  <th style="width:18%" class="text-end">Importo</th>
+                  <th style="width:25%">Prodotto</th>
+                  <th style="width:8%" class="text-center">Qty</th>
+                  <th style="width:14%" class="text-end">Prezzo Listino</th>
+                  <th style="width:10%" class="text-end">Sconto %</th>
+                  <th style="width:14%" class="text-end">Prezzo Unit.</th>
+                  <th style="width:15%" class="text-end">Importo</th>
                   <th style="width:14%" class="text-center"></th>
                 </tr>
               </thead>
@@ -2573,27 +2598,23 @@
             </div>
             <div class="col-md-8">
               <div class="row g-2">
-                <div class="col-md-4">
+                <div class="col">
                   <label class="form-label">Imponibile</label>
                   <input type="text" id="vf-imponibile" class="form-control text-end" readonly />
                 </div>
-                <div class="col-md-4">
-                  <label class="form-label">Sconto %</label>
-                  <input type="number" id="vf-sconto" class="form-control text-end" step="0.1" min="0" max="100" value="0" />
-                </div>
-                <div class="col-md-4">
-                  <label class="form-label">Imponibile Scontato</label>
-                  <input type="text" id="vf-imponibile-scontato" class="form-control text-end" readonly />
-                </div>
-                <div class="col-md-4">
+                <div class="col">
                   <label class="form-label">IVA %</label>
                   <input type="number" id="vf-iva" class="form-control text-end" step="1" min="0" value="4" />
                 </div>
-                <div class="col-md-4">
+                <div class="col">
                   <label class="form-label">Importo IVA</label>
                   <input type="text" id="vf-importo-iva" class="form-control text-end" readonly />
                 </div>
-                <div class="col-md-4">
+                <div class="col">
+                  <label class="form-label">Arrotond.</label>
+                  <input type="number" id="vf-arrotondamento" class="form-control text-end" step="0.01" value="0" />
+                </div>
+                <div class="col">
                   <label class="form-label fw-bold">TOTALE</label>
                   <input type="text" id="vf-totale" class="form-control text-end fw-bold" readonly />
                 </div>
@@ -2663,7 +2684,9 @@
                 <th>Prodotto</th>
                 <th>Contenitore</th>
                 <th class="text-center">Qty</th>
-                <th class="text-end">Prezzo Unit.</th>
+                <th class="text-end">P. Listino</th>
+                <th class="text-end">Sconto %</th>
+                <th class="text-end">P. Unit.</th>
                 <th class="text-end">Importo</th>
               </tr>
             </thead>
@@ -2680,9 +2703,8 @@
           <div class="col-md-5">
             <table class="table table-dark table-sm mb-0">
               <tr><td>Imponibile</td><td class="text-end" id="vd-imponibile"></td></tr>
-              <tr id="vd-sconto-row"><td>Sconto (<span id="vd-sconto-pct"></span>%)</td><td class="text-end" id="vd-sconto-val"></td></tr>
-              <tr><td>Imponibile Scontato</td><td class="text-end" id="vd-imponibile-scontato"></td></tr>
               <tr><td>IVA (<span id="vd-iva-pct"></span>%)</td><td class="text-end" id="vd-importo-iva"></td></tr>
+              <tr id="vd-arrotondamento-row"><td>Arrotondamento</td><td class="text-end" id="vd-arrotondamento"></td></tr>
               <tr class="fw-bold"><td>TOTALE</td><td class="text-end" id="vd-totale"></td></tr>
             </table>
           </div>
@@ -2723,10 +2745,10 @@
         <i class="fa-solid fa-money-bill me-1"></i> Registra Pagamento
       </button>
       <button class="btn btn-outline-secondary" id="btn-download-fattura" style="display:none;">
-        <i class="fa-solid fa-file-pdf me-1"></i> Scarica Fattura PDF
+        <i class="fa-solid fa-file-pdf me-1"></i> Visualizza Fattura
       </button>
       <button class="btn btn-outline-secondary" id="btn-download-ddt" style="display:none;">
-        <i class="fa-solid fa-file-pdf me-1"></i> Scarica DDT PDF
+        <i class="fa-solid fa-file-pdf me-1"></i> Visualizza DDT
       </button>
       <button class="btn btn-warning" id="btn-modifica-vendita" style="display:none;">
         <i class="fa-solid fa-pen me-1"></i> Modifica
@@ -2803,7 +2825,7 @@
             <div class="col-lg-7">
               <div class="table-responsive">
                 <table class="table table-sm table-dark dashboard-table" id="dash-table-costo-litro">
-                  <thead><tr><th>Anno</th><th class="text-end">Costo Camp.</th><th class="text-end">Litri Prod.</th><th class="text-end">Costo/Lt</th><th class="text-end">Prezzo Vend./Lt</th><th class="text-end">Margine/Lt</th></tr></thead>
+                  <thead><tr><th>Anno</th><th class="text-end">Costo Tot.</th><th class="text-end">Litri Prod.</th><th class="text-end">Costo/Lt</th><th class="text-end">Prezzo Vend./Lt</th><th class="text-end">Margine/Lt</th></tr></thead>
                   <tbody></tbody>
                 </table>
               </div>
@@ -2827,6 +2849,53 @@
             </div>
             <div class="col-lg-5">
               <div class="chart-container"><canvas id="chart-fatturato"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-coins me-2"></i>Riepilogo Costi per Anno</h5>
+          <div class="table-responsive">
+            <table class="table table-sm table-dark dashboard-table" id="dash-table-riepilogo-costi">
+              <thead><tr><th>Anno</th><th class="text-end">Costi Campagna</th><th class="text-end">Costi Strutturali</th><th class="text-end">Totale</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="dashboard-section mb-4">
+          <h5><i class="fa-solid fa-chart-pie me-2"></i>Dettaglio Costi per Categoria <span class="text-muted small" id="dash-dettaglio-costi-anno"></span></h5>
+          <div class="row mb-3">
+            <div class="col-md-4">
+              <div class="stat-card">
+                <div class="stat-label">Costi Campagna</div>
+                <div class="stat-value" id="dash-det-costi-campagna">&euro; 0</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-card">
+                <div class="stat-label">Costi Strutturali (competenza)</div>
+                <div class="stat-value" id="dash-det-costi-strutturali">&euro; 0</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-card">
+                <div class="stat-label">Totale Costi</div>
+                <div class="stat-value" id="dash-det-costi-totale">&euro; 0</div>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-lg-7">
+              <div class="table-responsive">
+                <table class="table table-sm table-dark dashboard-table" id="dash-table-dettaglio-costi">
+                  <thead><tr><th>Categoria</th><th>Tipo</th><th class="text-end">Importo</th><th class="text-end">%</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="col-lg-5">
+              <div class="chart-container"><canvas id="chart-dettaglio-costi"></canvas></div>
             </div>
           </div>
         </div>
@@ -2895,6 +2964,34 @@
     <div class="loading-spinner">
       <div class="spinner-border text-success" role="status"></div>
       <div class="loading-text mt-2">Caricamento...</div>
+    </div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <!-- Modal PDF Viewer -->
+  <div class="modal fade" id="modal-pdf-viewer" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width:90vw;">
+      <div class="modal-content bg-dark">
+        <div class="modal-header border-secondary py-2">
+          <h6 class="modal-title" id="modal-pdf-title">Documento</h6>
+          <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-sm btn-outline-light" id="btn-pdf-stampa" title="Stampa">
+              <i class="fa-solid fa-print me-1"></i> Stampa
+            </button>
+            <button class="btn btn-sm btn-accent" id="btn-pdf-download" title="Download">
+              <i class="fa-solid fa-download me-1"></i> Scarica
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+              <i class="fa-solid fa-times"></i>
+            </button>
+          </div>
+        </div>
+        <div class="modal-body p-0">
+          <iframe id="pdf-viewer-iframe" style="width:100%;height:80vh;border:none;background:#1a1a1a;"></iframe>
+        </div>
+      </div>
     </div>
   </div>
 

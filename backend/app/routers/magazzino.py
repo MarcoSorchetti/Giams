@@ -16,6 +16,8 @@ from app.models.movimento_magazzino import (
     MovimentoMagCreate, MovimentoMagUpdate, MovimentoMagOut,
 )
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/magazzino", tags=["magazzino"])
@@ -36,6 +38,7 @@ def _next_codice_movimento(anno: int, db: Session) -> str:
         db.query(MovimentoMagazzino)
         .filter(MovimentoMagazzino.codice.like(f"MV/%/{anno}"))
         .order_by(MovimentoMagazzino.codice.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -426,7 +429,7 @@ def get_movimento(mov_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=MovimentoMagOut, status_code=status.HTTP_201_CREATED)
-def create_movimento(data: MovimentoMagCreate, db: Session = Depends(get_db)):
+def create_movimento(data: MovimentoMagCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Validazioni
     if data.tipo_movimento not in TIPI_VALIDI:
         raise HTTPException(status_code=400, detail=f"Tipo movimento non valido. Usa: {', '.join(TIPI_VALIDI)}")
@@ -468,13 +471,17 @@ def create_movimento(data: MovimentoMagCreate, db: Session = Depends(get_db)):
 
     m = MovimentoMagazzino(**mov_data)
     db.add(m)
+    db.flush()
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="movimento", entita_id=m.id, codice_entita=m.codice,
+              dettagli=f"{m.tipo_movimento} {m.causale}")
     db.commit()
     db.refresh(m)
     return _build_movimento_out(m, db)
 
 
 @router.put("/{mov_id}", response_model=MovimentoMagOut)
-def update_movimento(mov_id: int, data: MovimentoMagUpdate, db: Session = Depends(get_db)):
+def update_movimento(mov_id: int, data: MovimentoMagUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     m = db.query(MovimentoMagazzino).filter(MovimentoMagazzino.id == mov_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Movimento non trovato.")
@@ -499,13 +506,15 @@ def update_movimento(mov_id: int, data: MovimentoMagUpdate, db: Session = Depend
     for key, value in update_data.items():
         setattr(m, key, value)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="movimento", entita_id=m.id, codice_entita=m.codice)
     db.commit()
     db.refresh(m)
     return _build_movimento_out(m, db)
 
 
 @router.delete("/{mov_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_movimento(mov_id: int, db: Session = Depends(get_db)):
+def delete_movimento(mov_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     m = db.query(MovimentoMagazzino).filter(MovimentoMagazzino.id == mov_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Movimento non trovato.")
@@ -514,6 +523,8 @@ def delete_movimento(mov_id: int, db: Session = Depends(get_db)):
     if m.causale == "vendita":
         raise HTTPException(status_code=400, detail="I movimenti di vendita non possono essere eliminati da qui.")
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="movimento", entita_id=mov_id, codice_entita=m.codice)
     db.delete(m)
     db.commit()
 

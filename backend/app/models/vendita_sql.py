@@ -23,6 +23,7 @@ class Vendita(Base):
     imponibile_scontato = Column(Numeric(12, 2), nullable=False, server_default="0")
     iva_percentuale = Column(Numeric(5, 2), nullable=False, server_default="4")
     importo_iva = Column(Numeric(12, 2), nullable=False, server_default="0")
+    arrotondamento = Column(Numeric(10, 2), nullable=False, server_default="0")
     importo_totale = Column(Numeric(12, 2), nullable=False, server_default="0")
 
     # Fattura interna (generata alla conferma)
@@ -52,8 +53,10 @@ class VenditaRiga(Base):
     __tablename__ = "vendita_righe"
 
     id = Column(Integer, primary_key=True, index=True)
-    vendita_id = Column(Integer, ForeignKey("vendite.id", ondelete="CASCADE"), nullable=False)
-    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="CASCADE"), nullable=False)
+    vendita_id = Column(Integer, ForeignKey("vendite.id", ondelete="CASCADE"), nullable=False, index=True)
+    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="CASCADE"), nullable=False, index=True)
     quantita = Column(Integer, nullable=False)
+    prezzo_listino = Column(Numeric(10, 2), nullable=True)
+    sconto_percentuale = Column(Numeric(6, 3), nullable=False, server_default="0")
     prezzo_unitario = Column(Numeric(10, 2), nullable=False)
     importo_riga = Column(Numeric(12, 2), nullable=False)

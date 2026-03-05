@@ -12,6 +12,8 @@ from app.models.raccolta import (
     RaccoltaCreate, RaccoltaUpdate, RaccoltaOut, RaccoltaParcellaOut,
 )
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/raccolte", tags=["raccolte"])
@@ -25,6 +27,7 @@ def _next_codice_raccolta(anno: int, db: Session) -> str:
         db.query(Raccolta)
         .filter(Raccolta.codice.like(f"R/%/{anno}"))
         .order_by(Raccolta.codice.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -206,7 +209,7 @@ def get_raccolta(raccolta_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=RaccoltaOut, status_code=status.HTTP_201_CREATED)
-def create_raccolta(data: RaccoltaCreate, db: Session = Depends(get_db)):
+def create_raccolta(data: RaccoltaCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Auto-genera codice se non fornito
     if not data.codice or data.codice.strip() == "":
         data.codice = _next_codice_raccolta(data.anno_campagna, db)
@@ -233,13 +236,15 @@ def create_raccolta(data: RaccoltaCreate, db: Session = Depends(get_db)):
         rp = RaccoltaParcella(raccolta_id=r.id, parcella_id=pd.parcella_id, kg_olive=pd.kg_olive)
         db.add(rp)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="raccolta", entita_id=r.id, codice_entita=r.codice)
     db.commit()
     db.refresh(r)
     return _build_raccolta_out(r, db)
 
 
 @router.put("/{raccolta_id}", response_model=RaccoltaOut)
-def update_raccolta(raccolta_id: int, data: RaccoltaUpdate, db: Session = Depends(get_db)):
+def update_raccolta(raccolta_id: int, data: RaccoltaUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     r = db.query(Raccolta).filter(Raccolta.id == raccolta_id).first()
     if not r:
         raise HTTPException(status_code=404, detail="Raccolta non trovata.")
@@ -272,13 +277,15 @@ def update_raccolta(raccolta_id: int, data: RaccoltaUpdate, db: Session = Depend
             )
             db.add(rp)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="raccolta", entita_id=r.id, codice_entita=r.codice)
     db.commit()
     db.refresh(r)
     return _build_raccolta_out(r, db)
 
 
 @router.delete("/{raccolta_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_raccolta(raccolta_id: int, db: Session = Depends(get_db)):
+def delete_raccolta(raccolta_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     r = db.query(Raccolta).filter(Raccolta.id == raccolta_id).first()
     if not r:
         raise HTTPException(status_code=404, detail="Raccolta non trovata.")
@@ -286,5 +293,7 @@ def delete_raccolta(raccolta_id: int, db: Session = Depends(get_db)):
     lotto = db.query(LottoOlio).filter(LottoOlio.raccolta_id == raccolta_id).first()
     if lotto:
         db.delete(lotto)
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="raccolta", entita_id=raccolta_id, codice_entita=r.codice)
     db.delete(r)
     db.commit()

@@ -24,8 +24,10 @@ class ConfezionamentoBase(BaseModel):
     capacita_litri: float
     num_unita: int
     litri_totali: float
-    costo_totale: Optional[float] = None
-    prezzo_unitario: Optional[float] = None
+    prezzo_imponibile: Optional[float] = None
+    iva_percentuale: float = 4
+    importo_iva: Optional[float] = None
+    prezzo_listino: Optional[float] = None
     note: Optional[str] = None
 
 
@@ -42,8 +44,10 @@ class ConfezionamentoUpdate(BaseModel):
     capacita_litri: Optional[float] = None
     num_unita: Optional[int] = None
     litri_totali: Optional[float] = None
-    costo_totale: Optional[float] = None
-    prezzo_unitario: Optional[float] = None
+    prezzo_imponibile: Optional[float] = None
+    iva_percentuale: Optional[float] = None
+    importo_iva: Optional[float] = None
+    prezzo_listino: Optional[float] = None
     note: Optional[str] = None
     lotti: Optional[List[ConfezionamentoLottoBase]] = None
 
@@ -52,6 +56,7 @@ class ConfezionamentoOut(ConfezionamentoBase):
     id: int
     contenitore_descrizione: Optional[str] = None
     contenitore_foto: Optional[str] = None
+    giacenza_unita: Optional[int] = None
     lotti: List[ConfezionamentoLottoOut] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None

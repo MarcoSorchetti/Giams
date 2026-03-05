@@ -10,6 +10,8 @@ from datetime import date, datetime
 class VenditaRigaBase(BaseModel):
     confezionamento_id: int
     quantita: int = Field(..., gt=0)
+    prezzo_listino: Optional[float] = None
+    sconto_percentuale: float = 0
     prezzo_unitario: float = Field(..., ge=0)
     importo_riga: float = Field(..., ge=0)
 
@@ -19,6 +21,8 @@ class VenditaRigaOut(VenditaRigaBase):
     confezionamento_codice: Optional[str] = None
     confezionamento_formato: Optional[str] = None
     contenitore_descrizione: Optional[str] = None
+    prezzo_listino: Optional[float] = None
+    sconto_percentuale: float = 0
 
     model_config = {"from_attributes": True}
 
@@ -37,6 +41,7 @@ class VenditaCreate(BaseModel):
     imponibile_scontato: float = 0
     iva_percentuale: float = 4
     importo_iva: float = 0
+    arrotondamento: float = 0
     importo_totale: float = 0
     spedizione_indirizzo: Optional[str] = None
     spedizione_cap: Optional[str] = None
@@ -56,6 +61,7 @@ class VenditaUpdate(BaseModel):
     imponibile_scontato: Optional[float] = None
     iva_percentuale: Optional[float] = None
     importo_iva: Optional[float] = None
+    arrotondamento: Optional[float] = None
     importo_totale: Optional[float] = None
     spedizione_indirizzo: Optional[str] = None
     spedizione_cap: Optional[str] = None
@@ -78,6 +84,7 @@ class VenditaOut(BaseModel):
     imponibile_scontato: float
     iva_percentuale: float
     importo_iva: float
+    arrotondamento: float = 0
     importo_totale: float
     numero_fattura: Optional[str] = None
     data_pagamento: Optional[date] = None

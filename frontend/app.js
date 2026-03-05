@@ -75,7 +75,7 @@ function renderPaginazione(containerId, infoId, pagina, totalePages, totale, cal
 async function scaricaCSV(endpoint, params, nomeFile) {
   try {
     const res = await apiFetch(`${API_URL}/${endpoint}/export/csv?${params}`);
-    if (!res.ok) { alert("Errore export CSV"); return; }
+    if (!res.ok) { showToast("Errore export CSV", "error"); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -85,8 +85,33 @@ async function scaricaCSV(endpoint, params, nomeFile) {
     URL.revokeObjectURL(url);
   } catch (e) {
     console.error("Errore export CSV:", e);
-    alert("Errore export CSV");
+    showToast("Errore export CSV", "error");
   }
+}
+
+// =============================================
+// TOAST NOTIFICATIONS
+// =============================================
+
+const _TOAST_ICONS = {
+  success: "fa-circle-check",
+  error: "fa-circle-xmark",
+  info: "fa-circle-info",
+  warning: "fa-triangle-exclamation",
+};
+
+function showToast(msg, type = "success", duration = 3500) {
+  const container = document.getElementById("toast-container");
+  if (!container) { console.warn("toast-container non trovato"); return; }
+  const icon = _TOAST_ICONS[type] || _TOAST_ICONS.info;
+  const div = document.createElement("div");
+  div.className = `toast-msg toast-${type}`;
+  div.innerHTML = `<i class="fa-solid ${icon}"></i><span>${msg}</span>`;
+  container.appendChild(div);
+  setTimeout(() => {
+    div.classList.add("toast-out");
+    div.addEventListener("animationend", () => div.remove());
+  }, duration);
 }
 
 // =============================================
@@ -104,7 +129,10 @@ function checkAuth() {
   return true;
 }
 
-function logout() {
+async function logout() {
+  try {
+    await apiFetch(`${API_URL}/auth/logout`, { method: "POST" });
+  } catch (_) { /* ignora errori — procedi con logout locale */ }
   localStorage.removeItem("giams_token");
   localStorage.removeItem("giams_token_type");
   localStorage.removeItem("giams_user");
@@ -118,6 +146,25 @@ function logout() {
 function escapeHtml(text) {
   if (!text) return "";
   return String(text).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+/**
+ * Carica immagini protette (con token JWT) da data-foto-url in blob URL.
+ */
+function _loadProtectedImages(container) {
+  const imgs = container.querySelectorAll("img[data-foto-url]");
+  imgs.forEach(async (img) => {
+    try {
+      const res = await apiFetch(img.dataset.fotoUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        img.src = URL.createObjectURL(blob);
+        img.style.display = "";
+        const placeholder = img.nextElementSibling;
+        if (placeholder?.classList.contains("ct-card-loading")) placeholder.remove();
+      }
+    } catch { /* fallback: resta il placeholder */ }
+  });
 }
 
 /**
@@ -197,6 +244,7 @@ const _menuInfo = {
   "menu-magazzino":   { title: "Magazzino", subtitle: "Giacenze, carichi e scarichi prodotti confezionati" },
   "menu-vendite":     { title: "Vendite", subtitle: "Gestione fatture, DDT, pagamenti" },
   "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma" },
+  "menu-audit":       { title: "Log Attivita'", subtitle: "Registro operazioni utenti sulla piattaforma" },
 };
 
 function setActiveMenu(id) {
@@ -206,6 +254,10 @@ function setActiveMenu(id) {
   // Cleanup grafici dashboard quando si naviga via
   dashboardCharts.forEach(c => c.destroy());
   dashboardCharts = [];
+  // Cleanup Flatpickr datepicker per evitare memory leak
+  document.querySelectorAll(".flatpickr-date, #vf-data, #modal-nuova-data, #modal-sped-data, #modal-pag-data").forEach(el => {
+    if (el._flatpickr) { el._flatpickr.destroy(); }
+  });
   // Aggiorna titolo + sottotitolo topbar
   const info = _menuInfo[id] || { title: "", subtitle: "" };
   const titleEl = document.getElementById("topbar-title");
@@ -507,6 +559,7 @@ async function loadDashboardData(anni) {
   renderDashRese(allData);
   renderDashCostoLitro(allData);
   renderDashFatturatoCosti(allData);
+  renderDashRiepilogoCosti(allData);
 
   // Sezioni filtrate per anno (anno piu' recente)
   const annoCorrente = anni[0]; // gia' ordinati DESC dal backend
@@ -517,6 +570,7 @@ async function loadDashboardFilteredSections(anno) {
   await Promise.all([
     renderDashTopClienti(anno),
     renderDashGiacenza(),
+    renderDashDettaglioCosti(anno),
   ]);
 }
 
@@ -599,7 +653,7 @@ function renderDashCostoLitro(allData) {
   const tbody = document.querySelector("#dash-table-costo-litro tbody");
   tbody.innerHTML = allData.map(d => {
     const litriProd = d.lotti.totale_litri || 0;
-    const costoCamp = d.costiCamp.costo_totale_campagna || 0;
+    const costoCamp = d.costiCamp.totale_produzione || 0;
     const costoLt = litriProd > 0 ? costoCamp / litriProd : 0;
     const litriVend = d.vendite.litri_venduti || 0;
     const prezzoLt = litriVend > 0 ? d.vendite.fatturato / litriVend : 0;
@@ -625,7 +679,7 @@ function renderDashCostoLitro(allData) {
           label: "Costo/Lt",
           data: allData.map(d => {
             const lt = d.lotti.totale_litri || 0;
-            return lt > 0 ? +((d.costiCamp.costo_totale_campagna || 0) / lt).toFixed(2) : 0;
+            return lt > 0 ? +((d.costiCamp.totale_produzione || 0) / lt).toFixed(2) : 0;
           }),
           backgroundColor: CHART_COLORS.rosso,
         },
@@ -695,7 +749,92 @@ function renderDashFatturatoCosti(allData) {
   dashboardCharts.push(chart);
 }
 
-// ---- Sezione 5: Top Clienti ----
+// ---- Sezione 5: Riepilogo Costi per Anno ----
+function renderDashRiepilogoCosti(allData) {
+  const tbody = document.querySelector("#dash-table-riepilogo-costi tbody");
+  tbody.innerHTML = allData.map(d => {
+    const campagna = (d.costiCamp.costo_raccolta || 0) + (d.costiCamp.costo_molitura || 0) + (d.costiCamp.costi_campagna || 0);
+    const strutturale = (d.costiCamp.quota_ammortamento || 0) + (d.costiCamp.costi_strutturali_anno || 0);
+    const totale = d.costiCamp.totale_produzione || 0;
+    return `<tr>
+      <td>${d.anno}</td>
+      <td class="text-end">${fmtEuro(campagna)}</td>
+      <td class="text-end">${fmtEuro(strutturale)}</td>
+      <td class="text-end fw-bold">${fmtEuro(totale)}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ---- Sezione 6: Dettaglio Costi per Categoria ----
+async function renderDashDettaglioCosti(anno) {
+  const annoLabel = document.getElementById("dash-dettaglio-costi-anno");
+  if (annoLabel) annoLabel.textContent = `(${anno})`;
+
+  try {
+    const res = await apiFetch(`${API_URL}/costi/stats/per-categoria?anno=${anno}`);
+    const data = await res.json();
+
+    // Summary cards
+    const elCamp = document.getElementById("dash-det-costi-campagna");
+    const elStrut = document.getElementById("dash-det-costi-strutturali");
+    const elTot = document.getElementById("dash-det-costi-totale");
+    if (elCamp) elCamp.textContent = fmtEuro(data.costi_campagna);
+    if (elStrut) elStrut.textContent = fmtEuro(data.costi_strutturali);
+    if (elTot) elTot.textContent = fmtEuro(data.totale);
+
+    // Table
+    const tbody = document.querySelector("#dash-table-dettaglio-costi tbody");
+    tbody.innerHTML = data.categorie.map(c => `
+      <tr>
+        <td>${c.nome}</td>
+        <td><span class="badge bg-${c.tipo === "campagna" ? "success" : "info"}">${c.tipo}</span></td>
+        <td class="text-end">${fmtEuro(c.importo)}</td>
+        <td class="text-end">${c.percentuale.toFixed(1)}%</td>
+      </tr>
+    `).join("");
+
+    // Doughnut chart
+    const ctx = document.getElementById("chart-dettaglio-costi");
+    const chart = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: data.categorie.map(c => c.nome),
+        datasets: [{
+          data: data.categorie.map(c => c.importo),
+          backgroundColor: [
+            CHART_COLORS.verde, CHART_COLORS.blu, CHART_COLORS.arancio,
+            CHART_COLORS.rosso, CHART_COLORS.giallo, CHART_COLORS.viola,
+            CHART_COLORS.verdeChiaro, CHART_COLORS.grigio,
+            "#6ee7b7", "#93c5fd", "#fdba74", "#fca5a5", "#fde68a", "#c4b5fd",
+            "#a78bfa", "#f9a8d4",
+          ],
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "right", labels: { color: "#d1d5db", font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed;
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = total > 0 ? (v / total * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${fmtEuro(v)} (${pct}%)`;
+              },
+            },
+          },
+        },
+      },
+    });
+    dashboardCharts.push(chart);
+  } catch (e) {
+    console.error("Errore dettaglio costi:", e);
+  }
+}
+
+// ---- Sezione 7: Top Clienti ----
 async function renderDashTopClienti(anno) {
   const tbody = document.querySelector("#dash-table-top-clienti tbody");
   const label = document.getElementById("dash-top-clienti-anno");
@@ -979,7 +1118,7 @@ async function salvaParcella() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
@@ -987,7 +1126,7 @@ async function salvaParcella() {
     renderParcelle();
   } catch (err) {
     console.error("Errore salvataggio:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -1143,7 +1282,7 @@ async function salvaUtente() {
     : `${API_URL}/users/`;
 
   if (!utenteInModifica && !pwd) {
-    alert("La password e' obbligatoria per un nuovo utente.");
+    showToast("La password e' obbligatoria per un nuovo utente.", "warning");
     return;
   }
 
@@ -1156,10 +1295,11 @@ async function salvaUtente() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore.");
+      showToast(err.detail || "Errore.", "error");
       return;
     }
 
+    showToast("Utente salvato.", "success");
     resetFormUtente();
     caricaUtenti();
   } catch (err) {
@@ -1171,6 +1311,7 @@ function eliminaUtente(id, username) {
   mostraConferma(`Eliminare l'utente "${username}"?`, async () => {
     try {
       await apiFetch(`${API_URL}/users/${id}`, { method: "DELETE" });
+      showToast("Utente eliminato.", "success");
       caricaUtenti();
     } catch (err) {
       console.error("Errore eliminazione utente:", err);
@@ -1542,16 +1683,17 @@ async function salvaRaccolta() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
+    showToast("Raccolta salvata.", "success");
     setActiveMenu("menu-produzione");
     produzioneTabAttiva = "raccolte";
     renderProduzione();
   } catch (err) {
     console.error("Errore salvataggio raccolta:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -1559,6 +1701,7 @@ function eliminaRaccolta(id, codice) {
   mostraConferma(`Eliminare la raccolta "${codice}"? Anche il lotto associato verra' eliminato.`, async () => {
     try {
       await apiFetch(`${API_URL}/raccolte/${id}`, { method: "DELETE" });
+      showToast("Raccolta eliminata.", "success");
       caricaRaccolteStats();
       caricaRaccolte();
     } catch (err) {
@@ -1889,16 +2032,17 @@ async function salvaLotto() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
+    showToast("Lotto salvato.", "success");
     setActiveMenu("menu-produzione");
     produzioneTabAttiva = "lotti";
     renderProduzione();
   } catch (err) {
     console.error("Errore salvataggio lotto:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -1906,6 +2050,7 @@ function eliminaLotto(id, codice) {
   mostraConferma(`Eliminare il lotto "${codice}"?`, async () => {
     try {
       await apiFetch(`${API_URL}/lotti/${id}`, { method: "DELETE" });
+      showToast("Lotto eliminato.", "success");
       caricaLottiStats();
       caricaLotti();
     } catch (err) {
@@ -2016,8 +2161,8 @@ async function caricaConfStats() {
     document.getElementById("stat-conf-totale").textContent = stats.totale_confezionamenti;
     document.getElementById("stat-conf-unita").textContent = stats.totale_unita.toLocaleString("it-IT");
     document.getElementById("stat-conf-litri").textContent = parseFloat(stats.totale_litri).toLocaleString("it-IT");
-    const costo = parseFloat(stats.costo_totale);
-    document.getElementById("stat-conf-costo").textContent = costo > 0 ? `€ ${costo.toLocaleString("it-IT")}` : "—";
+    document.getElementById("stat-conf-val-prod").textContent = `€ ${parseFloat(stats.valore_produzione || 0).toLocaleString("it-IT", {minimumFractionDigits: 2})}`;
+    document.getElementById("stat-conf-val-giac").textContent = `€ ${parseFloat(stats.valore_giacenza || 0).toLocaleString("it-IT", {minimumFractionDigits: 2})}`;
   } catch (err) {
     console.error("Errore stats confezionamenti:", err);
   }
@@ -2050,15 +2195,18 @@ function renderTabellaConf() {
   if (!tbody) return;
 
   if (confezionamentiLista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-secondary py-4">Nessun confezionamento trovato</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center text-secondary py-4">Nessun confezionamento trovato</td></tr>`;
     return;
   }
 
   tbody.innerHTML = confezionamentiLista.map(c => {
     const lottiNomi = c.lotti.map(l => `${l.lotto_codice} (${l.litri_utilizzati}L)`).join(", ") || "—";
-    const costo = c.costo_totale ? `€ ${parseFloat(c.costo_totale).toFixed(0)}` : "—";
-    const prezzo = c.prezzo_unitario ? `€ ${parseFloat(c.prezzo_unitario).toFixed(2)}` : "—";
+    const imponibile = c.prezzo_imponibile ? `€ ${parseFloat(c.prezzo_imponibile).toFixed(2)}` : "—";
+    const listino = c.prezzo_listino ? `€ ${parseFloat(c.prezzo_listino).toFixed(2)}` : "—";
     const desc = c.contenitore_descrizione || getContenitoreLabel(c.formato);
+    const valProd = c.prezzo_listino ? fmtEuro(c.num_unita * parseFloat(c.prezzo_listino)) : "—";
+    const giacUnita = c.giacenza_unita != null ? c.giacenza_unita : 0;
+    const valGiac = c.prezzo_listino && giacUnita > 0 ? fmtEuro(giacUnita * parseFloat(c.prezzo_listino)) : "—";
     return `
       <tr>
         <td><strong>${c.codice}</strong></td>
@@ -2067,8 +2215,11 @@ function renderTabellaConf() {
         <td>${c.num_unita}</td>
         <td>${parseFloat(c.litri_totali).toFixed(1)}</td>
         <td class="small">${lottiNomi}</td>
-        <td>${costo}</td>
-        <td class="text-end">${prezzo}</td>
+        <td class="text-end">${listino}</td>
+        <td class="text-end">${imponibile}</td>
+        <td class="text-end">${valProd}</td>
+        <td class="text-end">${giacUnita}</td>
+        <td class="text-end">${valGiac}</td>
         <td>
           <button class="btn-action btn-action-edit me-1" onclick="renderConfezionamentoForm(${c.id})" title="Modifica">
             <i class="fa-solid fa-pen-to-square"></i>
@@ -2167,6 +2318,22 @@ function initConfFormCalcolo() {
 
   formatoSel?.addEventListener("change", ricalcola);
   numInput?.addEventListener("input", ricalcola);
+
+  // Auto-calcolo: da listino ivato → imponibile e IVA
+  const listinoInput = document.getElementById("cf-prezzo-listino");
+  const ivaOutput = document.getElementById("cf-importo-iva");
+  const impOutput = document.getElementById("cf-prezzo-imponibile");
+
+  function ricalcolaListino() {
+    const listino = parseFloat(listinoInput?.value) || 0;
+    const ivaPct = 4;
+    const imponibile = +(listino / (1 + ivaPct / 100)).toFixed(2);
+    const iva = +(listino - imponibile).toFixed(2);
+    if (impOutput) impOutput.value = listino > 0 ? imponibile.toFixed(2) : "";
+    if (ivaOutput) ivaOutput.value = listino > 0 ? iva.toFixed(2) : "";
+  }
+
+  listinoInput?.addEventListener("input", ricalcolaListino);
 }
 
 function initConfFormUI() {
@@ -2199,8 +2366,9 @@ async function popolaFormConf(id) {
     document.getElementById("cf-formato").value = c.contenitore_id || "";
     document.getElementById("cf-num-unita").value = c.num_unita || "";
     document.getElementById("cf-litri-totali").value = c.litri_totali || "";
-    document.getElementById("cf-costo").value = c.costo_totale || "";
-    document.getElementById("cf-prezzo-unitario").value = c.prezzo_unitario || "";
+    document.getElementById("cf-prezzo-listino").value = c.prezzo_listino || "";
+    document.getElementById("cf-importo-iva").value = c.importo_iva != null ? parseFloat(c.importo_iva).toFixed(2) : "";
+    document.getElementById("cf-prezzo-imponibile").value = c.prezzo_imponibile != null ? parseFloat(c.prezzo_imponibile).toFixed(2) : "";
     document.getElementById("cf-note").value = c.note || "";
 
     if (c.lotti) {
@@ -2245,8 +2413,8 @@ async function salvaConfezionamento() {
     capacita_litri: cap,
     num_unita: numUnita,
     litri_totali: numUnita * cap,
-    costo_totale: parseFloat(document.getElementById("cf-costo").value) || null,
-    prezzo_unitario: parseFloat(document.getElementById("cf-prezzo-unitario").value) || null,
+    prezzo_listino: parseFloat(document.getElementById("cf-prezzo-listino").value) || null,
+    iva_percentuale: 4,
     note: document.getElementById("cf-note").value || null,
     lotti,
   };
@@ -2265,16 +2433,17 @@ async function salvaConfezionamento() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
+    showToast("Confezionamento salvato.", "success");
     setActiveMenu("menu-produzione");
     produzioneTabAttiva = "confezionamento";
     renderProduzione();
   } catch (err) {
     console.error("Errore salvataggio confezionamento:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -2282,6 +2451,7 @@ function eliminaConfezionamento(id, codice) {
   mostraConferma(`Eliminare il confezionamento "${codice}"?`, async () => {
     try {
       await apiFetch(`${API_URL}/confezionamenti/${id}`, { method: "DELETE" });
+      showToast("Confezionamento eliminato.", "success");
       caricaConfStats();
       caricaConfezionamenti();
     } catch (err) {
@@ -2358,7 +2528,7 @@ function renderContenitoriGrid(data) {
 
   grid.innerHTML = `<div class="row g-3">${items.map(ct => {
     const fotoHtml = ct.foto
-      ? `<img src="/uploads/${ct.foto}" alt="${ct.descrizione}" class="ct-card-img" />`
+      ? `<img data-foto-url="${API_URL}/contenitori/${ct.id}/foto/download" alt="${escapeHtml(ct.descrizione)}" class="ct-card-img" src="" style="display:none" /><div class="ct-card-placeholder ct-card-loading"><i class="fa-solid fa-spinner fa-spin fa-2x"></i></div>`
       : `<div class="ct-card-placeholder"><i class="fa-solid fa-bottle-water fa-2x"></i></div>`;
     const badgeAttivo = ct.attivo
       ? `<span class="badge bg-success">Attivo</span>`
@@ -2393,6 +2563,9 @@ function renderContenitoriGrid(data) {
     contenitoriPage = p;
     caricaContenitori();
   });
+
+  // Carica foto con token JWT (async)
+  _loadProtectedImages(grid);
 }
 
 // =============================================
@@ -2449,7 +2622,14 @@ async function popolaFormContenitore(id) {
     document.getElementById("ct-attivo").checked = ct.attivo !== false;
 
     if (ct.foto) {
-      document.getElementById("ct-foto-preview").innerHTML = `<img src="/uploads/${ct.foto}" class="ct-foto-preview-img" />`;
+      try {
+        const fotoRes = await apiFetch(`${API_URL}/contenitori/${ct.id}/foto/download`);
+        if (fotoRes.ok) {
+          const blob = await fotoRes.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          document.getElementById("ct-foto-preview").innerHTML = `<img src="${blobUrl}" class="ct-foto-preview-img" />`;
+        }
+      } catch { /* nessuna preview foto */ }
     }
   } catch (err) {
     console.error("Errore caricamento contenitore:", err);
@@ -2478,7 +2658,7 @@ async function salvaContenitore() {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
@@ -2495,11 +2675,12 @@ async function salvaContenitore() {
       });
     }
 
+    showToast("Contenitore salvato.", "success");
     setActiveMenu("menu-contenitori");
     renderContenitori();
   } catch (err) {
     console.error("Errore salvataggio contenitore:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -2515,9 +2696,10 @@ function eliminaContenitore(id, descrizione, force = false) {
       }
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore durante l'eliminazione.");
+        showToast(err.detail || "Errore durante l'eliminazione.", "error");
         return;
       }
+      showToast("Contenitore eliminato.", "success");
       caricaContenitori();
     } catch (err) {
       console.error("Errore eliminazione contenitore:", err);
@@ -2619,7 +2801,7 @@ function renderTabellaClienti() {
     const statoBadge = c.attivo
       ? `<span class="badge bg-success">Attivo</span>`
       : `<span class="badge bg-secondary">Inattivo</span>`;
-    const sconto = c.sconto_default ? `${c.sconto_default}%` : "—";
+    const sconto = c.sconto_default != null ? `${Number(c.sconto_default).toFixed(3)}%` : "0.000%";
     const citta = c.citta ? `${c.citta} (${c.provincia || ""})` : "—";
 
     return `
@@ -2738,7 +2920,7 @@ async function popolaFormCliente(id) {
     document.getElementById("cli-cons-provincia").value = c.consegna_provincia || "";
 
     // Commerciale
-    document.getElementById("cli-sconto").value = c.sconto_default || "";
+    document.getElementById("cli-sconto").value = c.sconto_default != null ? c.sconto_default : 0;
     document.getElementById("cli-attivo").checked = c.attivo !== false;
     document.getElementById("cli-note").value = c.note || "";
   } catch (err) {
@@ -2777,7 +2959,7 @@ async function salvaCliente(force = false) {
     consegna_citta: document.getElementById("cli-cons-citta").value.trim() || null,
     consegna_provincia: document.getElementById("cli-cons-provincia").value.trim().toUpperCase() || null,
 
-    sconto_default: parseFloat(document.getElementById("cli-sconto").value) || null,
+    sconto_default: parseFloat(document.getElementById("cli-sconto").value) || 0,
     attivo: document.getElementById("cli-attivo").checked,
     note: document.getElementById("cli-note").value || null,
   };
@@ -2803,15 +2985,16 @@ async function salvaCliente(force = false) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore durante il salvataggio.");
+      showToast(err.detail || "Errore durante il salvataggio.", "error");
       return;
     }
 
+    showToast("Cliente salvato.", "success");
     setActiveMenu("menu-clienti");
     renderClienti();
   } catch (err) {
     console.error("Errore salvataggio cliente:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -3073,14 +3256,15 @@ async function salvaFornitore(e, force = false) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore nel salvataggio.");
+      showToast(err.detail || "Errore nel salvataggio.", "error");
       return;
     }
 
+    showToast("Fornitore salvato.", "success");
     renderFornitori();
   } catch (err) {
     console.error("Errore salvataggio fornitore:", err);
-    alert("Errore di connessione.");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -3214,7 +3398,7 @@ async function renderCosti() {
   });
 
   // Filtri
-  document.getElementById("filtro-costi-anno")?.addEventListener("change", () => caricaCosti());
+  document.getElementById("filtro-costi-anno")?.addEventListener("change", () => { caricaCostiStats(); caricaCosti(); });
   document.getElementById("filtro-costi-tipo")?.addEventListener("change", () => {
     aggiornaFiltroCategorie();
     caricaCosti();
@@ -3390,7 +3574,7 @@ async function editCosto(id) {
 // COSTI — Form
 // =============================================
 
-function _mostraCostoDocPreview(tipo, url, filename) {
+async function _mostraCostoDocPreview(tipo, url, filename) {
   // Aggiorna info file
   const icon = document.getElementById("costo-doc-icon");
   const fnEl = document.getElementById("costo-doc-filename");
@@ -3409,21 +3593,31 @@ function _mostraCostoDocPreview(tipo, url, filename) {
   document.getElementById("costo-doc-viewer").style.display = "";
   document.getElementById("costo-doc-placeholder").style.display = "none";
 
+  // Fetch con token JWT e crea blob URL per iframe/img
+  let blobUrl = url;
+  try {
+    const res = await apiFetch(url);
+    if (res.ok) {
+      const blob = await res.blob();
+      blobUrl = URL.createObjectURL(blob);
+    }
+  } catch { /* fallback all'url diretto */ }
+
   const iframe = document.getElementById("costo-doc-iframe");
   const img = document.getElementById("costo-doc-img");
   if (tipo === "pdf") {
-    iframe.src = url;
+    iframe.src = blobUrl;
     iframe.style.display = "";
     img.style.display = "none";
   } else {
-    img.src = url;
+    img.src = blobUrl;
     img.style.display = "";
     iframe.style.display = "none";
   }
 
   // Mostra pulsanti
   const btnApri = document.getElementById("btn-apri-doc");
-  btnApri.href = url;
+  btnApri.href = blobUrl;
   btnApri.style.display = "";
   document.getElementById("btn-rimuovi-doc").style.display = "";
 
@@ -3672,10 +3866,10 @@ function popolaFormCosto(c) {
   // Note
   document.getElementById("costo-note").value = c.note || "";
 
-  // Documento allegato
+  // Documento allegato (via endpoint protetto)
   if (c.documento) {
     const isImage = /\.(jpe?g|png|webp)$/i.test(c.documento);
-    const url = `/uploads/${c.documento}`;
+    const url = `${API_URL}/costi/${c.id}/documento/download`;
     const filename = c.documento.split("/").pop();
     _mostraCostoDocPreview(isImage ? "image" : "pdf", url, filename);
   }
@@ -3720,7 +3914,7 @@ async function salvaCosto(e) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore nel salvataggio.");
+      showToast(err.detail || "Errore nel salvataggio.", "error");
       return;
     }
 
@@ -3737,11 +3931,12 @@ async function salvaCosto(e) {
       });
     }
 
+    showToast("Costo salvato.", "success");
     costoInModifica = null;
     renderCosti();
   } catch (err) {
     console.error("Errore salvataggio costo:", err);
-    alert("Errore di rete.");
+    showToast("Errore di rete.", "error");
   }
 }
 
@@ -3749,6 +3944,7 @@ function eliminaCosto(id) {
   mostraConferma("Eliminare questo costo?", async () => {
     try {
       await apiFetch(`${API_URL}/costi/${id}`, { method: "DELETE" });
+      showToast("Costo eliminato.", "success");
       costoInModifica = null;
       renderCosti();
     } catch (err) {
@@ -3917,7 +4113,7 @@ async function eliminaCategoriaCosto(id) {
       const res = await apiFetch(`${API_URL}/categorie-costo/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore eliminazione.");
+        showToast(err.detail || "Errore eliminazione.", "error");
         return;
       }
       await caricaCategorieCosto();
@@ -3948,7 +4144,7 @@ async function salvaCategoria(e) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore salvataggio.");
+      showToast(err.detail || "Errore salvataggio.", "error");
       return;
     }
 
@@ -4424,13 +4620,14 @@ async function salvaMovimento(e) {
     });
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore salvataggio");
+      showToast(err.detail || "Errore salvataggio.", "error");
       return;
     }
+    showToast("Movimento salvato.", "success");
     renderMagazzino();
   } catch (e) {
     console.error("Errore salvataggio movimento", e);
-    alert("Errore di rete");
+    showToast("Errore di rete.", "error");
   }
 }
 
@@ -4445,16 +4642,16 @@ async function sincronizzaMagazzino() {
     const res = await apiFetch(`${API_URL}/magazzino/sincronizza${qs}`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.detail || "Errore sincronizzazione");
+      showToast(data.detail || "Errore sincronizzazione.", "error");
       return;
     }
-    alert(data.messaggio || `${data.sincronizzati} confezionamenti sincronizzati.`);
+    showToast(data.messaggio || `${data.sincronizzati} confezionamenti sincronizzati.`, "success");
     caricaMagStats();
     if (magazzinoTabAttiva === "giacenze") caricaGiacenze();
     else caricaMovimenti();
   } catch (e) {
     console.error("Errore sincronizzazione magazzino", e);
-    alert("Errore di rete");
+    showToast("Errore di rete.", "error");
   }
 }
 
@@ -4465,9 +4662,10 @@ function eliminaMovimento(id, codice) {
       const res = await apiFetch(`${API_URL}/magazzino/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore eliminazione");
+        showToast(err.detail || "Errore eliminazione.", "error");
         return;
       }
+      showToast("Movimento eliminato.", "success");
       renderMagazzino();
     } catch (e) {
       console.error("Errore eliminazione movimento", e);
@@ -4555,6 +4753,8 @@ async function caricaVenditeStats() {
     const res = await apiFetch(url);
     const s = await res.json();
     document.getElementById("stat-vendite-totale").textContent = s.totale || 0;
+    document.getElementById("stat-vendite-imponibile").textContent = fmtEuro(s.imponibile_totale);
+    document.getElementById("stat-vendite-iva").textContent = fmtEuro(s.iva_totale);
     document.getElementById("stat-vendite-fatturato").textContent = fmtEuro(s.fatturato);
     document.getElementById("stat-vendite-bozze").textContent = s.bozze || 0;
     document.getElementById("stat-vendite-da-incassare").textContent = fmtEuro(s.da_incassare);
@@ -4666,22 +4866,26 @@ async function renderVenditaForm(venditaId = null) {
     if (anno) aggiornaCodiceDaAnno(anno);
   });
 
-  // Quando cambia cliente → auto-compila sconto e indirizzo spedizione
+  // Quando cambia cliente → aggiorna sconto default su tutte le righe + indirizzo spedizione
   document.getElementById("vf-cliente").addEventListener("change", (e) => {
     const opt = e.target.selectedOptions[0];
     if (opt && opt.value) {
-      document.getElementById("vf-sconto").value = opt.dataset.sconto || 0;
       document.getElementById("vf-sped-indirizzo").value = opt.dataset.spedInd || "";
       document.getElementById("vf-sped-cap").value = opt.dataset.spedCap || "";
       document.getElementById("vf-sped-citta").value = opt.dataset.spedCitta || "";
       document.getElementById("vf-sped-provincia").value = opt.dataset.spedProv || "";
-      ricalcolaTotaliVendita();
+      // Aggiorna sconto su tutte le righe esistenti
+      const scontoDefault = parseFloat(opt.dataset.sconto || 0);
+      document.querySelectorAll("#vendita-righe-tbody tr").forEach(tr => {
+        tr.querySelector(".riga-sconto").value = scontoDefault.toFixed(3);
+        calcolaImportoRiga(tr);
+      });
     }
   });
 
-  // Sconto e IVA → ricalcola
-  document.getElementById("vf-sconto").addEventListener("input", ricalcolaTotaliVendita);
+  // IVA → ricalcola
   document.getElementById("vf-iva").addEventListener("input", ricalcolaTotaliVendita);
+  document.getElementById("vf-arrotondamento").addEventListener("input", ricalcolaTotaliVendita);
 
   // Aggiungi riga
   document.getElementById("btn-aggiungi-riga").addEventListener("click", () => aggiungiRigaVendita());
@@ -4705,8 +4909,8 @@ async function renderVenditaForm(venditaId = null) {
       document.getElementById("vf-data")._flatpickr?.setDate(v.data_vendita);
       document.getElementById("vf-anno").value = v.anno_campagna;
       document.getElementById("vf-cliente").value = v.cliente_id;
-      document.getElementById("vf-sconto").value = v.sconto_percentuale || 0;
       document.getElementById("vf-iva").value = v.iva_percentuale || 4;
+      document.getElementById("vf-arrotondamento").value = v.arrotondamento || 0;
       document.getElementById("vf-sped-indirizzo").value = v.spedizione_indirizzo || "";
       document.getElementById("vf-sped-cap").value = v.spedizione_cap || "";
       document.getElementById("vf-sped-citta").value = v.spedizione_citta || "";
@@ -4737,16 +4941,27 @@ function aggiungiRigaVendita(rigaData = null) {
   let confOptions = '<option value="">— Seleziona —</option>';
   confOptions += venditeConfezionamentiCache.map(c => {
     const label = `${c.codice} — ${c.formato} (${c.contenitore_descrizione || "N/A"})`;
-    return `<option value="${c.id}" data-prezzo="${c.prezzo_unitario || 0}">${label}</option>`;
+    return `<option value="${c.id}" data-prezzo="${c.prezzo_imponibile || 0}">${label}</option>`;
   }).join("");
+
+  // Sconto default dal cliente selezionato
+  const clienteSel = document.getElementById("vf-cliente");
+  const scontoDefault = parseFloat(clienteSel?.selectedOptions[0]?.dataset.sconto || 0);
+
+  const prezzoListino = rigaData ? (rigaData.prezzo_listino || rigaData.prezzo_unitario || 0) : 0;
+  const scontoRiga = rigaData ? (rigaData.sconto_percentuale || 0) : scontoDefault;
+  const prezzoUnit = rigaData ? (rigaData.prezzo_unitario || 0) : 0;
+  const importoRiga = rigaData ? (rigaData.importo_riga || 0) : 0;
 
   tr.innerHTML = `
     <td>
       <select class="form-select form-select-sm riga-conf" required>${confOptions}</select>
     </td>
     <td><input type="number" class="form-control form-control-sm text-center riga-qty" min="1" value="${rigaData ? rigaData.quantita : 1}" required /></td>
-    <td><input type="number" class="form-control form-control-sm text-end riga-prezzo" step="0.01" min="0" value="${rigaData ? rigaData.prezzo_unitario : 0}" required /></td>
-    <td><input type="text" class="form-control form-control-sm text-end riga-importo" readonly value="${rigaData ? Number(rigaData.importo_riga).toFixed(2) : '0.00'}" /></td>
+    <td><input type="text" class="form-control form-control-sm text-end riga-prezzo-listino" readonly value="${Number(prezzoListino).toFixed(2)}" /></td>
+    <td><input type="number" class="form-control form-control-sm text-end riga-sconto" step="0.001" min="0" max="100" value="${Number(scontoRiga).toFixed(3)}" /></td>
+    <td><input type="text" class="form-control form-control-sm text-end riga-prezzo" readonly value="${Number(prezzoUnit).toFixed(2)}" /></td>
+    <td><input type="text" class="form-control form-control-sm text-end riga-importo" readonly value="${Number(importoRiga).toFixed(2)}" /></td>
     <td class="text-center">
       <button type="button" class="btn btn-sm btn-outline-danger btn-rimuovi-riga"><i class="fa-solid fa-times"></i></button>
     </td>
@@ -4760,12 +4975,12 @@ function aggiungiRigaVendita(rigaData = null) {
   tr.querySelector(".riga-conf").addEventListener("change", (e) => {
     const opt = e.target.selectedOptions[0];
     const prezzo = parseFloat(opt?.dataset.prezzo || 0);
-    tr.querySelector(".riga-prezzo").value = prezzo.toFixed(2);
+    tr.querySelector(".riga-prezzo-listino").value = prezzo.toFixed(2);
     calcolaImportoRiga(tr);
   });
 
   tr.querySelector(".riga-qty").addEventListener("input", () => calcolaImportoRiga(tr));
-  tr.querySelector(".riga-prezzo").addEventListener("input", () => calcolaImportoRiga(tr));
+  tr.querySelector(".riga-sconto").addEventListener("input", () => calcolaImportoRiga(tr));
 
   tr.querySelector(".btn-rimuovi-riga").addEventListener("click", () => {
     tr.remove();
@@ -4777,8 +4992,11 @@ function aggiungiRigaVendita(rigaData = null) {
 
 function calcolaImportoRiga(tr) {
   const qty = parseInt(tr.querySelector(".riga-qty").value) || 0;
-  const prezzo = parseFloat(tr.querySelector(".riga-prezzo").value) || 0;
-  const importo = qty * prezzo;
+  const prezzoListino = parseFloat(tr.querySelector(".riga-prezzo-listino").value) || 0;
+  const sconto = parseFloat(tr.querySelector(".riga-sconto").value) || 0;
+  const prezzoUnitario = prezzoListino * (1 - sconto / 100);
+  const importo = qty * prezzoUnitario;
+  tr.querySelector(".riga-prezzo").value = prezzoUnitario.toFixed(2);
   tr.querySelector(".riga-importo").value = importo.toFixed(2);
   ricalcolaTotaliVendita();
 }
@@ -4790,16 +5008,12 @@ function ricalcolaTotaliVendita() {
     imponibile += parseFloat(tr.querySelector(".riga-importo")?.value || 0);
   });
 
-  const sconto = parseFloat(document.getElementById("vf-sconto")?.value || 0);
   const ivaPct = parseFloat(document.getElementById("vf-iva")?.value || 4);
-
-  const scontoVal = imponibile * (sconto / 100);
-  const imponibileScontato = imponibile - scontoVal;
-  const importoIva = imponibileScontato * (ivaPct / 100);
-  const totale = imponibileScontato + importoIva;
+  const importoIva = imponibile * (ivaPct / 100);
+  const arrotondamento = parseFloat(document.getElementById("vf-arrotondamento")?.value || 0);
+  const totale = imponibile + importoIva + arrotondamento;
 
   document.getElementById("vf-imponibile").value = imponibile.toFixed(2);
-  document.getElementById("vf-imponibile-scontato").value = imponibileScontato.toFixed(2);
   document.getElementById("vf-importo-iva").value = importoIva.toFixed(2);
   document.getElementById("vf-totale").value = totale.toFixed(2);
 }
@@ -4812,12 +5026,16 @@ async function salvaVendita(e) {
   document.querySelectorAll("#vendita-righe-tbody tr").forEach(tr => {
     const confId = parseInt(tr.querySelector(".riga-conf").value);
     const qty = parseInt(tr.querySelector(".riga-qty").value) || 0;
+    const prezzoListino = parseFloat(tr.querySelector(".riga-prezzo-listino").value) || 0;
+    const scontoRiga = parseFloat(tr.querySelector(".riga-sconto").value) || 0;
     const prezzo = parseFloat(tr.querySelector(".riga-prezzo").value) || 0;
     const importo = parseFloat(tr.querySelector(".riga-importo").value) || 0;
     if (confId && qty > 0) {
       righe.push({
         confezionamento_id: confId,
         quantita: qty,
+        prezzo_listino: prezzoListino,
+        sconto_percentuale: scontoRiga,
         prezzo_unitario: prezzo,
         importo_riga: importo,
       });
@@ -4825,7 +5043,7 @@ async function salvaVendita(e) {
   });
 
   if (!righe.length) {
-    alert("Aggiungi almeno una riga prodotto.");
+    showToast("Aggiungi almeno una riga prodotto.", "warning");
     return;
   }
 
@@ -4835,10 +5053,11 @@ async function salvaVendita(e) {
     data_vendita: document.getElementById("vf-data").value,
     anno_campagna: parseInt(document.getElementById("vf-anno").value),
     imponibile: parseFloat(document.getElementById("vf-imponibile").value) || 0,
-    sconto_percentuale: parseFloat(document.getElementById("vf-sconto").value) || 0,
-    imponibile_scontato: parseFloat(document.getElementById("vf-imponibile-scontato").value) || 0,
+    sconto_percentuale: 0,
+    imponibile_scontato: parseFloat(document.getElementById("vf-imponibile").value) || 0,
     iva_percentuale: parseFloat(document.getElementById("vf-iva").value) || 4,
     importo_iva: parseFloat(document.getElementById("vf-importo-iva").value) || 0,
+    arrotondamento: parseFloat(document.getElementById("vf-arrotondamento").value) || 0,
     importo_totale: parseFloat(document.getElementById("vf-totale").value) || 0,
     spedizione_indirizzo: document.getElementById("vf-sped-indirizzo").value || null,
     spedizione_cap: document.getElementById("vf-sped-cap").value || null,
@@ -4860,16 +5079,16 @@ async function salvaVendita(e) {
 
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore salvataggio vendita");
+      showToast(err.detail || "Errore salvataggio vendita.", "error");
       return;
     }
 
     const saved = await res.json();
-    // Dopo il salvataggio vai al dettaglio se confermata, altrimenti torna alla lista
+    showToast("Vendita salvata.", "success");
     renderVendite();
   } catch (e) {
     console.error("Errore salvataggio vendita:", e);
-    alert("Errore di connessione");
+    showToast("Errore di connessione.", "error");
   }
 }
 
@@ -4879,9 +5098,10 @@ function eliminaVendita(id, codice) {
       const res = await apiFetch(`${API_URL}/vendite/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore eliminazione");
+        showToast(err.detail || "Errore eliminazione.", "error");
         return;
       }
+      showToast("Vendita eliminata.", "success");
       renderVendite();
     } catch (e) {
       console.error("Errore eliminazione vendita", e);
@@ -4904,7 +5124,7 @@ async function renderVenditaDettaglio(venditaId) {
 
   try {
     const res = await apiFetch(`${API_URL}/vendite/${venditaId}`);
-    if (!res.ok) { alert("Vendita non trovata"); renderVendite(); return; }
+    if (!res.ok) { showToast("Vendita non trovata.", "error"); renderVendite(); return; }
     const v = await res.json();
 
     setTopbarInfo(`Vendita ${v.codice}`, `${v.cliente_denominazione || ""} \u2014 ${v.stato.toUpperCase()}`);
@@ -4930,6 +5150,8 @@ async function renderVenditaDettaglio(venditaId) {
         <td>${r.confezionamento_formato || "—"}</td>
         <td>${r.contenitore_descrizione || "—"}</td>
         <td class="text-center">${r.quantita}</td>
+        <td class="text-end">${r.prezzo_listino != null ? fmtEuro(r.prezzo_listino) : "—"}</td>
+        <td class="text-end">${r.sconto_percentuale != null ? Number(r.sconto_percentuale).toFixed(3) + "%" : "0.000%"}</td>
         <td class="text-end">${fmtEuro(r.prezzo_unitario)}</td>
         <td class="text-end">${fmtEuro(r.importo_riga)}</td>
       </tr>
@@ -4938,15 +5160,13 @@ async function renderVenditaDettaglio(venditaId) {
 
     // Totali
     document.getElementById("vd-imponibile").textContent = fmtEuro(v.imponibile);
-    if (v.sconto_percentuale && v.sconto_percentuale > 0) {
-      document.getElementById("vd-sconto-pct").textContent = v.sconto_percentuale;
-      document.getElementById("vd-sconto-val").textContent = "- " + fmtEuro(v.imponibile - v.imponibile_scontato);
-    } else {
-      document.getElementById("vd-sconto-row").style.display = "none";
-    }
-    document.getElementById("vd-imponibile-scontato").textContent = fmtEuro(v.imponibile_scontato);
     document.getElementById("vd-iva-pct").textContent = v.iva_percentuale || 4;
     document.getElementById("vd-importo-iva").textContent = fmtEuro(v.importo_iva);
+    if (v.arrotondamento && v.arrotondamento !== 0) {
+      document.getElementById("vd-arrotondamento").textContent = (v.arrotondamento > 0 ? "+" : "") + fmtEuro(v.arrotondamento);
+    } else {
+      document.getElementById("vd-arrotondamento-row").style.display = "none";
+    }
     document.getElementById("vd-totale").textContent = fmtEuro(v.importo_totale);
 
     // Pagamento
@@ -4990,10 +5210,10 @@ async function renderVenditaDettaglio(venditaId) {
     // PDF sempre disponibili per confermata+
     if (v.stato !== "bozza") {
       document.getElementById("btn-download-fattura").style.display = "";
-      document.getElementById("btn-download-fattura").addEventListener("click", () => scaricaFatturaPdf(v.id));
+      document.getElementById("btn-download-fattura").addEventListener("click", () => visualizzaFatturaPdf(v.id));
 
       document.getElementById("btn-download-ddt").style.display = "";
-      document.getElementById("btn-download-ddt").addEventListener("click", () => scaricaDdtPdf(v.id));
+      document.getElementById("btn-download-ddt").addEventListener("click", () => visualizzaDdtPdf(v.id));
     }
 
   } catch (e) {
@@ -5037,7 +5257,7 @@ function modificaDataVendita(id, dataAttuale) {
   overlay.querySelector("#modal-data-annulla").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#modal-data-salva").addEventListener("click", async () => {
     const nuovaData = document.getElementById("modal-nuova-data").value;
-    if (!nuovaData) { alert("Inserire una data"); return; }
+    if (!nuovaData) { showToast("Inserire una data.", "warning"); return; }
 
     try {
       const res = await apiFetch(`${API_URL}/vendite/${id}`, {
@@ -5047,7 +5267,7 @@ function modificaDataVendita(id, dataAttuale) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore modifica data");
+        showToast(err.detail || "Errore modifica data.", "error");
         return;
       }
       overlay.remove();
@@ -5064,7 +5284,7 @@ function confermaVendita(id) {
       const res = await apiFetch(`${API_URL}/vendite/${id}/conferma`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore conferma");
+        showToast(err.detail || "Errore conferma.", "error");
         return;
       }
       _afterVenditaTransition(id);
@@ -5106,7 +5326,7 @@ function spedisciVendita(id, anno) {
   overlay.querySelector("#modal-sped-annulla").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#modal-sped-conferma").addEventListener("click", async () => {
     const dataSped = document.getElementById("modal-sped-data").value;
-    if (!dataSped) { alert("Inserire la data di spedizione"); return; }
+    if (!dataSped) { showToast("Inserire la data di spedizione.", "warning"); return; }
 
     const payload = {
       data_spedizione: dataSped,
@@ -5122,7 +5342,7 @@ function spedisciVendita(id, anno) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore spedizione");
+        showToast(err.detail || "Errore spedizione.", "error");
         return;
       }
       overlay.remove();
@@ -5171,7 +5391,7 @@ function pagaVendita(id) {
   overlay.querySelector("#modal-pag-annulla").addEventListener("click", () => overlay.remove());
   overlay.querySelector("#modal-pag-conferma").addEventListener("click", async () => {
     const dataPag = document.getElementById("modal-pag-data").value;
-    if (!dataPag) { alert("Inserire la data di pagamento"); return; }
+    if (!dataPag) { showToast("Inserire la data di pagamento.", "warning"); return; }
 
     const payload = {
       data_pagamento: dataPag,
@@ -5187,7 +5407,7 @@ function pagaVendita(id) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.detail || "Errore pagamento");
+        showToast(err.detail || "Errore pagamento.", "error");
         return;
       }
       overlay.remove();
@@ -5201,43 +5421,214 @@ function pagaVendita(id) {
 
 // ---- DOWNLOAD PDF ----
 
-async function scaricaFatturaPdf(id) {
+let _pdfViewerBlobUrl = null;
+let _pdfViewerFilename = null;
+
+async function mostraPdfViewer(apiUrl, titolo, filename) {
   try {
-    const res = await apiFetch(`${API_URL}/vendite/${id}/fattura/pdf`);
+    const res = await apiFetch(apiUrl);
     if (!res.ok) {
       const err = await res.json();
-      alert(err.detail || "Errore download fattura");
+      showToast(err.detail || "Errore caricamento documento.", "error");
       return;
     }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Fattura_${id}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    // Pulisci eventuale blob precedente
+    if (_pdfViewerBlobUrl) URL.revokeObjectURL(_pdfViewerBlobUrl);
+    _pdfViewerBlobUrl = URL.createObjectURL(blob);
+    _pdfViewerFilename = filename;
+
+    document.getElementById("modal-pdf-title").textContent = titolo;
+    document.getElementById("pdf-viewer-iframe").src = _pdfViewerBlobUrl;
+
+    const modal = new bootstrap.Modal(document.getElementById("modal-pdf-viewer"));
+    modal.show();
+
+    // Cleanup al chiudersi del modal
+    document.getElementById("modal-pdf-viewer").addEventListener("hidden.bs.modal", () => {
+      document.getElementById("pdf-viewer-iframe").src = "";
+      if (_pdfViewerBlobUrl) { URL.revokeObjectURL(_pdfViewerBlobUrl); _pdfViewerBlobUrl = null; }
+    }, { once: true });
+
   } catch (e) {
-    console.error("Errore download fattura:", e);
+    console.error("Errore caricamento PDF:", e);
+    showToast("Errore di connessione.", "error");
   }
 }
 
-async function scaricaDdtPdf(id) {
-  try {
-    const res = await apiFetch(`${API_URL}/vendite/${id}/ddt/pdf`);
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.detail || "Errore download DDT");
-      return;
+// Stampa PDF dal viewer
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("btn-pdf-stampa")?.addEventListener("click", () => {
+    const iframe = document.getElementById("pdf-viewer-iframe");
+    if (iframe && iframe.contentWindow) iframe.contentWindow.print();
+  });
+  document.getElementById("btn-pdf-download")?.addEventListener("click", () => {
+    if (_pdfViewerBlobUrl) {
+      const a = document.createElement("a");
+      a.href = _pdfViewerBlobUrl;
+      a.download = _pdfViewerFilename || "documento.pdf";
+      a.click();
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `DDT_${id}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+  });
+});
+
+function visualizzaFatturaPdf(id) {
+  mostraPdfViewer(`${API_URL}/vendite/${id}/fattura/pdf`, "Fattura", `Fattura_${id}.pdf`);
+}
+
+function visualizzaDdtPdf(id) {
+  mostraPdfViewer(`${API_URL}/vendite/${id}/ddt/pdf`, "DDT", `DDT_${id}.pdf`);
+}
+
+
+// =============================================
+// AUDIT LOG
+// =============================================
+
+let _auditPage = 1;
+let _auditFilters = {};
+
+const _AZIONE_BADGE = {
+  creato:     "badge bg-success",
+  modificato: "badge bg-warning text-dark",
+  eliminato:  "badge bg-danger",
+  confermato: "badge bg-info",
+  spedito:    "badge bg-primary",
+  pagato:     "badge bg-success",
+  login:      "badge bg-info",
+  logout:     "badge bg-secondary",
+};
+
+async function renderAuditLog(page) {
+  _auditPage = page || 1;
+  const main = document.getElementById("main-content");
+  main.innerHTML = `
+    <div class="p-4">
+      <div class="row g-2 mb-3 align-items-end">
+        <div class="col-sm-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Utente</label>
+          <input type="text" class="form-control form-control-sm" id="audit-f-username" placeholder="Tutti">
+        </div>
+        <div class="col-sm-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Azione</label>
+          <select class="form-select form-select-sm" id="audit-f-azione">
+            <option value="">Tutte</option>
+            <option value="creato">Creato</option>
+            <option value="modificato">Modificato</option>
+            <option value="eliminato">Eliminato</option>
+            <option value="confermato">Confermato</option>
+            <option value="spedito">Spedito</option>
+            <option value="pagato">Pagato</option>
+            <option value="login">Login</option>
+            <option value="logout">Logout</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Entita'</label>
+          <select class="form-select form-select-sm" id="audit-f-entita">
+            <option value="">Tutte</option>
+            <option value="raccolta">Raccolta</option>
+            <option value="lotto">Lotto</option>
+            <option value="costo">Costo</option>
+            <option value="vendita">Vendita</option>
+            <option value="movimento">Movimento</option>
+            <option value="confezionamento">Confezionamento</option>
+            <option value="contenitore">Contenitore</option>
+            <option value="cliente">Cliente</option>
+            <option value="fornitore">Fornitore</option>
+            <option value="utente">Utente</option>
+            <option value="sessione">Sessione</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">Da</label>
+          <input type="date" class="form-control form-control-sm" id="audit-f-da">
+        </div>
+        <div class="col-sm-6 col-md-2">
+          <label class="form-label form-label-sm mb-1">A</label>
+          <input type="date" class="form-control form-control-sm" id="audit-f-a">
+        </div>
+        <div class="col-sm-6 col-md-2">
+          <button class="btn btn-sm btn-outline-light w-100" id="audit-btn-filtra">
+            <i class="fa-solid fa-filter me-1"></i> Filtra
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-dark table-sm table-hover align-middle">
+          <thead>
+            <tr>
+              <th style="width:160px">Data/Ora</th>
+              <th>Utente</th>
+              <th>Azione</th>
+              <th>Entita'</th>
+              <th>Codice</th>
+              <th>Dettagli</th>
+            </tr>
+          </thead>
+          <tbody id="audit-tbody"></tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-2">
+        <small id="audit-info" class="text-secondary"></small>
+        <div id="audit-pag"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("audit-btn-filtra")?.addEventListener("click", () => {
+    _auditFilters = {
+      username:      document.getElementById("audit-f-username")?.value?.trim() || "",
+      azione:        document.getElementById("audit-f-azione")?.value || "",
+      entita:        document.getElementById("audit-f-entita")?.value || "",
+      data_da:       document.getElementById("audit-f-da")?.value || "",
+      data_a:        document.getElementById("audit-f-a")?.value || "",
+    };
+    renderAuditLog(1);
+  });
+
+  // Ripristina filtri attivi
+  if (_auditFilters.username) document.getElementById("audit-f-username").value = _auditFilters.username;
+  if (_auditFilters.azione)   document.getElementById("audit-f-azione").value = _auditFilters.azione;
+  if (_auditFilters.entita)   document.getElementById("audit-f-entita").value = _auditFilters.entita;
+  if (_auditFilters.data_da)  document.getElementById("audit-f-da").value = _auditFilters.data_da;
+  if (_auditFilters.data_a)   document.getElementById("audit-f-a").value = _auditFilters.data_a;
+
+  // Fetch dati
+  const params = new URLSearchParams({ page: _auditPage, per_page: 10 });
+  if (_auditFilters.username) params.append("username", _auditFilters.username);
+  if (_auditFilters.azione)   params.append("azione", _auditFilters.azione);
+  if (_auditFilters.entita)   params.append("entita", _auditFilters.entita);
+  if (_auditFilters.data_da)  params.append("data_da", _auditFilters.data_da);
+  if (_auditFilters.data_a)   params.append("data_a", _auditFilters.data_a);
+
+  try {
+    const res = await apiFetch(`/api/audit/?${params}`);
+    const data = await res.json();
+    const tbody = document.getElementById("audit-tbody");
+    if (!data.items || data.items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center text-secondary py-3">Nessun log trovato</td></tr>`;
+    } else {
+      tbody.innerHTML = data.items.map(row => {
+        const dt = row.created_at ? new Date(row.created_at) : null;
+        const dataStr = dt ? dt.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" })
+                            + " " + dt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : "–";
+        const badgeClass = _AZIONE_BADGE[row.azione] || "badge bg-secondary";
+        return `<tr>
+          <td class="text-nowrap small">${dataStr}</td>
+          <td>${row.username || "–"}</td>
+          <td><span class="${badgeClass}">${row.azione}</span></td>
+          <td class="text-capitalize">${row.entita || "–"}</td>
+          <td><code>${row.codice_entita || "–"}</code></td>
+          <td class="small text-secondary">${row.dettagli || ""}</td>
+        </tr>`;
+      }).join("");
+    }
+    renderPaginazione("audit-pag", "audit-info", data.page, data.pages, data.total, renderAuditLog);
   } catch (e) {
-    console.error("Errore download DDT:", e);
+    console.error("Errore caricamento audit log:", e);
   }
 }
 
@@ -5313,6 +5704,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-utenti")?.addEventListener("click", () => {
     setActiveMenu("menu-utenti");
     renderUtenti();
+  });
+
+  document.getElementById("menu-audit")?.addEventListener("click", () => {
+    setActiveMenu("menu-audit");
+    renderAuditLog();
   });
 
   document.getElementById("menu-logout")?.addEventListener("click", logout);

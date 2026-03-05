@@ -20,6 +20,8 @@ from app.models.cliente_sql import Cliente
 from app.models.movimento_magazzino_sql import MovimentoMagazzino
 from app.routers.magazzino import _calcola_giacenza, _next_codice_movimento
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/vendite", tags=["vendite"])
@@ -36,6 +38,7 @@ def _next_codice_vendita(anno: int, db: Session) -> str:
         db.query(Vendita)
         .filter(Vendita.codice.like(f"V/%/{anno}"))
         .order_by(Vendita.codice.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -53,6 +56,7 @@ def _next_numero_fattura(anno: int, db: Session) -> str:
         db.query(Vendita)
         .filter(Vendita.numero_fattura.like(f"FI/%/{anno}"))
         .order_by(Vendita.numero_fattura.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -70,6 +74,7 @@ def _next_numero_ddt(anno: int, db: Session) -> str:
         db.query(Vendita)
         .filter(Vendita.numero_ddt.like(f"DDT/%/{anno}"))
         .order_by(Vendita.numero_ddt.desc())
+        .with_for_update()
         .first()
     )
     if last:
@@ -110,6 +115,8 @@ def _build_vendita_out(v, db) -> VenditaOut:
             confezionamento_formato=conf.formato if conf else None,
             contenitore_descrizione=cont_desc,
             quantita=r.quantita,
+            prezzo_listino=float(r.prezzo_listino) if r.prezzo_listino else None,
+            sconto_percentuale=float(r.sconto_percentuale) if r.sconto_percentuale else 0,
             prezzo_unitario=float(r.prezzo_unitario),
             importo_riga=float(r.importo_riga),
         ))
@@ -127,6 +134,7 @@ def _build_vendita_out(v, db) -> VenditaOut:
         imponibile_scontato=float(v.imponibile_scontato),
         iva_percentuale=float(v.iva_percentuale),
         importo_iva=float(v.importo_iva),
+        arrotondamento=float(v.arrotondamento) if v.arrotondamento else 0,
         importo_totale=float(v.importo_totale),
         numero_fattura=v.numero_fattura,
         data_pagamento=v.data_pagamento,
@@ -168,6 +176,8 @@ def vendite_stats(anno: Optional[int] = Query(None), db: Session = Depends(get_d
     if anno:
         q_conf = q_conf.filter(Vendita.anno_campagna == anno)
     fatturato = q_conf.with_entities(func.sum(Vendita.importo_totale)).scalar() or 0
+    imponibile_totale = q_conf.with_entities(func.sum(Vendita.imponibile_scontato)).scalar() or 0
+    iva_totale = q_conf.with_entities(func.sum(Vendita.importo_iva)).scalar() or 0
 
     # Incassato = importo_totale di vendite pagate
     q_pag = db.query(Vendita).filter(Vendita.stato == "pagata")
@@ -194,6 +204,8 @@ def vendite_stats(anno: Optional[int] = Query(None), db: Session = Depends(get_d
         "confermate": confermate,
         "spedite": spedite,
         "pagate": pagate,
+        "imponibile_totale": float(imponibile_totale),
+        "iva_totale": float(iva_totale),
         "fatturato": float(fatturato),
         "incassato": float(incassato),
         "da_incassare": round(da_incassare, 2),
@@ -409,6 +421,8 @@ def list_vendite(
                 confezionamento_formato=conf.formato if conf else None,
                 contenitore_descrizione=cont_desc,
                 quantita=r.quantita,
+                prezzo_listino=float(r.prezzo_listino) if r.prezzo_listino else None,
+                sconto_percentuale=float(r.sconto_percentuale) if r.sconto_percentuale else 0,
                 prezzo_unitario=float(r.prezzo_unitario),
                 importo_riga=float(r.importo_riga),
             ))
@@ -420,7 +434,9 @@ def list_vendite(
             sconto_percentuale=float(v.sconto_percentuale) if v.sconto_percentuale else None,
             imponibile_scontato=float(v.imponibile_scontato),
             iva_percentuale=float(v.iva_percentuale),
-            importo_iva=float(v.importo_iva), importo_totale=float(v.importo_totale),
+            importo_iva=float(v.importo_iva),
+            arrotondamento=float(v.arrotondamento) if v.arrotondamento else 0,
+            importo_totale=float(v.importo_totale),
             numero_fattura=v.numero_fattura, data_pagamento=v.data_pagamento,
             modalita_pagamento=v.modalita_pagamento,
             riferimento_pagamento=v.riferimento_pagamento,
@@ -444,7 +460,7 @@ def get_vendita(vendita_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=VenditaOut, status_code=status.HTTP_201_CREATED)
-def create_vendita(data: VenditaCreate, db: Session = Depends(get_db)):
+def create_vendita(data: VenditaCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     # Verifica cliente
     cli = db.query(Cliente).filter(Cliente.id == data.cliente_id).first()
     if not cli:
@@ -468,36 +484,51 @@ def create_vendita(data: VenditaCreate, db: Session = Depends(get_db)):
     vendita_dict["codice"] = codice
     vendita_dict["stato"] = "bozza"
 
-    # Ricalcolo importi (server-side, ignora valori client)
-    imponibile = float(vendita_dict.get("imponibile", 0))
-    sconto = float(vendita_dict.get("sconto_percentuale", 0) or 0)
-    imponibile_scontato = round(imponibile * (1 - sconto / 100), 2)
+    # Ricalcolo importi server-side dalle righe (sconto per riga)
     iva_pct = float(vendita_dict.get("iva_percentuale", 4))
-    vendita_dict["imponibile_scontato"] = imponibile_scontato
-    vendita_dict["importo_iva"] = round(imponibile_scontato * iva_pct / 100, 2)
-    vendita_dict["importo_totale"] = round(imponibile_scontato + vendita_dict["importo_iva"], 2)
+    imponibile_totale = 0.0
 
     v = Vendita(**vendita_dict)
     db.add(v)
     db.flush()
 
     for riga in data.righe:
+        conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
+        prezzo_listino = float(riga.prezzo_listino) if riga.prezzo_listino else (float(conf.prezzo_imponibile) if conf and conf.prezzo_imponibile else 0)
+        sconto_pct = float(riga.sconto_percentuale or 0)
+        prezzo_unitario = round(prezzo_listino * (1 - sconto_pct / 100), 2)
+        importo_riga = round(riga.quantita * prezzo_unitario, 2)
+        imponibile_totale += importo_riga
+
         r = VenditaRiga(
             vendita_id=v.id,
             confezionamento_id=riga.confezionamento_id,
             quantita=riga.quantita,
-            prezzo_unitario=riga.prezzo_unitario,
-            importo_riga=riga.importo_riga,
+            prezzo_listino=prezzo_listino,
+            sconto_percentuale=sconto_pct,
+            prezzo_unitario=prezzo_unitario,
+            importo_riga=importo_riga,
         )
         db.add(r)
 
+    # Totali header: sconto header = 0, imponibile = somma righe
+    v.imponibile = round(imponibile_totale, 2)
+    v.sconto_percentuale = 0
+    v.imponibile_scontato = round(imponibile_totale, 2)
+    v.importo_iva = round(imponibile_totale * iva_pct / 100, 2)
+    arrotondamento = float(vendita_dict.get("arrotondamento", 0) or 0)
+    v.arrotondamento = round(arrotondamento, 2)
+    v.importo_totale = round(v.imponibile_scontato + v.importo_iva + v.arrotondamento, 2)
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="vendita", entita_id=v.id, codice_entita=v.codice)
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
 
 
 @router.put("/{vendita_id}", response_model=VenditaOut)
-def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(get_db)):
+def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
@@ -520,37 +551,50 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
     for key, value in update_data.items():
         setattr(v, key, value)
 
-    # Ricalcolo importi (server-side, ignora valori client)
-    imponibile = float(v.imponibile or 0)
-    sconto = float(v.sconto_percentuale or 0)
-    v.imponibile_scontato = round(imponibile * (1 - sconto / 100), 2)
     iva_pct = float(v.iva_percentuale or 4)
-    v.importo_iva = round(v.imponibile_scontato * iva_pct / 100, 2)
-    v.importo_totale = round(v.imponibile_scontato + v.importo_iva, 2)
 
     if righe_data is not None:
-        # Cancella righe esistenti e ricrea
+        # Cancella righe esistenti e ricrea con ricalcolo sconto per riga
         db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
+        imponibile_totale = 0.0
         for riga in righe_data:
             conf = db.query(Confezionamento).filter(Confezionamento.id == riga["confezionamento_id"]).first()
             if not conf:
                 raise HTTPException(status_code=400, detail=f"Confezionamento {riga['confezionamento_id']} non trovato.")
+            prezzo_listino = float(riga.get("prezzo_listino") or 0) or (float(conf.prezzo_imponibile) if conf and conf.prezzo_imponibile else 0)
+            sconto_pct = float(riga.get("sconto_percentuale", 0) or 0)
+            prezzo_unitario = round(prezzo_listino * (1 - sconto_pct / 100), 2)
+            importo_riga = round(riga["quantita"] * prezzo_unitario, 2)
+            imponibile_totale += importo_riga
+
             r = VenditaRiga(
                 vendita_id=vendita_id,
                 confezionamento_id=riga["confezionamento_id"],
                 quantita=riga["quantita"],
-                prezzo_unitario=riga["prezzo_unitario"],
-                importo_riga=riga["importo_riga"],
+                prezzo_listino=prezzo_listino,
+                sconto_percentuale=sconto_pct,
+                prezzo_unitario=prezzo_unitario,
+                importo_riga=importo_riga,
             )
             db.add(r)
 
+        # Ricalcolo totali header dalle righe
+        v.imponibile = round(imponibile_totale, 2)
+        v.sconto_percentuale = 0
+        v.imponibile_scontato = round(imponibile_totale, 2)
+        v.importo_iva = round(imponibile_totale * iva_pct / 100, 2)
+        arrotondamento = float(v.arrotondamento or 0)
+        v.importo_totale = round(v.imponibile_scontato + v.importo_iva + arrotondamento, 2)
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="vendita", entita_id=v.id, codice_entita=v.codice)
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
 
 
 @router.delete("/{vendita_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_vendita(vendita_id: int, db: Session = Depends(get_db)):
+def delete_vendita(vendita_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
@@ -558,6 +602,8 @@ def delete_vendita(vendita_id: int, db: Session = Depends(get_db)):
     if v.stato != "bozza":
         raise HTTPException(status_code=400, detail="Solo le vendite in bozza possono essere eliminate.")
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="vendita", entita_id=vendita_id, codice_entita=v.codice)
     db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
     db.delete(v)
     db.commit()
@@ -590,8 +636,8 @@ def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = De
 # ---------------------------------------------------------------------------
 
 @router.post("/{vendita_id}/conferma", response_model=VenditaOut)
-def conferma_vendita(vendita_id: int, db: Session = Depends(get_db)):
-    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+def conferma_vendita(vendita_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).with_for_update().first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
 
@@ -647,13 +693,16 @@ def conferma_vendita(vendita_id: int, db: Session = Depends(get_db)):
     v.stato = "confermata"
     v.data_conferma = v.data_vendita or date.today()
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="confermato", entita="vendita", entita_id=v.id, codice_entita=v.codice,
+              dettagli=f"Fattura {v.numero_fattura}")
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
 
 
 @router.post("/{vendita_id}/spedisci", response_model=VenditaOut)
-def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = Depends(get_db)):
+def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
@@ -675,13 +724,16 @@ def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = De
         v.spedizione_citta = payload.spedizione_citta
         v.spedizione_provincia = payload.spedizione_provincia
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="spedito", entita="vendita", entita_id=v.id, codice_entita=v.codice,
+              dettagli=f"DDT {v.numero_ddt}")
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
 
 
 @router.post("/{vendita_id}/paga", response_model=VenditaOut)
-def paga_vendita(vendita_id: int, payload: PagaPayload, db: Session = Depends(get_db)):
+def paga_vendita(vendita_id: int, payload: PagaPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
@@ -694,6 +746,9 @@ def paga_vendita(vendita_id: int, payload: PagaPayload, db: Session = Depends(ge
     v.modalita_pagamento = payload.modalita_pagamento
     v.riferimento_pagamento = payload.riferimento_pagamento
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="pagato", entita="vendita", entita_id=v.id, codice_entita=v.codice,
+              dettagli=f"{payload.modalita_pagamento or ''}")
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
@@ -730,6 +785,8 @@ def download_fattura_pdf(vendita_id: int, db: Session = Depends(get_db)):
             "confezionamento_formato": conf.formato if conf else "",
             "contenitore_descrizione": cont_desc or "",
             "quantita": r.quantita,
+            "prezzo_listino": float(r.prezzo_listino) if r.prezzo_listino else None,
+            "sconto_percentuale": float(r.sconto_percentuale) if r.sconto_percentuale else 0,
             "prezzo_unitario": float(r.prezzo_unitario),
             "importo_riga": float(r.importo_riga),
         })

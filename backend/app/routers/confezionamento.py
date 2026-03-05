@@ -2,19 +2,22 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 
 from app.database import get_db
 from app.models.confezionamento_sql import Confezionamento, ConfezionamentoLotto
 from app.models.contenitore_sql import Contenitore
 from app.models.lotto_sql import LottoOlio
 from app.models.movimento_magazzino_sql import MovimentoMagazzino
+from app.models.vendita_sql import VenditaRiga
 from app.models.confezionamento import (
     ConfezionamentoCreate, ConfezionamentoUpdate, ConfezionamentoOut,
     ConfezionamentoLottoOut,
 )
 from app.routers.magazzino import _next_codice_movimento
 from app.models.pagination import paginate, paginated_response
+from app.core.security import get_current_user
+from app.services.audit import log_audit
 
 
 router = APIRouter(prefix="/confezionamenti", tags=["confezionamenti"])
@@ -58,8 +61,10 @@ def _build_conf_out(conf, db):
         capacita_litri=float(conf.capacita_litri),
         num_unita=conf.num_unita,
         litri_totali=float(conf.litri_totali),
-        costo_totale=float(conf.costo_totale) if conf.costo_totale else None,
-        prezzo_unitario=float(conf.prezzo_unitario) if conf.prezzo_unitario else None,
+        prezzo_imponibile=float(conf.prezzo_imponibile) if conf.prezzo_imponibile else None,
+        iva_percentuale=float(conf.iva_percentuale) if conf.iva_percentuale is not None else 4,
+        importo_iva=float(conf.importo_iva) if conf.importo_iva else None,
+        prezzo_listino=float(conf.prezzo_listino) if conf.prezzo_listino else None,
         note=conf.note,
         lotti=lotti_out,
         created_at=conf.created_at,
@@ -79,25 +84,94 @@ def confezionamenti_stats(
     totale = query.count()
     unita = query.with_entities(func.sum(Confezionamento.num_unita)).scalar() or 0
     litri = query.with_entities(func.sum(Confezionamento.litri_totali)).scalar() or 0
-    costo = query.with_entities(func.sum(Confezionamento.costo_totale)).scalar() or 0
 
-    per_formato = {}
+    # Valore produzione totale (num_unita * prezzo_listino)
+    valore_produzione = (
+        query.with_entities(
+            func.sum(Confezionamento.num_unita * Confezionamento.prezzo_listino)
+        ).scalar() or 0
+    )
+
+    # Per-formato: unita + valore produzione
     formato_rows = (
         query.with_entities(
+            Confezionamento.contenitore_id,
             Confezionamento.formato,
             func.sum(Confezionamento.num_unita),
+            func.sum(Confezionamento.num_unita * Confezionamento.prezzo_listino),
         )
-        .group_by(Confezionamento.formato)
+        .group_by(Confezionamento.contenitore_id, Confezionamento.formato)
         .all()
     )
-    for row in formato_rows:
-        per_formato[row[0]] = int(row[1])
+
+    # Giacenza per confezionamento (carico - scarico)
+    mov_q = db.query(
+        MovimentoMagazzino.confezionamento_id,
+        func.sum(case(
+            (MovimentoMagazzino.tipo_movimento == "carico", MovimentoMagazzino.quantita),
+            else_=0,
+        )).label("carichi"),
+        func.sum(case(
+            (MovimentoMagazzino.tipo_movimento == "scarico", MovimentoMagazzino.quantita),
+            else_=0,
+        )).label("scarichi"),
+    ).group_by(MovimentoMagazzino.confezionamento_id)
+
+    if anno:
+        mov_q = mov_q.filter(MovimentoMagazzino.anno_campagna == anno)
+
+    # Mappa confezionamento_id -> giacenza unita
+    giacenza_per_conf = {}
+    for conf_id, carichi, scarichi in mov_q.all():
+        giacenza_per_conf[conf_id] = int(carichi) - int(scarichi)
+
+    # Mappa confezionamento_id -> (contenitore_id, prezzo_listino)
+    conf_list = query.all()
+    conf_info = {c.id: c for c in conf_list}
+
+    # Aggrega giacenza e valore per contenitore_id
+    giacenza_per_formato = {}  # contenitore_id -> {unita, valore}
+    for conf_id, giac_unita in giacenza_per_conf.items():
+        c = conf_info.get(conf_id)
+        if not c or giac_unita <= 0:
+            continue
+        key = c.contenitore_id or 0
+        if key not in giacenza_per_formato:
+            giacenza_per_formato[key] = {"unita": 0, "valore": 0}
+        giacenza_per_formato[key]["unita"] += giac_unita
+        prezzo = float(c.prezzo_listino) if c.prezzo_listino else 0
+        giacenza_per_formato[key]["valore"] += round(giac_unita * prezzo, 2)
+
+    # Contenitore descrizioni
+    cont_ids = list({c.contenitore_id for c in conf_list if c.contenitore_id})
+    cont_map = {}
+    if cont_ids:
+        for ct in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
+            cont_map[ct.id] = ct.descrizione
+
+    valore_giacenza = sum(g["valore"] for g in giacenza_per_formato.values())
+    giacenza_unita = sum(g["unita"] for g in giacenza_per_formato.values())
+
+    per_formato = []
+    for cont_id, formato, prod_unita, prod_valore in formato_rows:
+        giac = giacenza_per_formato.get(cont_id or 0, {"unita": 0, "valore": 0})
+        per_formato.append({
+            "contenitore_id": cont_id,
+            "formato": formato,
+            "descrizione": cont_map.get(cont_id, formato),
+            "produzione_unita": int(prod_unita or 0),
+            "produzione_valore": round(float(prod_valore or 0), 2),
+            "giacenza_unita": giac["unita"],
+            "giacenza_valore": round(giac["valore"], 2),
+        })
 
     return {
         "totale_confezionamenti": totale,
         "totale_unita": int(unita),
         "totale_litri": float(litri),
-        "costo_totale": float(costo),
+        "valore_produzione": round(float(valore_produzione), 2),
+        "giacenza_unita": giacenza_unita,
+        "valore_giacenza": round(valore_giacenza, 2),
         "per_formato": per_formato,
     }
 
@@ -170,6 +244,28 @@ def list_confezionamenti(
         for cont in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
             cont_map[cont.id] = cont
 
+    # Giacenza per confezionamento (carico - scarico)
+    giacenza_map = {}
+    if conf_ids:
+        mov_rows = (
+            db.query(
+                MovimentoMagazzino.confezionamento_id,
+                func.sum(case(
+                    (MovimentoMagazzino.tipo_movimento == "carico", MovimentoMagazzino.quantita),
+                    else_=0,
+                )),
+                func.sum(case(
+                    (MovimentoMagazzino.tipo_movimento == "scarico", MovimentoMagazzino.quantita),
+                    else_=0,
+                )),
+            )
+            .filter(MovimentoMagazzino.confezionamento_id.in_(conf_ids))
+            .group_by(MovimentoMagazzino.confezionamento_id)
+            .all()
+        )
+        for cid, carichi, scarichi in mov_rows:
+            giacenza_map[cid] = int(carichi) - int(scarichi)
+
     result = []
     for conf in confs:
         cont = cont_map.get(conf.contenitore_id) if conf.contenitore_id else None
@@ -184,8 +280,11 @@ def list_confezionamenti(
             capacita_litri=float(conf.capacita_litri),
             num_unita=conf.num_unita,
             litri_totali=float(conf.litri_totali),
-            costo_totale=float(conf.costo_totale) if conf.costo_totale else None,
-            prezzo_unitario=float(conf.prezzo_unitario) if conf.prezzo_unitario else None,
+            prezzo_imponibile=float(conf.prezzo_imponibile) if conf.prezzo_imponibile else None,
+            iva_percentuale=float(conf.iva_percentuale) if conf.iva_percentuale is not None else 4,
+            importo_iva=float(conf.importo_iva) if conf.importo_iva else None,
+            prezzo_listino=float(conf.prezzo_listino) if conf.prezzo_listino else None,
+            giacenza_unita=giacenza_map.get(conf.id),
             note=conf.note, lotti=lotti_map.get(conf.id, []),
             created_at=conf.created_at, updated_at=conf.updated_at,
         ))
@@ -201,7 +300,7 @@ def get_confezionamento(conf_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=ConfezionamentoOut, status_code=status.HTTP_201_CREATED)
-def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(get_db)):
+def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if db.query(Confezionamento).filter(Confezionamento.codice == data.codice).first():
         raise HTTPException(status_code=400, detail="Codice confezionamento gia' esistente.")
 
@@ -211,6 +310,12 @@ def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(ge
 
     lotti_data = data.lotti
     conf_dict = data.model_dump(exclude={"lotti"})
+    # Ricalcola imponibile e IVA dal prezzo listino ivato
+    if conf_dict.get("prezzo_listino") is not None:
+        listino = conf_dict["prezzo_listino"]
+        iva_pct = conf_dict.get("iva_percentuale") or 4
+        conf_dict["prezzo_imponibile"] = round(listino / (1 + iva_pct / 100), 2)
+        conf_dict["importo_iva"] = round(listino - conf_dict["prezzo_imponibile"], 2)
     c = Confezionamento(**conf_dict)
     db.add(c)
     db.flush()
@@ -226,6 +331,8 @@ def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(ge
         )
         db.add(cl)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="creato", entita="confezionamento", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
 
@@ -247,7 +354,7 @@ def create_confezionamento(data: ConfezionamentoCreate, db: Session = Depends(ge
 
 
 @router.put("/{conf_id}", response_model=ConfezionamentoOut)
-def update_confezionamento(conf_id: int, data: ConfezionamentoUpdate, db: Session = Depends(get_db)):
+def update_confezionamento(conf_id: int, data: ConfezionamentoUpdate, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Confezionamento).filter(Confezionamento.id == conf_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Confezionamento non trovato.")
@@ -267,6 +374,13 @@ def update_confezionamento(conf_id: int, data: ConfezionamentoUpdate, db: Sessio
     for key, value in update_data.items():
         setattr(c, key, value)
 
+    # Ricalcola imponibile e IVA dal prezzo listino ivato
+    if c.prezzo_listino is not None:
+        listino = float(c.prezzo_listino)
+        iva_pct = float(c.iva_percentuale) if c.iva_percentuale is not None else 4
+        c.prezzo_imponibile = round(listino / (1 + iva_pct / 100), 2)
+        c.importo_iva = round(listino - float(c.prezzo_imponibile), 2)
+
     if lotti_data is not None:
         # Verifica che tutti i lotti esistano
         if lotti_data:
@@ -285,16 +399,27 @@ def update_confezionamento(conf_id: int, data: ConfezionamentoUpdate, db: Sessio
             )
             db.add(cl)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato", entita="confezionamento", entita_id=c.id, codice_entita=c.codice)
     db.commit()
     db.refresh(c)
     return _build_conf_out(c, db)
 
 
 @router.delete("/{conf_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_confezionamento(conf_id: int, db: Session = Depends(get_db)):
+def delete_confezionamento(conf_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     c = db.query(Confezionamento).filter(Confezionamento.id == conf_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Confezionamento non trovato.")
+
+    # Verifica dipendenze
+    if db.query(VenditaRiga).filter(VenditaRiga.confezionamento_id == conf_id).first():
+        raise HTTPException(status_code=400, detail="Impossibile eliminare: il confezionamento ha righe vendita associate.")
+    if db.query(MovimentoMagazzino).filter(MovimentoMagazzino.confezionamento_id == conf_id).first():
+        raise HTTPException(status_code=400, detail="Impossibile eliminare: il confezionamento ha movimenti magazzino associati.")
+
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="eliminato", entita="confezionamento", entita_id=conf_id, codice_entita=c.codice)
     db.query(ConfezionamentoLotto).filter(ConfezionamentoLotto.confezionamento_id == conf_id).delete()
     db.delete(c)
     db.commit()
