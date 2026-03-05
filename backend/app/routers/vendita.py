@@ -466,21 +466,28 @@ def create_vendita(data: VenditaCreate, db: Session = Depends(get_db), current_u
     if not cli:
         raise HTTPException(status_code=400, detail="Cliente non trovato.")
 
-    # Auto-genera codice se vuoto
+    # Auto-genera codice dopo aver determinato anno_campagna
     codice = data.codice.strip() if data.codice else ""
-    if not codice:
-        codice = _next_codice_vendita(data.anno_campagna, db)
 
     if db.query(Vendita).filter(Vendita.codice == codice).first():
         raise HTTPException(status_code=400, detail="Codice vendita gia' esistente.")
 
-    # Verifica confezionamenti nelle righe
+    # Verifica confezionamenti e auto-deriva anno_campagna dal primo confezionamento
+    anno_da_conf = None
     for riga in data.righe:
         conf = db.query(Confezionamento).filter(Confezionamento.id == riga.confezionamento_id).first()
         if not conf:
             raise HTTPException(status_code=400, detail=f"Confezionamento {riga.confezionamento_id} non trovato.")
+        if anno_da_conf is None:
+            anno_da_conf = conf.anno_campagna
 
     vendita_dict = data.model_dump(exclude={"righe"})
+    # anno_campagna = quello del confezionamento (campagna produttiva)
+    if anno_da_conf is not None:
+        vendita_dict["anno_campagna"] = anno_da_conf
+    # Auto-genera codice con anno campagna corretto
+    if not codice:
+        codice = _next_codice_vendita(vendita_dict["anno_campagna"], db)
     vendita_dict["codice"] = codice
     vendita_dict["stato"] = "bozza"
 
@@ -557,10 +564,13 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
         # Cancella righe esistenti e ricrea con ricalcolo sconto per riga
         db.query(VenditaRiga).filter(VenditaRiga.vendita_id == vendita_id).delete()
         imponibile_totale = 0.0
+        anno_da_conf = None
         for riga in righe_data:
             conf = db.query(Confezionamento).filter(Confezionamento.id == riga["confezionamento_id"]).first()
             if not conf:
                 raise HTTPException(status_code=400, detail=f"Confezionamento {riga['confezionamento_id']} non trovato.")
+            if anno_da_conf is None:
+                anno_da_conf = conf.anno_campagna
             prezzo_listino = float(riga.get("prezzo_listino") or 0) or (float(conf.prezzo_imponibile) if conf and conf.prezzo_imponibile else 0)
             sconto_pct = float(riga.get("sconto_percentuale", 0) or 0)
             prezzo_unitario = round(prezzo_listino * (1 - sconto_pct / 100), 2)
@@ -578,6 +588,9 @@ def update_vendita(vendita_id: int, data: VenditaUpdate, db: Session = Depends(g
             )
             db.add(r)
 
+        # Auto-deriva anno_campagna dal confezionamento
+        if anno_da_conf is not None:
+            v.anno_campagna = anno_da_conf
         # Ricalcolo totali header dalle righe
         v.imponibile = round(imponibile_totale, 2)
         v.sconto_percentuale = 0

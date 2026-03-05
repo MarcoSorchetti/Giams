@@ -27,6 +27,7 @@ let venditeConfezionamentiCache = [];
 
 // ---- Dashboard ----
 let dashboardCharts = [];
+let dashboardAllData = [];
 
 // ---- Utilita' ----
 function debounceSearch(fn, delay = 400) {
@@ -487,9 +488,15 @@ const CHART_DEFAULTS = {
   },
 };
 
+function _fmtItNum(v, decimals) {
+  const parts = Math.abs(Number(v)).toFixed(decimals).split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return (Number(v) < 0 ? "-" : "") + (decimals > 0 ? parts.join(",") : parts[0]);
+}
+
 function fmtNum(v, decimals = 0) {
   if (v == null) return "0";
-  return Number(v).toLocaleString("it-IT", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return _fmtItNum(v, decimals);
 }
 
 async function renderDashboard() {
@@ -509,23 +516,35 @@ async function renderDashboard() {
     });
   });
 
-  // Popola selettore anni
+  // Popola selettore anni (unisce anni da lotti, vendite e costi)
   try {
-    const resAnni = await apiFetch(`${API_URL}/lotti/anni`);
-    const anni = await resAnni.json();
+    const safeFetchAnni = async (url) => {
+      try {
+        const res = await apiFetch(url);
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      } catch { return []; }
+    };
+    const [anniLotti, anniVendite, anniCosti] = await Promise.all([
+      safeFetchAnni(`${API_URL}/lotti/anni`),
+      safeFetchAnni(`${API_URL}/vendite/anni`),
+      safeFetchAnni(`${API_URL}/costi/anni`),
+    ]);
+    const anni = [...new Set([...anniLotti, ...anniVendite, ...anniCosti])].sort((a, b) => b - a);
     const sel = document.getElementById("dashboard-anno");
     if (anni.length === 0) {
       sel.innerHTML = '<option value="">Nessun dato</option>';
       return;
     }
-    sel.innerHTML = anni.map(a => `<option value="${a}">${a}</option>`).join("");
+    sel.innerHTML = '<option value="">Tutti</option>' + anni.map(a => `<option value="${a}">${a}</option>`).join("");
+    // Default: anno piu' recente
+    sel.value = String(anni[0]);
 
-    // Carica dati con l'anno piu' recente selezionato per top-clienti/giacenza
+    // Carica tutti i dati, poi renderizza per l'anno selezionato
     await loadDashboardData(anni);
 
     sel.addEventListener("change", async () => {
-      const anno = parseInt(sel.value);
-      await loadDashboardFilteredSections(anno);
+      await renderDashboardForSelection(sel.value);
     });
   } catch (e) {
     console.error("Errore caricamento dashboard:", e);
@@ -534,7 +553,8 @@ async function renderDashboard() {
 }
 
 async function loadDashboardData(anni) {
-  // Fetch dati per TUTTI gli anni in parallelo (sezioni 1-4)
+  // Fetch dati per TUTTI gli anni in parallelo
+  const safeJson = async (res) => { try { return await res.json(); } catch { return {}; } };
   const promises = anni.map(async (anno) => {
     const [lottiRes, costiCampRes, venditeRes, costiRes] = await Promise.all([
       apiFetch(`${API_URL}/lotti/stats?anno=${anno}`),
@@ -544,26 +564,50 @@ async function loadDashboardData(anni) {
     ]);
     return {
       anno,
-      lotti: await lottiRes.json(),
-      costiCamp: await costiCampRes.json(),
-      vendite: await venditeRes.json(),
-      costi: await costiRes.json(),
+      lotti: await safeJson(lottiRes),
+      costiCamp: await safeJson(costiCampRes),
+      vendite: await safeJson(venditeRes),
+      costi: await safeJson(costiRes),
     };
   });
 
   const allData = await Promise.all(promises);
-  // Ordina per anno crescente
   allData.sort((a, b) => a.anno - b.anno);
+  dashboardAllData = allData;
 
-  renderDashProduzione(allData);
-  renderDashRese(allData);
-  renderDashCostoLitro(allData);
-  renderDashFatturatoCosti(allData);
-  renderDashRiepilogoCosti(allData);
+  // Render per l'anno selezionato
+  const sel = document.getElementById("dashboard-anno");
+  await renderDashboardForSelection(sel.value);
+}
 
-  // Sezioni filtrate per anno (anno piu' recente)
-  const annoCorrente = anni[0]; // gia' ordinati DESC dal backend
-  await loadDashboardFilteredSections(annoCorrente);
+async function renderDashboardForSelection(annoValue) {
+  // Distruggi chart esistenti
+  dashboardCharts.forEach(c => c.destroy());
+  dashboardCharts.length = 0;
+
+  // Filtra dati
+  let filteredData;
+  if (annoValue === "") {
+    filteredData = dashboardAllData;
+  } else {
+    const anno = parseInt(annoValue);
+    filteredData = dashboardAllData.filter(d => d.anno === anno);
+  }
+
+  // Sezioni multi-anno (tabelle + chart)
+  renderDashProduzione(filteredData);
+  renderDashRese(filteredData);
+  renderDashCostoLitro(filteredData);
+  renderDashFatturatoCosti(filteredData);
+  renderDashRiepilogoCosti(filteredData);
+
+  // Sezioni per-anno (Top Clienti, Giacenza, Dettaglio Costi)
+  const annoFiltrato = annoValue !== ""
+    ? parseInt(annoValue)
+    : dashboardAllData.length > 0 ? dashboardAllData[dashboardAllData.length - 1].anno : null;
+  if (annoFiltrato) {
+    await loadDashboardFilteredSections(annoFiltrato);
+  }
 }
 
 async function loadDashboardFilteredSections(anno) {
@@ -841,7 +885,7 @@ async function renderDashTopClienti(anno) {
   if (label) label.textContent = `(${anno})`;
 
   try {
-    const res = await apiFetch(`${API_URL}/vendite/top-clienti?anno=${anno}&limit=10`);
+    const res = await apiFetch(`${API_URL}/vendite/top-clienti?anno=${anno}&limit=50`);
     const data = await res.json();
 
     if (data.length === 0) {
@@ -960,7 +1004,7 @@ async function caricaParcelleStats() {
     const stats = await res.json();
     document.getElementById("stat-parcelle").textContent = stats.totale_parcelle;
     document.getElementById("stat-ettari").textContent = parseFloat(stats.totale_ettari).toFixed(1);
-    document.getElementById("stat-piante").textContent = stats.totale_piante.toLocaleString("it-IT");
+    document.getElementById("stat-piante").textContent = fmtNum(stats.totale_piante);
     document.getElementById("stat-produttive").textContent = stats.per_stato?.produttivo || 0;
   } catch (err) {
     console.error("Errore caricamento stats:", err);
@@ -1438,10 +1482,10 @@ async function caricaRaccolteStats() {
     const res = await apiFetch(`${API_URL}/raccolte/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-raccolte").textContent = stats.totale_raccolte;
-    document.getElementById("stat-kg-olive").textContent = parseFloat(stats.totale_kg).toLocaleString("it-IT");
+    document.getElementById("stat-kg-olive").textContent = fmtNum(stats.totale_kg);
     document.getElementById("stat-media-kg").textContent = parseFloat(stats.media_kg).toFixed(1);
     const costo = parseFloat(stats.costo_totale);
-    document.getElementById("stat-costo-raccolte").textContent = costo > 0 ? `€ ${costo.toLocaleString("it-IT")}` : "—";
+    document.getElementById("stat-costo-raccolte").textContent = costo > 0 ? fmtEuro(costo) : "—";
   } catch (err) {
     console.error("Errore stats raccolte:", err);
   }
@@ -1483,7 +1527,7 @@ function renderTabellaRaccolte() {
 
   tbody.innerHTML = raccolteLista.map(r => {
     const parcNomi = r.parcelle.map(p => `${p.parcella_codice} (${p.kg_olive} kg)`).join(", ") || "—";
-    const costo = r.costo_totale_raccolta ? `€ ${parseFloat(r.costo_totale_raccolta).toFixed(0)}` : "—";
+    const costo = r.costo_totale_raccolta ? fmtEuro(r.costo_totale_raccolta) : "—";
     const lottoIcon = r.ha_lotto
       ? `<span class="badge-stato-produttivo">Si</span>`
       : `<button class="btn btn-outline-accent btn-sm" onclick="renderLottoFormDaRaccolta(${r.id})" title="Crea lotto"><i class="fa-solid fa-plus"></i></button>`;
@@ -1763,12 +1807,12 @@ async function caricaLottiStats() {
     const res = await apiFetch(`${API_URL}/lotti/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-lotti").textContent = stats.totale_lotti;
-    document.getElementById("stat-kg-olive-lotti").textContent = parseFloat(stats.totale_kg_olive).toLocaleString("it-IT");
-    document.getElementById("stat-litri").textContent = parseFloat(stats.totale_litri).toLocaleString("it-IT");
-    document.getElementById("stat-kg-olio").textContent = parseFloat(stats.totale_kg_olio).toLocaleString("it-IT");
+    document.getElementById("stat-kg-olive-lotti").textContent = fmtNum(stats.totale_kg_olive);
+    document.getElementById("stat-litri").textContent = fmtNum(stats.totale_litri);
+    document.getElementById("stat-kg-olio").textContent = fmtNum(stats.totale_kg_olio);
     document.getElementById("stat-resa").textContent = `${stats.resa_media}%`;
     const costo = parseFloat(stats.costo_totale);
-    document.getElementById("stat-costo-lotti").textContent = costo > 0 ? `€ ${costo.toLocaleString("it-IT")}` : "—";
+    document.getElementById("stat-costo-lotti").textContent = costo > 0 ? fmtEuro(costo) : "—";
   } catch (err) {
     console.error("Errore stats lotti:", err);
   }
@@ -2159,10 +2203,10 @@ async function caricaConfStats() {
     const res = await apiFetch(`${API_URL}/confezionamenti/stats?${params}`);
     const stats = await res.json();
     document.getElementById("stat-conf-totale").textContent = stats.totale_confezionamenti;
-    document.getElementById("stat-conf-unita").textContent = stats.totale_unita.toLocaleString("it-IT");
-    document.getElementById("stat-conf-litri").textContent = parseFloat(stats.totale_litri).toLocaleString("it-IT");
-    document.getElementById("stat-conf-val-prod").textContent = `€ ${parseFloat(stats.valore_produzione || 0).toLocaleString("it-IT", {minimumFractionDigits: 2})}`;
-    document.getElementById("stat-conf-val-giac").textContent = `€ ${parseFloat(stats.valore_giacenza || 0).toLocaleString("it-IT", {minimumFractionDigits: 2})}`;
+    document.getElementById("stat-conf-unita").textContent = fmtNum(stats.totale_unita);
+    document.getElementById("stat-conf-litri").textContent = fmtNum(stats.totale_litri);
+    document.getElementById("stat-conf-val-prod").textContent = fmtEuro(stats.valore_produzione || 0);
+    document.getElementById("stat-conf-val-giac").textContent = fmtEuro(stats.valore_giacenza || 0);
   } catch (err) {
     console.error("Errore stats confezionamenti:", err);
   }
@@ -2201,8 +2245,8 @@ function renderTabellaConf() {
 
   tbody.innerHTML = confezionamentiLista.map(c => {
     const lottiNomi = c.lotti.map(l => `${l.lotto_codice} (${l.litri_utilizzati}L)`).join(", ") || "—";
-    const imponibile = c.prezzo_imponibile ? `€ ${parseFloat(c.prezzo_imponibile).toFixed(2)}` : "—";
-    const listino = c.prezzo_listino ? `€ ${parseFloat(c.prezzo_listino).toFixed(2)}` : "—";
+    const imponibile = c.prezzo_imponibile ? fmtEuro(c.prezzo_imponibile) : "—";
+    const listino = c.prezzo_listino ? fmtEuro(c.prezzo_listino) : "—";
     const desc = c.contenitore_descrizione || getContenitoreLabel(c.formato);
     const valProd = c.prezzo_listino ? fmtEuro(c.num_unita * parseFloat(c.prezzo_listino)) : "—";
     const giacUnita = c.giacenza_unita != null ? c.giacenza_unita : 0;
@@ -3482,14 +3526,12 @@ async function caricaCostiStats() {
     const res = await apiFetch(url);
     const s = await res.json();
 
-    const fmt = (v) => "\u20AC " + Number(v).toLocaleString("it-IT", {minimumFractionDigits:2});
-
     document.getElementById("stat-costi-count").textContent = s.totale_count;
-    document.getElementById("stat-costi-totale").textContent = fmt(s.totale_importo);
-    document.getElementById("stat-costi-pagati").textContent = fmt(s.totale_pagati);
-    document.getElementById("stat-costi-da-pagare").textContent = fmt(s.totale_da_pagare);
-    document.getElementById("stat-costi-campagna").textContent = fmt(s.totale_campagna);
-    document.getElementById("stat-costi-strutturale").textContent = fmt(s.totale_strutturale);
+    document.getElementById("stat-costi-totale").textContent = fmtEuro(s.totale_importo);
+    document.getElementById("stat-costi-pagati").textContent = fmtEuro(s.totale_pagati);
+    document.getElementById("stat-costi-da-pagare").textContent = fmtEuro(s.totale_da_pagare);
+    document.getElementById("stat-costi-campagna").textContent = fmtEuro(s.totale_campagna);
+    document.getElementById("stat-costi-strutturale").textContent = fmtEuro(s.totale_strutturale);
   } catch (err) {
     console.error("Errore stats costi:", err);
   }
@@ -3545,7 +3587,7 @@ function renderTabellaCosti() {
       </td>
       <td>${c.descrizione || "—"} ${c.documento ? '<i class="fa-solid fa-paperclip text-secondary ms-1" title="Documento allegato"></i>' : ""}</td>
       <td>${c.fornitore_denominazione || "—"}</td>
-      <td class="text-end fw-bold totale-cell">&euro; ${Number(c.importo_totale).toLocaleString("it-IT", {minimumFractionDigits:2})}</td>
+      <td class="text-end fw-bold totale-cell">${fmtEuro(c.importo_totale)}</td>
       <td class="text-center">
         <span class="badge ${STATO_PAGAMENTO_BADGE[c.stato_pagamento] || "bg-secondary"}">
           ${STATO_PAGAMENTO_LABELS[c.stato_pagamento] || c.stato_pagamento}
@@ -4680,7 +4722,7 @@ function eliminaMovimento(id, codice) {
 
 function fmtEuro(v) {
   if (v == null) return "€ 0,00";
-  return "€ " + Number(v).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "€ " + _fmtItNum(v, 2);
 }
 
 function statoBadge(stato) {
@@ -4941,7 +4983,7 @@ function aggiungiRigaVendita(rigaData = null) {
   let confOptions = '<option value="">— Seleziona —</option>';
   confOptions += venditeConfezionamentiCache.map(c => {
     const label = `${c.codice} — ${c.formato} (${c.contenitore_descrizione || "N/A"})`;
-    return `<option value="${c.id}" data-prezzo="${c.prezzo_imponibile || 0}">${label}</option>`;
+    return `<option value="${c.id}" data-prezzo="${c.prezzo_imponibile || 0}" data-anno="${c.anno_campagna}">${label}</option>`;
   }).join("");
 
   // Sconto default dal cliente selezionato
@@ -4971,11 +5013,16 @@ function aggiungiRigaVendita(rigaData = null) {
     tr.querySelector(".riga-conf").value = rigaData.confezionamento_id;
   }
 
-  // Quando si seleziona un confezionamento → auto-compila prezzo listino
+  // Quando si seleziona un confezionamento → auto-compila prezzo listino e anno campagna
   tr.querySelector(".riga-conf").addEventListener("change", (e) => {
     const opt = e.target.selectedOptions[0];
     const prezzo = parseFloat(opt?.dataset.prezzo || 0);
     tr.querySelector(".riga-prezzo-listino").value = prezzo.toFixed(2);
+    // Auto-imposta anno campagna dal confezionamento (prima riga vince)
+    const annoConf = opt?.dataset.anno;
+    if (annoConf) {
+      document.getElementById("vf-anno").value = annoConf;
+    }
     calcolaImportoRiga(tr);
   });
 

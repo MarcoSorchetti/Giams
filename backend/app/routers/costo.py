@@ -160,11 +160,12 @@ def costi_per_categoria(
     if costo_molitura > 0:
         categorie.append({"nome": "Molitura", "tipo": "campagna", "importo": round(costo_molitura, 2)})
 
-    # Costi campagna per categoria
+    # Costi campagna per categoria (escludi Raccolta/Molitura, gia' conteggiati sopra)
     camp_rows = (
         db.query(CategoriaCosto.nome, func.sum(Costo.importo_totale))
         .join(Costo, Costo.categoria_id == CategoriaCosto.id)
         .filter(Costo.anno_campagna == anno, CategoriaCosto.tipo_costo == "campagna")
+        .filter(CategoriaCosto.nome.notin_(["Raccolta", "Molitura"]))
         .group_by(CategoriaCosto.nome)
         .all()
     )
@@ -237,11 +238,12 @@ def costi_campagna_stats(
         .scalar() or 0
     )
 
-    # Costi campagna aggiuntivi
+    # Costi campagna aggiuntivi (escludi Raccolta/Molitura, gia' conteggiati sopra)
     costi_campagna = (
         db.query(func.sum(Costo.importo_totale))
         .join(CategoriaCosto, Costo.categoria_id == CategoriaCosto.id)
         .filter(Costo.anno_campagna == anno, CategoriaCosto.tipo_costo == "campagna")
+        .filter(CategoriaCosto.nome.notin_(["Raccolta", "Molitura"]))
         .scalar() or 0
     )
 
