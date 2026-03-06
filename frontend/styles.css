@@ -1812,3 +1812,74 @@ th.sortable.active-sort i {
 .toast-msg i { font-size: 1.1rem; flex-shrink: 0; }
 @keyframes toastIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
 @keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(100%); } }
+
+/* =============================================
+   MAPPA AZIENDALE — Leaflet dark theme
+   ============================================= */
+#mappa-container {
+  background: var(--bg-card, #1a1a2e);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+/* Popup stile dark */
+.leaflet-popup-content-wrapper {
+  background: #1e1e2e !important;
+  color: #e0e0e0 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(77,124,15,0.3) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+}
+.leaflet-popup-tip {
+  background: #1e1e2e !important;
+}
+.leaflet-popup-content {
+  margin: 10px 14px !important;
+  font-size: 0.85rem !important;
+  line-height: 1.5 !important;
+}
+/* Tooltip stile dark */
+.mappa-tooltip {
+  background: rgba(30,30,46,0.92) !important;
+  color: #e0e0e0 !important;
+  border: 1px solid rgba(77,124,15,0.4) !important;
+  border-radius: 6px !important;
+  padding: 4px 10px !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+}
+.mappa-tooltip::before {
+  border-top-color: rgba(30,30,46,0.92) !important;
+}
+/* Controlli Leaflet dark */
+.leaflet-control-zoom a,
+.leaflet-control-layers-toggle {
+  background: #1e1e2e !important;
+  color: #e0e0e0 !important;
+  border-color: rgba(77,124,15,0.3) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: #2a2a3e !important;
+}
+.leaflet-control-layers {
+  background: #1e1e2e !important;
+  color: #e0e0e0 !important;
+  border: 1px solid rgba(77,124,15,0.3) !important;
+  border-radius: 8px !important;
+}
+.leaflet-control-layers label {
+  color: #e0e0e0 !important;
+}
+/* Attribution link discreto */
+.leaflet-control-attribution {
+  background: rgba(0,0,0,0.5) !important;
+  color: #888 !important;
+  font-size: 0.65rem !important;
+}
+.leaflet-control-attribution a {
+  color: #aaa !important;
+}
+/* Marker azienda — rimuovi background di default */
+.mappa-marker-azienda {
+  background: none !important;
+  border: none !important;
+}

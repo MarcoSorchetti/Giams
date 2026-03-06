@@ -313,6 +313,7 @@ async function getAppVersion() {
 const _menuInfo = {
   "menu-home":        { title: "", subtitle: "" },
   "menu-dashboard":   { title: "Dashboard", subtitle: "Analisi e statistiche aziendali" },
+  "menu-mappa":       { title: "Mappa Aziendale", subtitle: "Visualizzazione terreni e infrastrutture" },
   "menu-parcelle":    { title: "Gestione Parcelle", subtitle: "Terreni e oliveti \u00b7 Ricerca avanzata" },
   "menu-produzione":  { title: "Produzione Olio", subtitle: "Raccolte, lotti e confezionamento" },
   "menu-contenitori": { title: "Gestione Contenitori", subtitle: "Tipologie di contenitori per il confezionamento" },
@@ -6811,6 +6812,233 @@ function esportaListinoPdf() {
 }
 
 
+// =============================================
+// MAPPA AZIENDALE — Leaflet.js
+// =============================================
+
+let _mappaLeaflet = null;
+
+// Dati GeoJSON delle zone aziendali (estratti da Google Earth KML)
+const MAPPA_ZONE = [
+  {
+    nome: "Oliveto 1 Produttivo",
+    codice: "P001",
+    tipo: "oliveto",
+    stato: "produttivo",
+    coords: [[42.33291125,12.02253313],[42.33176795,12.02230536],[42.33158086,12.02293874],[42.33157003,12.02298137],[42.33230654,12.02312366],[42.33250766,12.02255936],[42.33287654,12.02261586],[42.33289700,12.02255459],[42.33291125,12.02253313]]
+  },
+  {
+    nome: "Impianto 2 Olive Canine",
+    codice: "P002",
+    tipo: "oliveto",
+    stato: "giovane",
+    coords: [[42.33156743,12.02298361],[42.33100147,12.02484454],[42.33168848,12.02498761],[42.33206516,12.02382733],[42.33217643,12.02349055],[42.33223044,12.02331561],[42.33230674,12.02312616],[42.33221758,12.02310717],[42.33212907,12.02309622],[42.33195361,12.02306126],[42.33156743,12.02298361]]
+  },
+  {
+    nome: "Impianto 3 Olive Canine",
+    codice: "P003",
+    tipo: "oliveto",
+    stato: "giovane",
+    coords: [[42.33100819,12.02488881],[42.33037226,12.02707658],[42.33134018,12.02775718],[42.33167196,12.02683522],[42.33171472,12.02666039],[42.33181230,12.02629079],[42.33187441,12.02608073],[42.33189725,12.02597643],[42.33188851,12.02591875],[42.33164246,12.02578031],[42.33183572,12.02511609],[42.33100819,12.02488881]]
+  },
+  {
+    nome: "Impianto 4 Olive Canine",
+    codice: "P004",
+    tipo: "oliveto",
+    stato: "giovane",
+    coords: [[42.33276326,12.02731423],[42.33202043,12.02661196],[42.33178320,12.02671352],[42.33141131,12.02780775],[42.33232972,12.02845945],[42.33239232,12.02843771],[42.33241929,12.02836049],[42.33248665,12.02819246],[42.33255754,12.02802048],[42.33263321,12.02783125],[42.33271122,12.02769137],[42.33279018,12.02750327],[42.33281570,12.02737990],[42.33276326,12.02731423]]
+  },
+  {
+    nome: "Impianto 5 Oliveto",
+    codice: "P005",
+    tipo: "oliveto",
+    stato: "giovane",
+    coords: [[42.33262930,12.02540936],[42.33255721,12.02544171],[42.33255481,12.02544660],[42.33233564,12.02556785],[42.33232814,12.02574629],[42.33228606,12.02612280],[42.33234197,12.02635701],[42.33245203,12.02652846],[42.33261483,12.02684687],[42.33260833,12.02715265],[42.33273559,12.02726442],[42.33283399,12.02680411],[42.33272293,12.02629380],[42.33266104,12.02554985],[42.33266104,12.02554984],[42.33266104,12.02554984],[42.33262930,12.02540936]]
+  },
+  {
+    nome: "Impianto Oliveto 6",
+    codice: "P006",
+    tipo: "oliveto",
+    stato: "giovane",
+    coords: [[42.33186653,12.02502105],[42.33193665,12.02503252],[42.33200387,12.02497921],[42.33208305,12.02494934],[42.33216280,12.02487194],[42.33223943,12.02454469],[42.33231036,12.02420804],[42.33239822,12.02381406],[42.33244594,12.02382415],[42.33246512,12.02374301],[42.33252413,12.02359833],[42.33259560,12.02354173],[42.33266248,12.02354520],[42.33275165,12.02356287],[42.33286390,12.02356167],[42.33295255,12.02352284],[42.33308002,12.02330511],[42.33316650,12.02314034],[42.33316342,12.02301831],[42.33314029,12.02295057],[42.33308746,12.02293115],[42.33297259,12.02299744],[42.33285810,12.02309482],[42.33275775,12.02320019],[42.33264821,12.02326858],[42.33260020,12.02334363],[42.33249414,12.02343765],[42.33225867,12.02366182],[42.33217785,12.02385242],[42.33211138,12.02418035],[42.33205770,12.02433531],[42.33186860,12.02479752],[42.33184015,12.02495146],[42.33186653,12.02502105]]
+  },
+  {
+    nome: "Immobile agricolo",
+    tipo: "edificio",
+    descrizione: "Da ristrutturare, rifare tetto e impianto fotovoltaico",
+    coords: [[42.33208372,12.02523298],[42.33193386,12.02517526],[42.33184222,12.02550716],[42.33192208,12.02554457],[42.33192718,12.02553097],[42.33199113,12.02556051],[42.33208372,12.02523298]]
+  },
+  {
+    nome: "Serra",
+    tipo: "edificio",
+    coords: [[42.33199564,12.02565650],[42.33182013,12.02555761],[42.33175218,12.02574304],[42.33191765,12.02582875],[42.33199564,12.02565650]]
+  },
+  {
+    nome: "Area Immobiliare",
+    tipo: "edificio",
+    coords: [[42.33210549,12.02523626],[42.33184080,12.02511829],[42.33164480,12.02577876],[42.33190461,12.02591779],[42.33210549,12.02523626]]
+  },
+  {
+    nome: "Strada Ingresso",
+    tipo: "strada",
+    descrizione: "Strada ingresso principale",
+    coords: [[42.33220378,12.02516040],[42.33197251,12.02507365],[42.33172612,12.02500065],[42.33138390,12.02493304],[42.33109952,12.02487202],[42.33099465,12.02485808],[42.33100754,12.02488428],[42.33115384,12.02492304],[42.33122730,12.02493885],[42.33139383,12.02498138],[42.33155286,12.02502921],[42.33170737,12.02506776],[42.33183996,12.02510351],[42.33210831,12.02521665],[42.33218017,12.02520141],[42.33220378,12.02516040]]
+  },
+  {
+    nome: "Strada 2 Di Servizio",
+    tipo: "strada",
+    coords: [[42.33215825,12.02521966],[42.33211595,12.02521281],[42.33208724,12.02531632],[42.33205931,12.02541811],[42.33200640,12.02560554],[42.33195569,12.02579599],[42.33191525,12.02591558],[42.33191015,12.02594282],[42.33190504,12.02597005],[42.33189319,12.02604855],[42.33183032,12.02626376],[42.33177719,12.02645513],[42.33173886,12.02659535],[42.33171905,12.02666529],[42.33170367,12.02673297],[42.33166602,12.02687387],[42.33161716,12.02700458],[42.33146693,12.02741558],[42.33142498,12.02754433],[42.33134832,12.02776062],[42.33140243,12.02778815],[42.33144769,12.02766350],[42.33149915,12.02752254],[42.33159372,12.02724691],[42.33168821,12.02698354],[42.33174587,12.02679144],[42.33177326,12.02672540],[42.33176148,12.02671110],[42.33178959,12.02662071],[42.33187318,12.02628244],[42.33189787,12.02619925],[42.33192759,12.02611454],[42.33197214,12.02593783],[42.33211880,12.02538489],[42.33215825,12.02521966]]
+  }
+];
+
+// Colori per tipo zona
+const MAPPA_COLORI = {
+  oliveto_produttivo: { fill: "#66bb6a", border: "#43a047", opacity: 0.5 },
+  oliveto_giovane:    { fill: "#42a5f5", border: "#1e88e5", opacity: 0.4 },
+  edificio:           { fill: "#d32f2f", border: "#b71c1c", opacity: 0.4 },
+  strada:             { fill: "#9e9e9e", border: "#757575", opacity: 0.35 }
+};
+
+// Gruppi layer per i toggle
+let _mappaLayers = { oliveti: null, infrastrutture: null, strade: null };
+
+async function renderMappa() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-mappa");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+  setTopbarInfo("Mappa Aziendale", "Visualizzazione terreni e infrastrutture aziendali");
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Mappa Aziendale" }
+  ]);
+
+  // Carica dati parcelle dal backend per le statistiche
+  let parcelle = [];
+  try {
+    const res = await apiFetch(`${API_URL}/parcelle/?per_page=100`);
+    const data = await res.json();
+    parcelle = data.items || [];
+  } catch (e) { console.warn("Errore caricamento parcelle per mappa", e); }
+
+  // Statistiche
+  const totEttari = parcelle.reduce((s, p) => s + parseFloat(p.superficie_ettari || 0), 0);
+  const totPiante = parcelle.reduce((s, p) => s + (p.num_piante || 0), 0);
+  const produttive = parcelle.filter(p => p.stato === "produttivo").length;
+  document.getElementById("mappa-stat-parcelle").textContent = parcelle.length;
+  document.getElementById("mappa-stat-ettari").textContent = totEttari.toFixed(2);
+  document.getElementById("mappa-stat-piante").textContent = totPiante;
+  document.getElementById("mappa-stat-produttive").textContent = produttive;
+
+  // Distruggi mappa precedente se esiste
+  if (_mappaLeaflet) { _mappaLeaflet.remove(); _mappaLeaflet = null; }
+
+  // Centro mappa: coordinate azienda
+  const centro = [42.33190, 12.02533];
+  _mappaLeaflet = L.map("mappa-container", {
+    center: centro,
+    zoom: 16,
+    zoomControl: true
+  });
+
+  // Tile layer — satellite (Esri)
+  const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri",
+    maxZoom: 19
+  });
+
+  // Tile layer — OpenStreetMap
+  const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors",
+    maxZoom: 19
+  });
+
+  // Default: satellite
+  satellite.addTo(_mappaLeaflet);
+
+  // Controllo layer base
+  L.control.layers({ "Satellite": satellite, "Mappa": osm }, null, { position: "topright" }).addTo(_mappaLeaflet);
+
+  // Marker centrale azienda
+  const markerIcon = L.divIcon({
+    className: "mappa-marker-azienda",
+    html: '<i class="fa-solid fa-location-dot" style="font-size:28px;color:#4caf50;text-shadow:0 2px 6px rgba(0,0,0,0.6)"></i>',
+    iconSize: [28, 28],
+    iconAnchor: [14, 28]
+  });
+  L.marker(centro, { icon: markerIcon })
+    .addTo(_mappaLeaflet)
+    .bindPopup("<strong>Gia.Mar Green Farm</strong><br>Azienda Agricola");
+
+  // Crea gruppi layer
+  _mappaLayers.oliveti = L.layerGroup();
+  _mappaLayers.infrastrutture = L.layerGroup();
+  _mappaLayers.strade = L.layerGroup();
+
+  // Disegna zone
+  MAPPA_ZONE.forEach(zona => {
+    const latlngs = zona.coords.map(c => [c[0], c[1]]);
+    let colorKey;
+    let layerGroup;
+    if (zona.tipo === "oliveto") {
+      colorKey = zona.stato === "produttivo" ? "oliveto_produttivo" : "oliveto_giovane";
+      layerGroup = _mappaLayers.oliveti;
+    } else if (zona.tipo === "edificio") {
+      colorKey = "edificio";
+      layerGroup = _mappaLayers.infrastrutture;
+    } else if (zona.tipo === "strada") {
+      colorKey = "strada";
+      layerGroup = _mappaLayers.strade;
+    }
+
+    const colore = MAPPA_COLORI[colorKey];
+    const polygon = L.polygon(latlngs, {
+      color: colore.border,
+      weight: 2,
+      fillColor: colore.fill,
+      fillOpacity: colore.opacity
+    });
+
+    // Popup con info
+    let popupHtml = `<div style="min-width:160px"><strong>${zona.nome}</strong>`;
+    if (zona.codice) {
+      const parc = parcelle.find(p => p.codice === zona.codice);
+      if (parc) {
+        popupHtml += `<br><span style="color:#888">Codice: ${parc.codice}</span>`;
+        popupHtml += `<br>Superficie: <strong>${parseFloat(parc.superficie_ettari).toFixed(2)} ha</strong>`;
+        popupHtml += `<br>Piante: <strong>${parc.num_piante}</strong>`;
+        popupHtml += `<br>Cultivar: ${parc.varieta_principale}`;
+        popupHtml += `<br>Stato: <strong>${parc.stato}</strong>`;
+      }
+    }
+    if (zona.descrizione) popupHtml += `<br><em style="color:#aaa">${zona.descrizione}</em>`;
+    popupHtml += "</div>";
+    polygon.bindPopup(popupHtml);
+
+    // Tooltip con nome
+    polygon.bindTooltip(zona.nome, { permanent: false, direction: "center", className: "mappa-tooltip" });
+
+    polygon.addTo(layerGroup);
+  });
+
+  // Aggiungi tutti i layer alla mappa
+  Object.values(_mappaLayers).forEach(lg => lg.addTo(_mappaLeaflet));
+
+  // Toggle layer
+  document.getElementById("layer-oliveti")?.addEventListener("change", (e) => {
+    e.target.checked ? _mappaLayers.oliveti.addTo(_mappaLeaflet) : _mappaLeaflet.removeLayer(_mappaLayers.oliveti);
+  });
+  document.getElementById("layer-infrastrutture")?.addEventListener("change", (e) => {
+    e.target.checked ? _mappaLayers.infrastrutture.addTo(_mappaLeaflet) : _mappaLeaflet.removeLayer(_mappaLayers.infrastrutture);
+  });
+  document.getElementById("layer-strade")?.addEventListener("change", (e) => {
+    e.target.checked ? _mappaLayers.strade.addTo(_mappaLeaflet) : _mappaLeaflet.removeLayer(_mappaLayers.strade);
+  });
+  // Forza resize mappa (fix rendering)
+  setTimeout(() => _mappaLeaflet.invalidateSize(), 200);
+}
+
+
 async function renderAuditLog(page) {
   _auditPage = page || 1;
   const main = document.getElementById("main-content");
@@ -6973,6 +7201,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-dashboard")?.addEventListener("click", () => {
     setActiveMenu("menu-dashboard");
     renderDashboard();
+  });
+
+  document.getElementById("menu-mappa")?.addEventListener("click", () => {
+    setActiveMenu("menu-mappa");
+    renderMappa();
   });
 
   document.getElementById("menu-parcelle")?.addEventListener("click", () => {

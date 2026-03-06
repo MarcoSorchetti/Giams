@@ -18,6 +18,9 @@ __pycache__/
 .vscode/
 .idea/
 
+# MCP (contiene credenziali DB)
+.mcp.json
+
 # Log
 logfile
 *.log

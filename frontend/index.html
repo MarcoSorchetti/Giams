@@ -13,6 +13,10 @@
   <!-- Flatpickr date picker -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css" />
+
+  <!-- Leaflet.js — mappa interattiva -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -26,7 +30,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.6.0</div>
+        <div class="app-version">v2.7.1</div>
       </div>
 
       <nav class="nav flex-column sidebar-nav">
@@ -36,6 +40,9 @@
         </button>
         <button id="menu-dashboard" class="text-start sidebar-link" type="button">
           <i class="fa-solid fa-gauge-high me-2"></i> Dashboard
+        </button>
+        <button id="menu-mappa" class="text-start sidebar-link" type="button">
+          <i class="fa-solid fa-map me-2"></i> Mappa Aziendale
         </button>
 
         <!-- Gruppo: Produzione -->
@@ -3115,6 +3122,67 @@
         </div>
       </div>
 
+    </div>
+  </template>
+
+  <!-- ======== TEMPLATE: MAPPA AZIENDALE ======== -->
+  <template id="template-mappa">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+      <div class="d-flex flex-wrap gap-3 flex-grow-1">
+        <div class="stat-card-3d">
+          <div class="stat-card-3d-value" id="mappa-stat-parcelle">0</div>
+          <div class="stat-card-3d-label">Parcelle</div>
+        </div>
+        <div class="stat-card-3d">
+          <div class="stat-card-3d-value" id="mappa-stat-ettari">0</div>
+          <div class="stat-card-3d-label">Ettari totali</div>
+        </div>
+        <div class="stat-card-3d">
+          <div class="stat-card-3d-value" id="mappa-stat-piante">0</div>
+          <div class="stat-card-3d-label">Piante</div>
+        </div>
+        <div class="stat-card-3d">
+          <div class="stat-card-3d-value" id="mappa-stat-produttive">0</div>
+          <div class="stat-card-3d-label">Produttive</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtro layer mappa -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center flex-wrap gap-3">
+          <span class="text-secondary small fw-semibold me-1"><i class="fa-solid fa-layer-group me-1"></i>Layer:</span>
+          <div class="form-check form-check-inline form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="layer-oliveti" checked>
+            <label class="form-check-label small" for="layer-oliveti">Oliveti</label>
+          </div>
+          <div class="form-check form-check-inline form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="layer-infrastrutture" checked>
+            <label class="form-check-label small" for="layer-infrastrutture">Infrastrutture</label>
+          </div>
+          <div class="form-check form-check-inline form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="layer-strade" checked>
+            <label class="form-check-label small" for="layer-strade">Strade</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contenitore mappa -->
+    <div id="mappa-container" style="height: 600px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(77,124,15,0.3);"></div>
+
+    <!-- Legenda -->
+    <div class="card bg-glass mt-3">
+      <div class="card-body py-2 px-3">
+        <div class="d-flex flex-wrap gap-4 align-items-center">
+          <span class="text-secondary small fw-semibold"><i class="fa-solid fa-circle-info me-1"></i>Legenda:</span>
+          <span class="d-flex align-items-center gap-1 small"><span style="display:inline-block;width:14px;height:14px;background:#66bb6a;border-radius:3px;opacity:0.8"></span> Oliveto produttivo</span>
+          <span class="d-flex align-items-center gap-1 small"><span style="display:inline-block;width:14px;height:14px;background:#42a5f5;border-radius:3px;opacity:0.8"></span> Nuovo impianto</span>
+          <span class="d-flex align-items-center gap-1 small"><span style="display:inline-block;width:14px;height:14px;background:#d32f2f;border-radius:3px;opacity:0.8"></span> Edifici</span>
+          <span class="d-flex align-items-center gap-1 small"><span style="display:inline-block;width:14px;height:14px;background:#9e9e9e;border-radius:3px;opacity:0.8"></span> Strade</span>
+        </div>
+      </div>
     </div>
   </template>
 
