@@ -204,11 +204,13 @@ def esegui_riscontro(transazioni_banca: list[dict], costi_db: list[dict]) -> dic
 
     abbinati = []
 
-    # PASS 1: Match esatto importo + data (alta confidenza)
+    # PASS 1: Match importo + data (alta confidenza)
     for bi in list(banca_disponibili):
         tb = uscite_banca[bi]
         best_ci = None
         best_score = 0
+        best_delta_giorni = 999
+        best_fornitore_sim = 0.0
 
         for ci in costi_disponibili:
             tc = costi_db[ci]
@@ -223,25 +225,42 @@ def esegui_riscontro(transazioni_banca: list[dict], costi_db: list[dict]) -> dic
             if not _match_data(data_banca, data_costo, giorni_tolleranza=3):
                 continue
 
-            # Score basato su similarita' testo
-            score = 80  # Base: importo + data matchano
-            desc_sim = max(
-                _similarita_testo(tb.get("dettagli", ""), tc.get("descrizione", "")),
+            # Distanza data in giorni
+            delta_giorni = abs((data_banca - data_costo).days) if data_banca and data_costo else 999
+
+            # Similarita' testo tra operazione banca e fornitore costo
+            fornitore_sim = max(
                 _similarita_testo(tb.get("dettagli", ""), tc.get("fornitore", "")),
                 _similarita_testo(tb.get("operazione", ""), tc.get("fornitore", "")),
             )
+            desc_sim = max(
+                fornitore_sim,
+                _similarita_testo(tb.get("dettagli", ""), tc.get("descrizione", "")),
+            )
+
+            # Score basato su similarita' testo
+            score = 80  # Base: importo + data matchano
             score += desc_sim * 20  # Bonus per similarita' descrizione
 
             if score > best_score:
                 best_score = score
                 best_ci = ci
+                best_delta_giorni = delta_giorni
+                best_fornitore_sim = fornitore_sim
 
         if best_ci is not None and best_score >= 75:
+            # Verificato se:
+            # 1) data esatta (stesso giorno) + importo uguale, OPPURE
+            # 2) data vicina (max 2 gg) + importo uguale + fornitore trovato in descrizione banca
+            data_esatta = best_delta_giorni == 0
+            data_vicina = best_delta_giorni <= 2
+            fornitore_match = best_fornitore_sim >= 0.4
+            tipo = "verificato" if (data_esatta or (data_vicina and fornitore_match)) else "da_verificare"
             abbinati.append({
                 "banca": uscite_banca[bi],
                 "costo": costi_db[best_ci],
                 "score": round(best_score),
-                "tipo": "esatto" if best_score >= 90 else "probabile",
+                "tipo": tipo,
             })
             banca_disponibili.discard(bi)
             costi_disponibili.discard(best_ci)
@@ -279,7 +298,7 @@ def esegui_riscontro(transazioni_banca: list[dict], costi_db: list[dict]) -> dic
                 "banca": uscite_banca[bi],
                 "costo": costi_db[best_ci],
                 "score": round(best_score),
-                "tipo": "incerto",
+                "tipo": "da_verificare",
             })
             banca_disponibili.discard(bi)
             costi_disponibili.discard(best_ci)

@@ -76,6 +76,7 @@ def _build_costo_out(costo, db):
         riferimento_pagamento=costo.riferimento_pagamento,
         stato_pagamento=costo.stato_pagamento,
         anni_ammortamento=costo.anni_ammortamento,
+        stato_riscontro=costo.stato_riscontro,
         quota_ammortamento=quota,
         documento=costo.documento,
         note=costo.note,
@@ -420,6 +421,29 @@ def report_pagamenti_pdf(
     )
 
 
+@router.put("/riscontro-stato/{costo_id}")
+def aggiorna_stato_riscontro(
+    costo_id: int,
+    stato: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Aggiorna lo stato di riscontro bancario di un costo."""
+    stati_validi = {"da_riscontrare", "verificato", "da_verificare"}
+    if stato not in stati_validi:
+        raise HTTPException(status_code=400, detail=f"Stato non valido. Valori ammessi: {', '.join(stati_validi)}")
+
+    c = db.query(Costo).filter(Costo.id == costo_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Costo non trovato.")
+
+    c.stato_riscontro = stato
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="riscontro_aggiornato", entita="costo", entita_id=c.id, codice_entita=c.codice)
+    db.commit()
+    return {"id": c.id, "stato_riscontro": c.stato_riscontro}
+
+
 @router.post("/riscontro-bancario")
 def riscontro_bancario(
     file: UploadFile = File(...),
@@ -444,31 +468,70 @@ def riscontro_bancario(
     except Exception:
         raise HTTPException(status_code=400, detail="Errore nella lettura del file Excel. Verifica il formato.")
 
-    # Recupera costi pagati dalla piattaforma
-    query = db.query(Costo).filter(Costo.data_pagamento.isnot(None))
+    # Recupera costi da riscontrare (non ancora verificati)
+    base_filter = [Costo.data_pagamento.isnot(None)]
     if data_da:
-        query = query.filter(Costo.data_pagamento >= data_da)
+        base_filter.append(Costo.data_pagamento >= data_da)
     if data_a:
-        query = query.filter(Costo.data_pagamento <= data_a)
-    costi = query.order_by(Costo.data_pagamento.asc()).all()
+        base_filter.append(Costo.data_pagamento <= data_a)
 
-    costi_data = _build_report_data(costi, db)
+    costi_da_riscontrare = db.query(Costo).filter(
+        *base_filter,
+        Costo.stato_riscontro.in_(["da_riscontrare", "da_verificare"]),
+    ).order_by(Costo.data_pagamento.asc()).all()
+
+    costi_data = _build_report_data(costi_da_riscontrare, db)
     risultato = esegui_riscontro(transazioni, costi_data)
 
+    # PASS 3: le transazioni bancarie rimaste "solo_banca" potrebbero corrispondere
+    # a costi gia' verificati in precedenza — non sono errori
+    if risultato["solo_banca"]:
+        costi_verificati = db.query(Costo).filter(
+            *base_filter,
+            Costo.stato_riscontro == "verificato",
+        ).order_by(Costo.data_pagamento.asc()).all()
+
+        if costi_verificati:
+            costi_verif_data = _build_report_data(costi_verificati, db)
+            risultato_verif = esegui_riscontro(risultato["solo_banca"], costi_verif_data)
+
+            # Le transazioni che matchano costi verificati vanno in "gia_verificati"
+            for m in risultato_verif["abbinati"]:
+                m["tipo"] = "gia_verificato"
+            risultato["abbinati"].extend(risultato_verif["abbinati"])
+            # Solo le transazioni davvero senza match restano in solo_banca
+            risultato["solo_banca"] = risultato_verif["solo_banca"]
+            # Aggiorna statistiche
+            stats = risultato["statistiche"]
+            stats["abbinati"] = len(risultato["abbinati"])
+            stats["solo_banca"] = len(risultato["solo_banca"])
+            totale_abb = sum(abs(m["banca"]["importo"]) for m in risultato["abbinati"])
+            totale_sb = sum(abs(t["importo"]) for t in risultato["solo_banca"])
+            stats["totale_abbinati"] = round(totale_abb, 2)
+            stats["totale_solo_banca"] = round(totale_sb, 2)
+            if stats["transazioni_banca"] > 0:
+                stats["percentuale_copertura"] = round(stats["abbinati"] / stats["transazioni_banca"] * 100, 1)
+
     # Serializza date per JSON
-    for item in risultato["abbinati"]:
-        b = item["banca"]
-        b["data"] = str(b["data"]) if b["data"] else None
-        b["contabilizzazione"] = str(b["contabilizzazione"]) if b["contabilizzazione"] else None
-        c = item["costo"]
-        c["data_pagamento"] = str(c["data_pagamento"]) if c["data_pagamento"] else None
-        c["data_fattura"] = str(c["data_fattura"]) if c["data_fattura"] else None
-    for b in risultato["solo_banca"]:
-        b["data"] = str(b["data"]) if b["data"] else None
-        b["contabilizzazione"] = str(b["contabilizzazione"]) if b["contabilizzazione"] else None
-    for c in risultato["solo_piattaforma"]:
-        c["data_pagamento"] = str(c["data_pagamento"]) if c["data_pagamento"] else None
-        c["data_fattura"] = str(c["data_fattura"]) if c["data_fattura"] else None
+    def _serialize_dates(items, is_banca=False, is_costo=False, is_abbinato=False):
+        for item in items:
+            if is_abbinato:
+                b = item["banca"]
+                b["data"] = str(b["data"]) if b["data"] else None
+                b["contabilizzazione"] = str(b["contabilizzazione"]) if b["contabilizzazione"] else None
+                c = item["costo"]
+                c["data_pagamento"] = str(c["data_pagamento"]) if c["data_pagamento"] else None
+                c["data_fattura"] = str(c["data_fattura"]) if c["data_fattura"] else None
+            elif is_banca:
+                item["data"] = str(item["data"]) if item["data"] else None
+                item["contabilizzazione"] = str(item["contabilizzazione"]) if item["contabilizzazione"] else None
+            elif is_costo:
+                item["data_pagamento"] = str(item["data_pagamento"]) if item["data_pagamento"] else None
+                item["data_fattura"] = str(item["data_fattura"]) if item["data_fattura"] else None
+
+    _serialize_dates(risultato["abbinati"], is_abbinato=True)
+    _serialize_dates(risultato["solo_banca"], is_banca=True)
+    _serialize_dates(risultato["solo_piattaforma"], is_costo=True)
 
     return risultato
 
@@ -625,6 +688,7 @@ def list_costi(
             riferimento_pagamento=costo.riferimento_pagamento,
             stato_pagamento=costo.stato_pagamento,
             anni_ammortamento=costo.anni_ammortamento,
+            stato_riscontro=costo.stato_riscontro,
             quota_ammortamento=quota,
             documento=costo.documento, note=costo.note,
             created_at=costo.created_at, updated_at=costo.updated_at,

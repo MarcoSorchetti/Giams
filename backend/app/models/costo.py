@@ -21,6 +21,7 @@ class CostoBase(BaseModel):
     riferimento_pagamento: Optional[str] = Field(None, max_length=50)
     stato_pagamento: str = Field("da_pagare", max_length=15)
     anni_ammortamento: int = 0
+    stato_riscontro: str = Field("da_riscontrare", max_length=20)
     note: Optional[str] = None
 
 
@@ -46,6 +47,7 @@ class CostoUpdate(BaseModel):
     riferimento_pagamento: Optional[str] = Field(None, max_length=50)
     stato_pagamento: Optional[str] = Field(None, max_length=15)
     anni_ammortamento: Optional[int] = None
+    stato_riscontro: Optional[str] = Field(None, max_length=20)
     note: Optional[str] = None
 
 

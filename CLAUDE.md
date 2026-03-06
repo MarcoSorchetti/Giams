@@ -161,9 +161,55 @@ git push origin main
 - I prezzi sono sempre in **Euro (€)**, con 2 decimali
 - Le date seguono il formato **italiano**: GG/MM/AAAA
 
-## 🎯 Priorità di Sviluppo
+## 🚀 Procedura di Commit e Deploy
+
+### Commit su GitHub
+Dopo ogni sessione di lavoro o quando l'utente chiede di salvare:
+1. **Version bump** in 3 file (se non ancora fatto):
+   - `frontend/version.json` → `"version": "X.Y.Z"`
+   - `frontend/index.html` → sidebar `<div class="app-version">vX.Y.Z</div>`
+   - `backend/app/main.py` → `version="X.Y.Z"`
+2. **Aggiornare il dump DB** prima del commit (per avere il DB aggiornato su GitHub):
+   ```bash
+   pg_dump -U giams_user -h localhost -d giams_db --no-owner --no-privileges -F c -f /Users/marcos.orchetti/giams/Progetto/giams_db.dump
+   ```
+3. **Git add** solo i file modificati (mai `git add .`):
+   ```bash
+   git add file1 file2 ... Progetto/giams_db.dump
+   ```
+4. **Commit** con messaggio descrittivo:
+   ```bash
+   git commit -m "GIAMS vX.Y.Z — descrizione breve delle modifiche"
+   ```
+5. **Push**:
+   ```bash
+   git push origin main
+   ```
+
+### File su GitHub (repository pubblico)
+- **Codice**: tutto il backend e frontend
+- **Database dump**: `Progetto/giams_db.dump` — aggiornato ad ogni commit
+- **Script deploy VM**: `Progetto/setup_vm.sh` — setup automatico server
+- **Documentazione deploy**: `Progetto/DEPLOY_VM_GIAMS.md`
+
+### Deploy su VM di Produzione
+I sistemisti clonano il repo e lanciano lo script:
+```bash
+git clone https://github.com/MarcoSorchetti/Giams.git /opt/giams
+cd /opt/giams/Progetto
+sudo bash setup_vm.sh DOMINIO PASSWORD_DB
+```
+Per aggiornare una VM gia' installata:
+```bash
+cd /opt/giams && sudo -u giams git pull origin main
+sudo -u giams bash -c "source .venv/bin/activate && pip install -r requirements.txt"
+sudo -u postgres pg_restore -d giams_db --no-owner --role=giams_user --clean --if-exists Progetto/giams_db.dump
+sudo systemctl restart giams
+```
+
+## 🎯 Priorita' di Sviluppo
 Quando suggerisci soluzioni, considera in quest'ordine:
-1. **Semplicità** — meno codice, più manutenibile
-2. **Affidabilità** — i dati aziendali non devono mai andare persi
-3. **Usabilità** — l'utente finale non è un tecnico informatico
+1. **Semplicita'** — meno codice, piu' manutenibile
+2. **Affidabilita'** — i dati aziendali non devono mai andare persi
+3. **Usabilita'** — l'utente finale non e' un tecnico informatico
 4. **Performance** — ottimizza solo se necessario

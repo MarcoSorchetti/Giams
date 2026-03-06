@@ -730,7 +730,7 @@ def conferma_vendita(vendita_id: int, db: Session = Depends(get_db), current_use
 
 @router.post("/{vendita_id}/spedisci", response_model=VenditaOut)
 def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).with_for_update().first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
 
@@ -761,7 +761,7 @@ def spedisci_vendita(vendita_id: int, payload: SpedisciPayload, db: Session = De
 
 @router.post("/{vendita_id}/paga", response_model=VenditaOut)
 def paga_vendita(vendita_id: int, payload: PagaPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
+    v = db.query(Vendita).filter(Vendita.id == vendita_id).with_for_update().first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
 

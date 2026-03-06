@@ -36,6 +36,9 @@ class Costo(Base):
     # Ammortamento (solo strutturali)
     anni_ammortamento = Column(Integer, nullable=False, server_default="0")
 
+    # Riscontro bancario
+    stato_riscontro = Column(String(20), nullable=False, server_default="da_riscontrare")
+
     # Documento allegato (path relativo, es. "costi/C_001_2025_abc12345.pdf")
     documento = Column(String(255), nullable=True)
 

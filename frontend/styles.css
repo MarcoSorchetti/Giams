@@ -1952,3 +1952,9 @@ th.sortable.active-sort i {
 .riscontro-dropzone.dragover {
   transform: scale(1.01);
 }
+.riscontro-errore-row {
+  background: rgba(220, 38, 38, 0.15) !important;
+}
+.riscontro-errore-row:hover {
+  background: rgba(220, 38, 38, 0.25) !important;
+}

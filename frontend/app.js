@@ -3718,6 +3718,18 @@ const STATO_PAGAMENTO_BADGE = {
   parziale: "bg-warning text-dark",
 };
 
+const STATO_RISCONTRO_LABELS = {
+  da_riscontrare: "Da riscontrare",
+  verificato: "Verificato",
+  da_verificare: "Da verificare",
+};
+
+const STATO_RISCONTRO_BADGE = {
+  da_riscontrare: "bg-secondary",
+  verificato: "bg-success",
+  da_verificare: "bg-warning text-dark",
+};
+
 const TIPO_DOC_LABELS = {
   fattura: "Fattura",
   ricevuta: "Ricevuta",
@@ -3943,7 +3955,7 @@ function renderTabellaCosti() {
   if (!tbody) return;
 
   if (costiLista.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nessun costo trovato</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nessun costo trovato</td></tr>';
     return;
   }
 
@@ -3961,6 +3973,11 @@ function renderTabellaCosti() {
       <td class="text-center">
         <span class="badge ${STATO_PAGAMENTO_BADGE[c.stato_pagamento] || "bg-secondary"}">
           ${STATO_PAGAMENTO_LABELS[c.stato_pagamento] || c.stato_pagamento}
+        </span>
+      </td>
+      <td class="text-center">
+        <span class="badge ${STATO_RISCONTRO_BADGE[c.stato_riscontro] || "bg-secondary"}">
+          ${STATO_RISCONTRO_LABELS[c.stato_riscontro] || c.stato_riscontro || "—"}
         </span>
       </td>
       <td class="text-center">
@@ -4953,57 +4970,95 @@ function _renderRiscontroRisultati(data) {
   // Tab Abbinati
   const tbodyAbb = document.getElementById("riscontro-abbinati-tbody");
   if (data.abbinati.length === 0) {
-    tbodyAbb.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nessun abbinamento trovato</td></tr>';
+    tbodyAbb.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nessun abbinamento trovato</td></tr>';
   } else {
     tbodyAbb.innerHTML = data.abbinati.map(m => {
       const b = m.banca;
       const c = m.costo;
-      const scoreBadge = m.tipo === "esatto"
-        ? '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Esatto</span>'
-        : m.tipo === "probabile"
-          ? '<span class="badge bg-info"><i class="fa-solid fa-question me-1"></i>Probabile</span>'
-          : '<span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation me-1"></i>Incerto</span>';
-      const dataBanca = b.contabilizzazione || b.data || "—";
-      const dataCosto = c.data_pagamento || "—";
+      const costoId = c.id;
+      let scoreBadge, azioneRiscontro;
+      if (m.tipo === "gia_verificato") {
+        scoreBadge = '<span class="badge bg-success"><i class="fa-solid fa-check-double me-1"></i>Gia\' verificato</span>';
+        azioneRiscontro = '<span class="badge bg-success"><i class="fa-solid fa-lock"></i></span>';
+      } else if (m.tipo === "verificato") {
+        scoreBadge = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Verificato</span>';
+        azioneRiscontro = `<button class="btn btn-sm btn-outline-success btn-riscontro-stato" data-costo-id="${costoId}" data-stato="verificato" title="Conferma verificato">
+            <i class="fa-solid fa-check-double"></i>
+          </button>`;
+      } else {
+        scoreBadge = '<span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation me-1"></i>Da verificare</span>';
+        azioneRiscontro = `<button class="btn btn-sm btn-outline-warning btn-riscontro-stato" data-costo-id="${costoId}" data-stato="verificato" title="Segna come verificato">
+            <i class="fa-solid fa-check"></i>
+          </button>`;
+      }
+      const dataBanca = b.contabilizzazione || b.data || "\u2014";
+      const dataCosto = c.data_pagamento || "\u2014";
       return `<tr>
         <td>${scoreBadge} <small class="text-muted">${m.score}%</small></td>
         <td>${_fmtDataRiscontro(dataBanca)}</td>
-        <td><small>${_escHtml(b.dettagli || b.operazione || "—")}</small></td>
+        <td><small>${_escHtml(b.dettagli || b.operazione || "\u2014")}</small></td>
         <td class="text-end text-danger">${fmtEuro(Math.abs(b.importo))}</td>
         <td>${_fmtDataRiscontro(dataCosto)}</td>
-        <td><small>${_escHtml(c.descrizione || "—")}</small></td>
-        <td>${_escHtml(c.fornitore || "—")}</td>
+        <td><small>${_escHtml(c.descrizione || "\u2014")}</small></td>
+        <td>${_escHtml(c.fornitore || "\u2014")}</td>
         <td class="text-end">${fmtEuro(Math.abs(c.importo_totale))}</td>
+        <td class="text-center">${azioneRiscontro}</td>
       </tr>`;
     }).join("");
+
+    // Event listener per cambio stato riscontro
+    tbodyAbb.querySelectorAll(".btn-riscontro-stato").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const costoId = btn.dataset.costoId;
+        const stato = btn.dataset.stato;
+        try {
+          const res = await apiFetch(`${API_URL}/costi/riscontro-stato/${costoId}?stato=${stato}`, { method: "PUT" });
+          if (res.ok) {
+            // Aggiorna visivamente la riga
+            const tr = btn.closest("tr");
+            const firstTd = tr.querySelector("td:first-child");
+            firstTd.innerHTML = '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Verificato</span> <small class="text-muted">100%</small>';
+            btn.outerHTML = '<span class="badge bg-success"><i class="fa-solid fa-check-double"></i></span>';
+            showToast("Stato riscontro aggiornato", "success");
+          } else {
+            showToast("Errore aggiornamento stato", "danger");
+          }
+        } catch (err) {
+          console.error("Errore aggiornamento stato riscontro:", err);
+          showToast("Errore aggiornamento stato", "danger");
+        }
+      });
+    });
   }
 
-  // Tab Solo Banca
+  // Tab Solo Banca (Errore solo banca — sfondo rosso)
   const tbodySB = document.getElementById("riscontro-solo-banca-tbody");
   if (data.solo_banca.length === 0) {
-    tbodySB.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessun movimento bancario senza corrispondenza</td></tr>';
+    tbodySB.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessun movimento bancario senza corrispondenza</td></tr>';
   } else {
-    tbodySB.innerHTML = data.solo_banca.map(b => `<tr>
+    tbodySB.innerHTML = data.solo_banca.map(b => `<tr class="riscontro-errore-row">
+      <td><span class="badge bg-danger">Errore solo banca</span></td>
       <td>${_fmtDataRiscontro(b.data)}</td>
       <td>${_fmtDataRiscontro(b.contabilizzazione)}</td>
-      <td>${_escHtml(b.operazione || "—")}</td>
-      <td><small>${_escHtml(b.dettagli || "—")}</small></td>
-      <td>${_escHtml(b.categoria || "—")}</td>
-      <td class="text-end text-danger fw-bold">${fmtEuro(Math.abs(b.importo))}</td>
+      <td>${_escHtml(b.operazione || "\u2014")}</td>
+      <td><small>${_escHtml(b.dettagli || "\u2014")}</small></td>
+      <td>${_escHtml(b.categoria || "\u2014")}</td>
+      <td class="text-end fw-bold">${fmtEuro(Math.abs(b.importo))}</td>
     </tr>`).join("");
   }
 
-  // Tab Solo Piattaforma
+  // Tab Solo Piattaforma (Errore solo piattaforma — sfondo rosso)
   const tbodySP = document.getElementById("riscontro-solo-piatt-tbody");
   if (data.solo_piattaforma.length === 0) {
-    tbodySP.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessun costo senza corrispondenza</td></tr>';
+    tbodySP.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessun costo senza corrispondenza</td></tr>';
   } else {
-    tbodySP.innerHTML = data.solo_piattaforma.map(c => `<tr>
+    tbodySP.innerHTML = data.solo_piattaforma.map(c => `<tr class="riscontro-errore-row">
+      <td><span class="badge bg-danger">Errore solo piattaforma</span></td>
       <td>${_fmtDataRiscontro(c.data_pagamento)}</td>
       <td>${_fmtDataRiscontro(c.data_fattura)}</td>
-      <td>${_escHtml(c.descrizione || "—")}</td>
-      <td>${_escHtml(c.fornitore || "—")}</td>
-      <td>${c.numero_fattura || "—"}</td>
+      <td>${_escHtml(c.descrizione || "\u2014")}</td>
+      <td>${_escHtml(c.fornitore || "\u2014")}</td>
+      <td>${c.numero_fattura || "\u2014"}</td>
       <td class="text-end fw-bold">${fmtEuro(Math.abs(c.importo_totale))}</td>
     </tr>`).join("");
   }
