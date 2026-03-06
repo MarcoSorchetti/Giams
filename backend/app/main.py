@@ -32,6 +32,7 @@ from app.routers.causale_movimento import router as causale_movimento_router
 from app.routers.vendita import router as vendita_router
 from app.routers.campagna import router as campagna_router
 from app.routers.audit import router as audit_router
+from app.routers.tipo_documento import router as tipo_documento_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -43,7 +44,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="2.7.1",
+    version="2.10.0",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 
@@ -85,6 +86,7 @@ app.include_router(causale_movimento_router, prefix="/api", dependencies=_protec
 app.include_router(vendita_router, prefix="/api", dependencies=_protected)
 app.include_router(campagna_router, prefix="/api", dependencies=_protected)
 app.include_router(audit_router, prefix="/api", dependencies=_protected)
+app.include_router(tipo_documento_router, prefix="/api", dependencies=_protected)
 
 
 # ------------------------------------------------------------------------------
@@ -97,6 +99,7 @@ from app.database import SessionLocal
 from app.routers.categoria_costo import seed_categorie
 from app.models.causale_movimento_sql import CausaleMovimento
 from app.models.campagna_sql import Campagna
+from app.models.tipo_documento_sql import TipoDocumento
 
 def _seed_causali(db):
     """Popola le causali di default se la tabella e' vuota."""
@@ -121,11 +124,26 @@ def _seed_campagne(db):
     db.add(Campagna(anno=2025, stato="aperta", data_inizio=date(2025, 10, 1)))
     db.commit()
 
+def _seed_tipi_documento(db):
+    """Popola i tipi documento di default se la tabella e' vuota."""
+    if db.query(TipoDocumento).first():
+        return
+    defaults = [
+        ("fattura", "Fattura", True, 1),
+        ("ricevuta", "Ricevuta", True, 2),
+        ("nota_credito", "Nota di credito", True, 3),
+        ("scontrino", "Scontrino", True, 4),
+    ]
+    for valore, etichetta, sistema, ordine in defaults:
+        db.add(TipoDocumento(valore=valore, etichetta=etichetta, sistema=sistema, ordine=ordine))
+    db.commit()
+
 _db = SessionLocal()
 try:
     seed_categorie(_db)
     _seed_causali(_db)
     _seed_campagne(_db)
+    _seed_tipi_documento(_db)
 finally:
     _db.close()
 

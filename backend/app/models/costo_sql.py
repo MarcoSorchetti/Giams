@@ -19,7 +19,7 @@ class Costo(Base):
     # Dati fattura
     data_fattura = Column(Date, nullable=False)
     numero_fattura = Column(String(50), nullable=True)
-    tipo_documento = Column(String(20), nullable=False, server_default="fattura")
+    tipo_documento = Column(String(30), nullable=False, server_default="fattura")
 
     # Importi
     imponibile = Column(Numeric(12, 3), nullable=False)

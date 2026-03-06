@@ -15,14 +15,16 @@ operatività aziendale: produzione, costi, fatturazione e gestione generale.
   - Fatturazione (clienti, fornitori, DDT)
   - Gestione magazzino (scorte olio, bottiglie, materiali)
   - Reportistica aziendale
+  - Mappa aziendale interattiva (parcelle, infrastrutture, strade)
 
 ## 🛠 Stack Tecnologico
 - **Frontend**: HTML5 + CSS3 + JavaScript Vanilla + Bootstrap 5 (dark theme)
   - `index.html` → dashboard principale (SPA)
   - `login.html` → autenticazione
-  - `app.js` → logica applicativa principale (~7000 righe)
+  - `app.js` → logica applicativa principale (~7200 righe)
   - `styles.css` → stile globale (variabili CSS, tema scuro verde)
   - Servito come file statici da FastAPI (non ha un server separato)
+  - **Leaflet.js** v1.9.4 (via CDN unpkg) per mappa interattiva aziendale
 - **Backend**: FastAPI + SQLAlchemy + Alembic (Python 3.12)
   - Auth: JWT (python-jose) con `apiFetch()` lato frontend
   - PDF: fpdf2 (Helvetica, no Unicode — evitare em-dash e caratteri speciali)
@@ -132,6 +134,18 @@ cd backend && alembic upgrade head
 # Push su GitHub
 git push origin main
 ```
+
+## 🗺 Mappa Aziendale (Leaflet.js)
+- **Libreria**: Leaflet.js v1.9.4 caricato via CDN (unpkg) in `index.html`
+- **Tile layers**: Esri satellite (default) + OpenStreetMap (toggle)
+- **Dati poligoni**: definiti staticamente in `app.js` nell'array `MAPPA_ZONE`
+  - Coordinate estratte da file KML (Google Earth) e convertite in formato `[lat, lng]`
+  - 11 zone totali: 6 oliveti (P001-P006), 3 edifici, 2 strade
+- **Layer groups**: Oliveti, Infrastrutture, Strade — toggle indipendente
+- **Integrazione DB**: le parcelle (P001-P006) sono nella tabella `parcelle`, la mappa carica i dati via API `/api/parcelle/` per le stat cards
+- **Stili dark theme**: popup, tooltip, zoom controls e attribution stilizzati in `styles.css`
+- **Funzione principale**: `renderMappa()` in `app.js`
+- **Colori zone**: definiti in `MAPPA_COLORI` (verde oliveti, grigio edifici, marrone strade)
 
 ## ⚠️ Regole Importanti
 - **VERSIONING OBBLIGATORIO**: Dopo OGNI modifica al codice, aggiornare SEMPRE la versione in TUTTI e 3 i file:

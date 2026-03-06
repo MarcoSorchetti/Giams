@@ -3,10 +3,11 @@ import io
 import os
 import shutil
 import uuid
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -287,6 +288,189 @@ def costi_anni(db: Session = Depends(get_db)):
         .all()
     )
     return [a[0] for a in anni]
+
+
+def _calcola_date_periodo(periodo: str):
+    """Calcola data_da e data_a per i preset di periodo."""
+    oggi = date.today()
+    if periodo == "ultimo_mese":
+        return oggi - timedelta(days=30), oggi
+    elif periodo == "ultimo_trimestre":
+        return oggi - timedelta(days=90), oggi
+    elif periodo == "ultimo_semestre":
+        return oggi - timedelta(days=180), oggi
+    elif periodo == "annuale":
+        return date(oggi.year, 1, 1), oggi
+    return None, None
+
+
+def _query_report_costi(db, data_da=None, data_a=None, solo_pagati=True):
+    """Query base per il report costi ordinato per data pagamento."""
+    query = db.query(Costo)
+    if solo_pagati:
+        query = query.filter(Costo.data_pagamento.isnot(None))
+    if data_da:
+        query = query.filter(Costo.data_pagamento >= data_da)
+    if data_a:
+        query = query.filter(Costo.data_pagamento <= data_a)
+    return query.order_by(Costo.data_pagamento.asc(), Costo.data_fattura.asc())
+
+
+def _build_report_data(costi, db):
+    """Costruisce i dati del report con info fornitore e tipo documento."""
+    from app.models.tipo_documento_sql import TipoDocumento
+
+    forn_ids = list({c.fornitore_id for c in costi if c.fornitore_id})
+    forn_map = {}
+    if forn_ids:
+        for f in db.query(Fornitore).filter(Fornitore.id.in_(forn_ids)).all():
+            forn_map[f.id] = f
+
+    tipo_doc_map = {}
+    for t in db.query(TipoDocumento).all():
+        tipo_doc_map[t.valore] = t.etichetta
+
+    result = []
+    for c in costi:
+        forn = forn_map.get(c.fornitore_id) if c.fornitore_id else None
+        result.append({
+            "id": c.id,
+            "codice": c.codice,
+            "data_pagamento": c.data_pagamento,
+            "data_fattura": c.data_fattura,
+            "descrizione": c.descrizione,
+            "fornitore": _fornitore_denominazione(forn),
+            "numero_fattura": c.numero_fattura,
+            "tipo_documento": c.tipo_documento,
+            "tipo_documento_label": tipo_doc_map.get(c.tipo_documento, c.tipo_documento),
+            "imponibile": float(c.imponibile),
+            "importo_iva": float(c.importo_iva),
+            "importo_totale": float(c.importo_totale),
+            "modalita_pagamento": c.modalita_pagamento,
+            "stato_pagamento": c.stato_pagamento,
+        })
+    return result
+
+
+@router.get("/report/pagamenti")
+def report_pagamenti(
+    data_da: Optional[date] = Query(None),
+    data_a: Optional[date] = Query(None),
+    periodo: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Report costi ordinati per data pagamento per riscontro bancario."""
+    if periodo:
+        data_da, data_a = _calcola_date_periodo(periodo)
+
+    costi = _query_report_costi(db, data_da, data_a).all()
+    data = _build_report_data(costi, db)
+
+    totale_imponibile = sum(r["imponibile"] for r in data)
+    totale_iva = sum(r["importo_iva"] for r in data)
+    totale_importo = sum(r["importo_totale"] for r in data)
+
+    return {
+        "costi": data,
+        "totali": {
+            "count": len(data),
+            "imponibile": round(totale_imponibile, 2),
+            "iva": round(totale_iva, 2),
+            "totale": round(totale_importo, 2),
+        },
+        "filtri": {
+            "data_da": str(data_da) if data_da else None,
+            "data_a": str(data_a) if data_a else None,
+            "periodo": periodo,
+        }
+    }
+
+
+@router.get("/report/pagamenti/pdf")
+def report_pagamenti_pdf(
+    data_da: Optional[date] = Query(None),
+    data_a: Optional[date] = Query(None),
+    periodo: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Genera PDF del report costi per riscontro bancario."""
+    from app.services.pdf_report_costi import genera_report_costi_pdf
+
+    label = ""
+    if periodo:
+        data_da, data_a = _calcola_date_periodo(periodo)
+        labels = {
+            "ultimo_mese": "Ultimo mese",
+            "ultimo_trimestre": "Ultimo trimestre",
+            "ultimo_semestre": "Ultimo semestre",
+            "annuale": f"Anno {date.today().year}",
+        }
+        label = labels.get(periodo, "")
+
+    costi = _query_report_costi(db, data_da, data_a).all()
+    data = _build_report_data(costi, db)
+
+    pdf_bytes = genera_report_costi_pdf(data, data_da, data_a, label)
+
+    filename = f"Report_Costi_{date.today().strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
+@router.post("/riscontro-bancario")
+def riscontro_bancario(
+    file: UploadFile = File(...),
+    data_da: Optional[date] = Query(None),
+    data_a: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Analizza file Excel bancario e confronta con i costi registrati."""
+    from app.services.riscontro_bancario import parse_estratto_conto, esegui_riscontro
+
+    # Validazione file
+    allowed_ext = {"xlsx", "xls"}
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail="Formato non supportato. Carica un file Excel (.xlsx)")
+
+    try:
+        file_bytes = file.file.read()
+        transazioni = parse_estratto_conto(file_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Errore nella lettura del file Excel. Verifica il formato.")
+
+    # Recupera costi pagati dalla piattaforma
+    query = db.query(Costo).filter(Costo.data_pagamento.isnot(None))
+    if data_da:
+        query = query.filter(Costo.data_pagamento >= data_da)
+    if data_a:
+        query = query.filter(Costo.data_pagamento <= data_a)
+    costi = query.order_by(Costo.data_pagamento.asc()).all()
+
+    costi_data = _build_report_data(costi, db)
+    risultato = esegui_riscontro(transazioni, costi_data)
+
+    # Serializza date per JSON
+    for item in risultato["abbinati"]:
+        b = item["banca"]
+        b["data"] = str(b["data"]) if b["data"] else None
+        b["contabilizzazione"] = str(b["contabilizzazione"]) if b["contabilizzazione"] else None
+        c = item["costo"]
+        c["data_pagamento"] = str(c["data_pagamento"]) if c["data_pagamento"] else None
+        c["data_fattura"] = str(c["data_fattura"]) if c["data_fattura"] else None
+    for b in risultato["solo_banca"]:
+        b["data"] = str(b["data"]) if b["data"] else None
+        b["contabilizzazione"] = str(b["contabilizzazione"]) if b["contabilizzazione"] else None
+    for c in risultato["solo_piattaforma"]:
+        c["data_pagamento"] = str(c["data_pagamento"]) if c["data_pagamento"] else None
+        c["data_fattura"] = str(c["data_fattura"]) if c["data_fattura"] else None
+
+    return risultato
 
 
 @router.get("/export/csv")

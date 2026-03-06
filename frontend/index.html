@@ -30,7 +30,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.7.1</div>
+        <div class="app-version">v2.10.0</div>
       </div>
 
       <nav class="nav flex-column sidebar-nav">
@@ -1709,6 +1709,12 @@
         <button class="btn btn-outline-secondary btn-sm" id="btn-gestisci-categorie">
           <i class="fa-solid fa-tags me-1"></i> Categorie
         </button>
+        <button class="btn btn-outline-info btn-sm" id="btn-report-pagamenti">
+          <i class="fa-solid fa-building-columns me-1"></i> Report Pagamenti
+        </button>
+        <button class="btn btn-outline-warning btn-sm" id="btn-riscontro-bancario">
+          <i class="fa-solid fa-scale-balanced me-1"></i> Riscontro Bancario
+        </button>
         <button class="btn btn-accent" id="btn-nuovo-costo">
           <i class="fa-solid fa-plus me-1"></i> Nuovo Costo
         </button>
@@ -1906,12 +1912,14 @@
                 </div>
                 <div class="col-4">
                   <label class="form-label">Tipo documento</label>
-                  <select class="form-select form-select-sm" id="costo-tipo-documento">
-                    <option value="fattura">Fattura</option>
-                    <option value="ricevuta">Ricevuta</option>
-                    <option value="nota_credito">Nota di credito</option>
-                    <option value="scontrino">Scontrino</option>
-                  </select>
+                  <div class="input-group input-group-sm">
+                    <select class="form-select form-select-sm" id="costo-tipo-documento">
+                      <!-- Caricato dinamicamente da API -->
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" id="btn-gestisci-tipi-documento" title="Gestisci tipi documento">
+                      <i class="fa-solid fa-gear"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1932,7 +1940,7 @@
                   <label class="form-label">Imponibile *</label>
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">&euro;</span>
-                    <input type="number" class="form-control" id="costo-imponibile" step="0.001" min="0" required />
+                    <input type="number" class="form-control" id="costo-imponibile" step="0.001" required />
                   </div>
                 </div>
                 <div class="col-6">
@@ -2080,6 +2088,32 @@
     </form>
   </template>
 
+  <!-- ═══════════════════ MODAL: GESTIONE TIPI DOCUMENTO ═══════════════════ -->
+  <div class="modal fade" id="modalTipiDocumento" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content modal-dark">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fa-solid fa-file-lines me-2 text-accent"></i>Gestione Tipi Documento</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Form aggiunta nuovo tipo -->
+          <label class="form-label form-label-sm mb-1 opacity-75">Aggiungi nuovo tipo</label>
+          <div class="d-flex gap-2 align-items-center mb-3">
+            <input type="text" class="form-control form-control-sm" id="nuovo-tipo-doc-valore" placeholder="Codice (es. proforma)" maxlength="30" />
+            <input type="text" class="form-control form-control-sm" id="nuovo-tipo-doc-etichetta" placeholder="Etichetta (es. Pro Forma)" maxlength="80" />
+            <button class="btn btn-accent btn-sm px-3" type="button" id="btn-aggiungi-tipo-doc" title="Aggiungi">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+          <hr class="border-secondary opacity-25" />
+          <!-- Lista tipi documento -->
+          <div id="lista-tipi-documento"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════════════ TEMPLATE: GESTIONE CATEGORIE COSTO ═══════════════════ -->
   <template id="template-categorie-costo">
     <div class="module-header mb-3">
@@ -2150,6 +2184,290 @@
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- ═══════════════════ TEMPLATE: REPORT PAGAMENTI COSTI ═══════════════════ -->
+  <template id="template-report-pagamenti">
+    <div class="module-header mb-3">
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" id="btn-torna-costi-da-report">
+          <i class="fa-solid fa-arrow-left me-1"></i> Torna ai Costi
+        </button>
+        <button class="btn btn-outline-danger btn-sm" id="btn-report-pdf">
+          <i class="fa-solid fa-file-pdf me-1"></i> Scarica PDF
+        </button>
+      </div>
+    </div>
+
+    <h4 class="module-title mb-3"><i class="fa-solid fa-building-columns me-2"></i>Report Pagamenti — Riscontro Bancario</h4>
+
+    <!-- Filtri periodo -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Periodo</label>
+            <select class="form-select form-select-sm" id="report-periodo">
+              <option value="">Personalizzato</option>
+              <option value="ultimo_mese">Ultimo mese</option>
+              <option value="ultimo_trimestre">Ultimo trimestre</option>
+              <option value="ultimo_semestre">Ultimo semestre</option>
+              <option value="annuale">Anno corrente</option>
+              <option value="globale">Globale (tutti)</option>
+            </select>
+          </div>
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Da</label>
+            <input type="text" class="form-control form-control-sm flatpickr-date" id="report-data-da" placeholder="GG/MM/AAAA" />
+          </div>
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">A</label>
+            <input type="text" class="form-control form-control-sm flatpickr-date" id="report-data-a" placeholder="GG/MM/AAAA" />
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-accent btn-sm" id="btn-carica-report">
+              <i class="fa-solid fa-magnifying-glass me-1"></i> Cerca
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md-3">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-report-count">0</div><div class="stat-label">N. Pagamenti</div></div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-report-imponibile">0</div><div class="stat-label">Imponibile</div></div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-report-iva">0</div><div class="stat-label">IVA</div></div>
+      </div>
+      <div class="col-sm-6 col-md-3">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-report-totale">0</div><div class="stat-label">Totale</div></div>
+      </div>
+    </div>
+
+    <!-- Tabella -->
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Data Pagamento</th>
+            <th>Data Fattura</th>
+            <th>Descrizione</th>
+            <th>Fornitore</th>
+            <th>N. Fattura</th>
+            <th>Tipo Doc.</th>
+            <th class="text-end">Imponibile</th>
+            <th class="text-end">IVA</th>
+            <th class="text-end">Totale</th>
+            <th>Modalita'</th>
+          </tr>
+        </thead>
+        <tbody id="report-pagamenti-tbody"></tbody>
+      </table>
+    </div>
+  </template>
+
+  <!-- ═══════════════════ TEMPLATE: RISCONTRO BANCARIO ═══════════════════ -->
+  <template id="template-riscontro-bancario">
+    <div class="module-header mb-3">
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" id="btn-torna-costi-da-riscontro">
+          <i class="fa-solid fa-arrow-left me-1"></i> Torna ai Costi
+        </button>
+      </div>
+    </div>
+
+    <h4 class="module-title mb-3"><i class="fa-solid fa-scale-balanced me-2"></i>Riscontro Bancario</h4>
+
+    <!-- Upload area -->
+    <div class="card bg-glass mb-3" id="riscontro-upload-area">
+      <div class="card-body py-4 text-center">
+        <div class="riscontro-dropzone" id="riscontro-dropzone">
+          <i class="fa-solid fa-cloud-arrow-up fa-3x mb-3" style="color: var(--accent);"></i>
+          <h5>Carica l'estratto conto bancario</h5>
+          <p class="text-muted mb-3">Trascina il file Excel (.xlsx) qui oppure clicca per selezionarlo</p>
+          <input type="file" id="riscontro-file-input" accept=".xlsx,.xls" class="d-none" />
+          <button class="btn btn-accent" id="btn-seleziona-file">
+            <i class="fa-solid fa-file-excel me-1"></i> Seleziona file Excel
+          </button>
+          <div class="mt-2 small text-muted" id="riscontro-file-name"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filtri data (opzionale) -->
+    <div class="card bg-glass mb-3" id="riscontro-filtri" style="display:none;">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Filtra costi dal</label>
+            <input type="text" class="form-control form-control-sm flatpickr-date" id="riscontro-data-da" placeholder="GG/MM/AAAA" />
+          </div>
+          <div class="col-auto">
+            <label class="form-label form-label-sm mb-0">Al</label>
+            <input type="text" class="form-control form-control-sm flatpickr-date" id="riscontro-data-a" placeholder="GG/MM/AAAA" />
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-accent btn-sm" id="btn-avvia-riscontro">
+              <i class="fa-solid fa-magnifying-glass-chart me-1"></i> Avvia Riscontro
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loader -->
+    <div class="text-center py-4 d-none" id="riscontro-loader">
+      <div class="spinner-border text-success" role="status"></div>
+      <p class="mt-2">Analisi in corso...</p>
+    </div>
+
+    <!-- Risultati -->
+    <div id="riscontro-risultati" style="display:none;">
+      <!-- Stats -->
+      <div class="row g-2 mb-3">
+        <div class="col-sm-6 col-md">
+          <div class="stat-card stat-card-3d text-center">
+            <div class="stat-value stat-value-sm" id="stat-risc-banca">0</div>
+            <div class="stat-label">Movimenti Banca</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md">
+          <div class="stat-card stat-card-3d text-center">
+            <div class="stat-value stat-value-sm" id="stat-risc-piattaforma">0</div>
+            <div class="stat-label">Costi Piattaforma</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md">
+          <div class="stat-card stat-card-3d text-center" style="border-color: var(--accent);">
+            <div class="stat-value stat-value-sm text-success" id="stat-risc-abbinati">0</div>
+            <div class="stat-label">Abbinati</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md">
+          <div class="stat-card stat-card-3d text-center" style="border-color: #f59e0b;">
+            <div class="stat-value stat-value-sm text-warning" id="stat-risc-solo-banca">0</div>
+            <div class="stat-label">Solo Banca</div>
+          </div>
+        </div>
+        <div class="col-sm-6 col-md">
+          <div class="stat-card stat-card-3d text-center" style="border-color: #ef4444;">
+            <div class="stat-value stat-value-sm text-danger" id="stat-risc-solo-piatt">0</div>
+            <div class="stat-label">Solo Piattaforma</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra copertura -->
+      <div class="card bg-glass mb-3">
+        <div class="card-body py-2">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <strong>Copertura riscontro</strong>
+            <span id="risc-copertura-pct">0%</span>
+          </div>
+          <div class="progress" style="height: 10px; background: rgba(255,255,255,0.1);">
+            <div class="progress-bar bg-success" id="risc-copertura-bar" role="progressbar" style="width:0%"></div>
+          </div>
+          <div class="d-flex justify-content-between mt-2 small">
+            <span>Totale Banca: <strong id="risc-tot-banca">-</strong></span>
+            <span>Totale Piattaforma: <strong id="risc-tot-piatt">-</strong></span>
+            <span>Differenza: <strong id="risc-differenza">-</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs risultati -->
+      <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+          <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-abbinati" type="button">
+            <i class="fa-solid fa-check-double me-1"></i> Abbinati <span class="badge bg-success ms-1" id="badge-abbinati">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-solo-banca" type="button">
+            <i class="fa-solid fa-building-columns me-1"></i> Solo Banca <span class="badge bg-warning ms-1" id="badge-solo-banca">0</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-solo-piattaforma" type="button">
+            <i class="fa-solid fa-laptop me-1"></i> Solo Piattaforma <span class="badge bg-danger ms-1" id="badge-solo-piatt">0</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="tab-content">
+        <!-- Tab Abbinati -->
+        <div class="tab-pane fade show active" id="tab-abbinati">
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle table-bordered-3d">
+              <thead>
+                <tr>
+                  <th>Affidabilita'</th>
+                  <th>Data Banca</th>
+                  <th>Operazione Banca</th>
+                  <th>Importo Banca</th>
+                  <th>Data Costo</th>
+                  <th>Descrizione Costo</th>
+                  <th>Fornitore</th>
+                  <th>Importo Costo</th>
+                </tr>
+              </thead>
+              <tbody id="riscontro-abbinati-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab Solo Banca -->
+        <div class="tab-pane fade" id="tab-solo-banca">
+          <div class="alert alert-warning py-2 mb-2">
+            <i class="fa-solid fa-triangle-exclamation me-1"></i>
+            Movimenti bancari senza corrispondenza nei costi registrati
+          </div>
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle table-bordered-3d">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Contabilizzazione</th>
+                  <th>Operazione</th>
+                  <th>Dettagli</th>
+                  <th>Categoria</th>
+                  <th class="text-end">Importo</th>
+                </tr>
+              </thead>
+              <tbody id="riscontro-solo-banca-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab Solo Piattaforma -->
+        <div class="tab-pane fade" id="tab-solo-piattaforma">
+          <div class="alert alert-danger py-2 mb-2">
+            <i class="fa-solid fa-circle-exclamation me-1"></i>
+            Costi registrati senza corrispondenza nell'estratto conto bancario
+          </div>
+          <div class="table-responsive">
+            <table class="table table-dark table-hover align-middle table-bordered-3d">
+              <thead>
+                <tr>
+                  <th>Data Pagamento</th>
+                  <th>Data Fattura</th>
+                  <th>Descrizione</th>
+                  <th>Fornitore</th>
+                  <th>N. Fattura</th>
+                  <th class="text-end">Importo</th>
+                </tr>
+              </thead>
+              <tbody id="riscontro-solo-piatt-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

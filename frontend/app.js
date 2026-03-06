@@ -3778,6 +3778,8 @@ async function renderCosti() {
 
   document.getElementById("btn-nuovo-costo")?.addEventListener("click", () => renderCostoForm());
   document.getElementById("btn-gestisci-categorie")?.addEventListener("click", () => renderCategorieCosto());
+  document.getElementById("btn-report-pagamenti")?.addEventListener("click", () => renderReportPagamenti());
+  document.getElementById("btn-riscontro-bancario")?.addEventListener("click", () => renderRiscontroBancario());
   document.getElementById("btn-export-costi-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
     const anno = document.getElementById("filtro-costi-anno")?.value;
@@ -3955,7 +3957,7 @@ function renderTabellaCosti() {
       </td>
       <td>${c.descrizione || "—"} ${c.documento ? '<i class="fa-solid fa-paperclip text-secondary ms-1" title="Documento allegato"></i>' : ""}</td>
       <td>${c.fornitore_denominazione || "—"}</td>
-      <td class="text-end fw-bold totale-cell">${fmtEuro(c.importo_totale)}</td>
+      <td class="text-end fw-bold totale-cell ${c.importo_totale < 0 ? 'text-danger' : ''}">${fmtEuro(c.importo_totale)}</td>
       <td class="text-center">
         <span class="badge ${STATO_PAGAMENTO_BADGE[c.stato_pagamento] || "bg-secondary"}">
           ${STATO_PAGAMENTO_LABELS[c.stato_pagamento] || c.stato_pagamento}
@@ -4080,6 +4082,9 @@ async function renderCostoForm() {
   document.getElementById("costo-imponibile")?.addEventListener("input", calcolaImportiCosto);
   document.getElementById("costo-iva")?.addEventListener("change", calcolaImportiCosto);
 
+  // Cambio tipo documento — adatta segno per nota di credito
+  document.getElementById("costo-tipo-documento")?.addEventListener("change", _onTipoDocumentoChange);
+
   // Calcolo quota ammortamento
   document.getElementById("costo-anni-ammortamento")?.addEventListener("change", calcolaQuotaAmmortamento);
 
@@ -4089,9 +4094,13 @@ async function renderCostoForm() {
     await withButtonLoading(e.target, () => salvaCosto(e));
   });
 
-  // Carica categorie e fornitori per i dropdown
+  // Carica categorie, fornitori e tipi documento per i dropdown
   await caricaCategorieCosto();
   await popolaSelectFornitoriCosto();
+  await caricaTipiDocumento();
+
+  // Pulsante gestione tipi documento
+  document.getElementById("btn-gestisci-tipi-documento")?.addEventListener("click", apriModalTipiDocumento);
 
   // Anno campagna - popola select
   if (!costoInModifica) {
@@ -4149,6 +4158,252 @@ async function renderCostoForm() {
   const annoInput = document.getElementById("costo-anno");
   annoInput?.addEventListener("change", aggiornaCodiciCosto);
   annoInput?.addEventListener("input", aggiornaCodiciCosto);
+}
+
+// ── Tipi Documento (caricamento dinamico + gestione) ──
+
+// Carica le opzioni tipo documento dal DB nella select
+async function caricaTipiDocumento() {
+  const sel = document.getElementById("costo-tipo-documento");
+  if (!sel) return;
+  const currentVal = sel.value;
+  try {
+    const res = await apiFetch(`${API_URL}/tipi-documento/`);
+    const tipi = await res.json();
+    sel.innerHTML = "";
+    tipi.forEach(t => {
+      const opt = document.createElement("option");
+      opt.value = t.valore;
+      opt.textContent = t.etichetta;
+      sel.appendChild(opt);
+    });
+    if (currentVal) sel.value = currentVal;
+    if (!sel.value && sel.options.length > 0) sel.value = sel.options[0].value;
+  } catch (err) {
+    console.error("Errore caricamento tipi documento:", err);
+  }
+}
+
+// Flag per evitare listener duplicati sul pulsante aggiungi
+let _tipiDocListenerAttivo = false;
+
+// Apre il modal di gestione tipi documento
+async function apriModalTipiDocumento() {
+  await renderListaTipiDocumento();
+
+  // Usa getOrCreateInstance per non creare modal duplicati
+  const modalEl = document.getElementById("modalTipiDocumento");
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+
+  // Listener aggiunta — solo la prima volta
+  if (!_tipiDocListenerAttivo) {
+    _tipiDocListenerAttivo = true;
+    document.getElementById("btn-aggiungi-tipo-doc").addEventListener("click", _aggiungiTipoDocumento);
+    // Enter sui campi di input per aggiungere
+    ["nuovo-tipo-doc-valore", "nuovo-tipo-doc-etichetta"].forEach(id => {
+      document.getElementById(id).addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); _aggiungiTipoDocumento(); }
+      });
+    });
+  }
+}
+
+// Aggiunge un nuovo tipo documento
+async function _aggiungiTipoDocumento() {
+  const valoreInput = document.getElementById("nuovo-tipo-doc-valore");
+  const etichettaInput = document.getElementById("nuovo-tipo-doc-etichetta");
+  const valore = valoreInput.value.trim();
+  const etichetta = etichettaInput.value.trim();
+
+  if (!valore && !etichetta) return;
+  if (!valore || !etichetta) {
+    alert("Compila sia il codice che l'etichetta.");
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`${API_URL}/tipi-documento/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ valore, etichetta })
+    });
+    if (res.ok) {
+      valoreInput.value = "";
+      etichettaInput.value = "";
+      await renderListaTipiDocumento();
+      await caricaTipiDocumento();
+    } else {
+      const err = await res.json();
+      alert(err.detail || "Errore durante la creazione.");
+    }
+  } catch (err) {
+    console.error("Errore creazione tipo documento:", err);
+    alert("Errore di rete durante la creazione.");
+  }
+}
+
+// Renderizza la lista dei tipi nel modal
+async function renderListaTipiDocumento() {
+  const container = document.getElementById("lista-tipi-documento");
+  if (!container) return;
+  try {
+    const res = await apiFetch(`${API_URL}/tipi-documento/?tutti=true`);
+    const tipi = await res.json();
+    container.innerHTML = "";
+    if (tipi.length === 0) {
+      container.innerHTML = '<p class="text-light opacity-50">Nessun tipo documento configurato.</p>';
+      return;
+    }
+    tipi.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "tipo-doc-row d-flex align-items-center justify-content-between py-2 px-2";
+      // Riga in modalita' visualizzazione
+      row.innerHTML = `
+        <div class="d-flex align-items-center gap-2 flex-grow-1 tipo-doc-view">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input tipo-doc-toggle" type="checkbox" data-id="${t.id}" ${t.attivo ? 'checked' : ''} title="${t.attivo ? 'Disattiva' : 'Attiva'}">
+          </div>
+          <span class="text-light fw-semibold">${t.etichetta}</span>
+          <small class="opacity-50">${t.valore}</small>
+          ${t.sistema ? '<span class="badge bg-info bg-opacity-25 text-info"><i class="fa-solid fa-lock me-1"></i>Sistema</span>' : ''}
+        </div>
+        <div class="d-flex gap-1 tipo-doc-actions">
+          <button class="btn btn-outline-warning btn-sm tipo-doc-btn-edit" data-id="${t.id}" data-etichetta="${t.etichetta}" title="Modifica">
+            <i class="fa-solid fa-pencil"></i>
+          </button>
+          ${!t.sistema ? `<button class="btn btn-outline-danger btn-sm tipo-doc-btn-del" data-id="${t.id}" data-etichetta="${t.etichetta}" title="Elimina">
+            <i class="fa-solid fa-trash"></i>
+          </button>` : ''}
+        </div>
+        <div class="d-none tipo-doc-edit-row d-flex gap-2 flex-grow-1 align-items-center">
+          <input type="text" class="form-control form-control-sm tipo-doc-edit-input" value="${t.etichetta}" maxlength="80" />
+          <button class="btn btn-success btn-sm tipo-doc-btn-save" data-id="${t.id}" title="Salva"><i class="fa-solid fa-check"></i></button>
+          <button class="btn btn-outline-secondary btn-sm tipo-doc-btn-cancel" title="Annulla"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+
+    // Listener toggle attivo/disattivo
+    container.querySelectorAll(".tipo-doc-toggle").forEach(toggle => {
+      toggle.addEventListener("change", async () => {
+        const id = toggle.dataset.id;
+        try {
+          await apiFetch(`${API_URL}/tipi-documento/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ attivo: toggle.checked })
+          });
+          await caricaTipiDocumento();
+        } catch (err) {
+          console.error("Errore toggle tipo documento:", err);
+          toggle.checked = !toggle.checked;
+        }
+      });
+    });
+
+    // Listener modifica inline — mostra input
+    container.querySelectorAll(".tipo-doc-btn-edit").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest(".tipo-doc-row");
+        row.querySelector(".tipo-doc-view").classList.add("d-none");
+        row.querySelector(".tipo-doc-actions").classList.add("d-none");
+        const editRow = row.querySelector(".tipo-doc-edit-row");
+        editRow.classList.remove("d-none");
+        editRow.classList.add("d-flex");
+        editRow.querySelector(".tipo-doc-edit-input").focus();
+      });
+    });
+
+    // Listener annulla modifica
+    container.querySelectorAll(".tipo-doc-btn-cancel").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const row = btn.closest(".tipo-doc-row");
+        row.querySelector(".tipo-doc-view").classList.remove("d-none");
+        row.querySelector(".tipo-doc-actions").classList.remove("d-none");
+        const editRow = row.querySelector(".tipo-doc-edit-row");
+        editRow.classList.add("d-none");
+        editRow.classList.remove("d-flex");
+      });
+    });
+
+    // Listener salva modifica
+    container.querySelectorAll(".tipo-doc-btn-save").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.id;
+        const row = btn.closest(".tipo-doc-row");
+        const nuovaEtichetta = row.querySelector(".tipo-doc-edit-input").value.trim();
+        if (!nuovaEtichetta) return;
+
+        try {
+          const res = await apiFetch(`${API_URL}/tipi-documento/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ etichetta: nuovaEtichetta })
+          });
+          if (res.ok) {
+            await renderListaTipiDocumento();
+            await caricaTipiDocumento();
+          } else {
+            const err = await res.json();
+            alert(err.detail || "Errore durante la modifica.");
+          }
+        } catch (err) {
+          console.error("Errore modifica tipo documento:", err);
+        }
+      });
+    });
+
+    // Listener Enter su input modifica
+    container.querySelectorAll(".tipo-doc-edit-input").forEach(input => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.closest(".tipo-doc-edit-row").querySelector(".tipo-doc-btn-save").click();
+        } else if (e.key === "Escape") {
+          input.closest(".tipo-doc-edit-row").querySelector(".tipo-doc-btn-cancel").click();
+        }
+      });
+    });
+
+    // Listener elimina
+    container.querySelectorAll(".tipo-doc-btn-del").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.id;
+        const etichetta = btn.dataset.etichetta;
+        if (!confirm(`Eliminare il tipo "${etichetta}"?`)) return;
+
+        try {
+          const res = await apiFetch(`${API_URL}/tipi-documento/${id}`, { method: "DELETE" });
+          if (res.status === 204) {
+            await renderListaTipiDocumento();
+            await caricaTipiDocumento();
+          } else if (res.status === 409) {
+            const err = await res.json();
+            if (confirm(err.detail + "\n\nVuoi disattivarlo invece?")) {
+              await apiFetch(`${API_URL}/tipi-documento/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ attivo: false })
+              });
+              await renderListaTipiDocumento();
+              await caricaTipiDocumento();
+            }
+          } else {
+            const err = await res.json();
+            alert(err.detail || "Errore durante l'eliminazione.");
+          }
+        } catch (err) {
+          console.error("Errore eliminazione tipo documento:", err);
+        }
+      });
+    });
+
+  } catch (err) {
+    console.error("Errore caricamento tipi documento:", err);
+    container.innerHTML = '<p class="text-danger">Errore nel caricamento.</p>';
+  }
 }
 
 function aggiornaSelectCategorieCosto() {
@@ -4209,7 +4464,28 @@ function calcolaImportiCosto() {
   document.getElementById("costo-importo-iva").value = importoIva.toFixed(2);
   document.getElementById("costo-importo-totale").value = totale.toFixed(2);
 
+  // Indicatore visivo rosso se importo negativo (nota di credito)
+  const totaleEl = document.getElementById("costo-importo-totale");
+  if (totaleEl) totaleEl.style.color = totale < 0 ? "#ef4444" : "";
+
   calcolaQuotaAmmortamento();
+}
+
+// Quando cambia il tipo documento, adatta il segno dell'imponibile
+function _onTipoDocumentoChange() {
+  const tipoDoc = document.getElementById("costo-tipo-documento")?.value;
+  const imponibileEl = document.getElementById("costo-imponibile");
+  if (!imponibileEl) return;
+  const val = parseFloat(imponibileEl.value);
+  if (isNaN(val) || val === 0) return;
+
+  if (tipoDoc === "nota_credito" && val > 0) {
+    imponibileEl.value = (-Math.abs(val)).toFixed(3);
+    calcolaImportiCosto();
+  } else if (tipoDoc !== "nota_credito" && val < 0) {
+    imponibileEl.value = Math.abs(val).toFixed(3);
+    calcolaImportiCosto();
+  }
 }
 
 function calcolaQuotaAmmortamento() {
@@ -4305,7 +4581,26 @@ async function salvaCosto(e) {
   if (!validaCampoObbligatorio("costo-categoria", "Categoria")) return;
   if (!validaCampoObbligatorio("costo-descrizione", "Descrizione")) return;
   if (!validaCampoObbligatorio("costo-data-fattura", "Data fattura")) return;
-  if (!validaCampoNumerico("costo-imponibile", 0.01, "Imponibile")) return;
+
+  // Imponibile: negativo ammesso solo per nota di credito
+  const tipoDocVal = document.getElementById("costo-tipo-documento")?.value;
+  const imponibileVal = parseFloat(document.getElementById("costo-imponibile")?.value);
+  if (isNaN(imponibileVal) || imponibileVal === 0) {
+    showToast("Imponibile deve essere diverso da zero.", "warning");
+    document.getElementById("costo-imponibile")?.focus();
+    return;
+  }
+  if (tipoDocVal === "nota_credito" && imponibileVal > 0) {
+    showToast("Per una Nota di Credito l'imponibile deve essere negativo.", "warning");
+    document.getElementById("costo-imponibile")?.focus();
+    return;
+  }
+  if (tipoDocVal !== "nota_credito" && imponibileVal < 0) {
+    showToast("Imponibile deve essere positivo per questo tipo documento.", "warning");
+    document.getElementById("costo-imponibile")?.focus();
+    return;
+  }
+
   if (!validaCampoNumerico("costo-iva", 0, "IVA %")) return;
 
   const id = document.getElementById("costo-id")?.value;
@@ -4382,6 +4677,355 @@ function eliminaCosto(id) {
 // =============================================
 // CATEGORIE COSTO — Gestione
 // =============================================
+
+// ── Report Pagamenti Costi (riscontro bancario) ──
+
+async function renderReportPagamenti() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-report-pagamenti");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Costi", onClick: () => { setActiveMenu("menu-costi"); renderCosti(); } },
+    { label: "Report Pagamenti" }
+  ]);
+
+  document.getElementById("btn-torna-costi-da-report")?.addEventListener("click", () => renderCosti());
+
+  // Init flatpickr sui campi data
+  initFlatpickr();
+
+  // Periodo preset: disabilita/abilita date manuali
+  const periodoSel = document.getElementById("report-periodo");
+  const dataDa = document.getElementById("report-data-da");
+  const dataA = document.getElementById("report-data-a");
+
+  periodoSel?.addEventListener("change", () => {
+    const isPeriodo = periodoSel.value !== "";
+    dataDa.disabled = isPeriodo;
+    dataA.disabled = isPeriodo;
+    if (isPeriodo) {
+      dataDa._flatpickr?.clear();
+      dataA._flatpickr?.clear();
+    }
+  });
+
+  // Pulsante cerca
+  document.getElementById("btn-carica-report")?.addEventListener("click", caricaReportPagamenti);
+
+  // Pulsante PDF — scarica via apiFetch (autenticato) e apre in nuova tab
+  document.getElementById("btn-report-pdf")?.addEventListener("click", async () => {
+    const params = _buildReportParams();
+    try {
+      const res = await apiFetch(`${API_URL}/costi/report/pagamenti/pdf?${params.toString()}`);
+      if (!res.ok) throw new Error("Errore generazione PDF");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (err) {
+      console.error("Errore PDF report:", err);
+      showToast("Errore nella generazione del PDF.", "danger");
+    }
+  });
+
+  // Carica default: globale (tutti i pagamenti)
+  periodoSel.value = "globale";
+  dataDa.disabled = true;
+  dataA.disabled = true;
+  await caricaReportPagamenti();
+}
+
+function _buildReportParams() {
+  const params = new URLSearchParams();
+  const periodo = document.getElementById("report-periodo")?.value;
+  if (periodo && periodo !== "globale") {
+    params.set("periodo", periodo);
+  } else if (!periodo) {
+    // Personalizzato: date manuali
+    const da = document.getElementById("report-data-da")?.value;
+    const a = document.getElementById("report-data-a")?.value;
+    if (da) params.set("data_da", da);
+    if (a) params.set("data_a", a);
+  }
+  // "globale" = nessun filtro
+  return params;
+}
+
+async function caricaReportPagamenti() {
+  const params = _buildReportParams();
+  try {
+    const res = await apiFetch(`${API_URL}/costi/report/pagamenti?${params.toString()}`);
+    if (!res.ok) throw new Error("Errore API");
+    const data = await res.json();
+
+    // Stats
+    document.getElementById("stat-report-count").textContent = data.totali.count;
+    document.getElementById("stat-report-imponibile").textContent = fmtEuro(data.totali.imponibile);
+    document.getElementById("stat-report-iva").textContent = fmtEuro(data.totali.iva);
+    document.getElementById("stat-report-totale").textContent = fmtEuro(data.totali.totale);
+
+    // Tabella
+    const tbody = document.getElementById("report-pagamenti-tbody");
+    if (!tbody) return;
+
+    if (data.costi.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Nessun pagamento trovato nel periodo selezionato</td></tr>';
+      return;
+    }
+
+    const MODALITA_LABELS = {
+      "bonifico": "Bonifico", "contanti": "Contanti", "carta": "Carta",
+      "assegno": "Assegno", "ri_ba": "Ri.Ba.", "altro": "Altro"
+    };
+
+    tbody.innerHTML = data.costi.map(c => {
+      const dataPag = c.data_pagamento ? new Date(c.data_pagamento).toLocaleDateString("it-IT") : "—";
+      const dataFat = c.data_fattura ? new Date(c.data_fattura).toLocaleDateString("it-IT") : "—";
+      const isNegativo = c.importo_totale < 0;
+      const classTotale = isNegativo ? "text-danger" : "";
+      return `
+        <tr>
+          <td>${dataPag}</td>
+          <td>${dataFat}</td>
+          <td>${c.descrizione || "—"}</td>
+          <td>${c.fornitore || "—"}</td>
+          <td>${c.numero_fattura || "—"}</td>
+          <td><span class="badge bg-secondary">${c.tipo_documento_label || c.tipo_documento || "—"}</span></td>
+          <td class="text-end ${classTotale}">${fmtEuro(c.imponibile)}</td>
+          <td class="text-end ${classTotale}">${fmtEuro(c.importo_iva)}</td>
+          <td class="text-end fw-bold ${classTotale}">${fmtEuro(c.importo_totale)}</td>
+          <td>${MODALITA_LABELS[c.modalita_pagamento] || c.modalita_pagamento || "—"}</td>
+        </tr>`;
+    }).join("");
+
+  } catch (err) {
+    console.error("Errore caricamento report pagamenti:", err);
+  }
+}
+
+// ── Riscontro Bancario ──
+
+async function renderRiscontroBancario() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-riscontro-bancario");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  setBreadcrumb([
+    { label: "Home", onClick: () => { setActiveMenu("menu-home"); renderHome(); } },
+    { label: "Costi", onClick: () => { setActiveMenu("menu-costi"); renderCosti(); } },
+    { label: "Riscontro Bancario" }
+  ]);
+
+  setTopbarInfo("Riscontro Bancario", "Confronto estratto conto bancario con costi registrati");
+  promoteActionsToTopbar();
+
+  document.getElementById("btn-torna-costi-da-riscontro")?.addEventListener("click", () => renderCosti());
+
+  // Gestione upload file
+  const fileInput = document.getElementById("riscontro-file-input");
+  const dropzone = document.getElementById("riscontro-dropzone");
+  const btnSeleziona = document.getElementById("btn-seleziona-file");
+  const fileNameDiv = document.getElementById("riscontro-file-name");
+  const filtriDiv = document.getElementById("riscontro-filtri");
+  let selectedFile = null;
+
+  btnSeleziona?.addEventListener("click", () => fileInput.click());
+
+  fileInput?.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      selectedFile = e.target.files[0];
+      fileNameDiv.innerHTML = `<i class="fa-solid fa-file-excel text-success me-1"></i> ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)`;
+      filtriDiv.style.display = "block";
+    }
+  });
+
+  // Drag & drop
+  dropzone?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone?.addEventListener("dragleave", () => {
+    dropzone.classList.remove("dragover");
+  });
+  dropzone?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const files = e.dataTransfer.files;
+    if (files.length > 0 && (files[0].name.endsWith(".xlsx") || files[0].name.endsWith(".xls"))) {
+      selectedFile = files[0];
+      fileInput.files = files;
+      fileNameDiv.innerHTML = `<i class="fa-solid fa-file-excel text-success me-1"></i> ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(0)} KB)`;
+      filtriDiv.style.display = "block";
+    } else {
+      showToast("Seleziona un file Excel (.xlsx)", "warning");
+    }
+  });
+
+  // Init flatpickr
+  initFlatpickr();
+
+  // Avvia riscontro
+  document.getElementById("btn-avvia-riscontro")?.addEventListener("click", async () => {
+    if (!selectedFile) {
+      showToast("Seleziona prima un file Excel", "warning");
+      return;
+    }
+    await eseguiRiscontroBancario(selectedFile);
+  });
+}
+
+
+async function eseguiRiscontroBancario(file) {
+  const loader = document.getElementById("riscontro-loader");
+  const risultati = document.getElementById("riscontro-risultati");
+  const uploadArea = document.getElementById("riscontro-upload-area");
+
+  loader?.classList.remove("d-none");
+  risultati.style.display = "none";
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  // Aggiungi filtri data se presenti
+  const dataDa = document.getElementById("riscontro-data-da")?.value;
+  const dataA = document.getElementById("riscontro-data-a")?.value;
+
+  let queryParams = "";
+  const params = new URLSearchParams();
+  if (dataDa) params.set("data_da", dataDa);
+  if (dataA) params.set("data_a", dataA);
+  if (params.toString()) queryParams = "?" + params.toString();
+
+  try {
+    const res = await apiFetch(`${API_URL}/costi/riscontro-bancario${queryParams}`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Errore nell'analisi del file");
+    }
+
+    const data = await res.json();
+    loader?.classList.add("d-none");
+    uploadArea.style.display = "none";
+    risultati.style.display = "block";
+
+    _renderRiscontroRisultati(data);
+  } catch (err) {
+    loader?.classList.add("d-none");
+    console.error("Errore riscontro bancario:", err);
+    showToast(err.message || "Errore nell'analisi del file", "danger");
+  }
+}
+
+
+function _renderRiscontroRisultati(data) {
+  const stats = data.statistiche;
+
+  // Stats cards
+  document.getElementById("stat-risc-banca").textContent = stats.transazioni_banca;
+  document.getElementById("stat-risc-piattaforma").textContent = stats.costi_piattaforma;
+  document.getElementById("stat-risc-abbinati").textContent = stats.abbinati;
+  document.getElementById("stat-risc-solo-banca").textContent = stats.solo_banca;
+  document.getElementById("stat-risc-solo-piatt").textContent = stats.solo_piattaforma;
+
+  // Badges nelle tab
+  document.getElementById("badge-abbinati").textContent = stats.abbinati;
+  document.getElementById("badge-solo-banca").textContent = stats.solo_banca;
+  document.getElementById("badge-solo-piatt").textContent = stats.solo_piattaforma;
+
+  // Barra copertura
+  document.getElementById("risc-copertura-pct").textContent = stats.percentuale_copertura + "%";
+  document.getElementById("risc-copertura-bar").style.width = stats.percentuale_copertura + "%";
+  document.getElementById("risc-tot-banca").textContent = fmtEuro(stats.totale_banca);
+  document.getElementById("risc-tot-piatt").textContent = fmtEuro(stats.totale_piattaforma);
+
+  const diff = stats.differenza;
+  const diffEl = document.getElementById("risc-differenza");
+  diffEl.textContent = fmtEuro(Math.abs(diff));
+  diffEl.className = diff === 0 ? "text-success" : "text-danger";
+
+  // Tab Abbinati
+  const tbodyAbb = document.getElementById("riscontro-abbinati-tbody");
+  if (data.abbinati.length === 0) {
+    tbodyAbb.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nessun abbinamento trovato</td></tr>';
+  } else {
+    tbodyAbb.innerHTML = data.abbinati.map(m => {
+      const b = m.banca;
+      const c = m.costo;
+      const scoreBadge = m.tipo === "esatto"
+        ? '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Esatto</span>'
+        : m.tipo === "probabile"
+          ? '<span class="badge bg-info"><i class="fa-solid fa-question me-1"></i>Probabile</span>'
+          : '<span class="badge bg-warning text-dark"><i class="fa-solid fa-triangle-exclamation me-1"></i>Incerto</span>';
+      const dataBanca = b.contabilizzazione || b.data || "—";
+      const dataCosto = c.data_pagamento || "—";
+      return `<tr>
+        <td>${scoreBadge} <small class="text-muted">${m.score}%</small></td>
+        <td>${_fmtDataRiscontro(dataBanca)}</td>
+        <td><small>${_escHtml(b.dettagli || b.operazione || "—")}</small></td>
+        <td class="text-end text-danger">${fmtEuro(Math.abs(b.importo))}</td>
+        <td>${_fmtDataRiscontro(dataCosto)}</td>
+        <td><small>${_escHtml(c.descrizione || "—")}</small></td>
+        <td>${_escHtml(c.fornitore || "—")}</td>
+        <td class="text-end">${fmtEuro(Math.abs(c.importo_totale))}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  // Tab Solo Banca
+  const tbodySB = document.getElementById("riscontro-solo-banca-tbody");
+  if (data.solo_banca.length === 0) {
+    tbodySB.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessun movimento bancario senza corrispondenza</td></tr>';
+  } else {
+    tbodySB.innerHTML = data.solo_banca.map(b => `<tr>
+      <td>${_fmtDataRiscontro(b.data)}</td>
+      <td>${_fmtDataRiscontro(b.contabilizzazione)}</td>
+      <td>${_escHtml(b.operazione || "—")}</td>
+      <td><small>${_escHtml(b.dettagli || "—")}</small></td>
+      <td>${_escHtml(b.categoria || "—")}</td>
+      <td class="text-end text-danger fw-bold">${fmtEuro(Math.abs(b.importo))}</td>
+    </tr>`).join("");
+  }
+
+  // Tab Solo Piattaforma
+  const tbodySP = document.getElementById("riscontro-solo-piatt-tbody");
+  if (data.solo_piattaforma.length === 0) {
+    tbodySP.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nessun costo senza corrispondenza</td></tr>';
+  } else {
+    tbodySP.innerHTML = data.solo_piattaforma.map(c => `<tr>
+      <td>${_fmtDataRiscontro(c.data_pagamento)}</td>
+      <td>${_fmtDataRiscontro(c.data_fattura)}</td>
+      <td>${_escHtml(c.descrizione || "—")}</td>
+      <td>${_escHtml(c.fornitore || "—")}</td>
+      <td>${c.numero_fattura || "—"}</td>
+      <td class="text-end fw-bold">${fmtEuro(Math.abs(c.importo_totale))}</td>
+    </tr>`).join("");
+  }
+}
+
+
+function _fmtDataRiscontro(val) {
+  if (!val || val === "—" || val === "None") return "—";
+  try {
+    return new Date(val).toLocaleDateString("it-IT");
+  } catch {
+    return val;
+  }
+}
+
+
+function _escHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 
 async function renderCategorieCosto() {
   const main = document.getElementById("main-content");

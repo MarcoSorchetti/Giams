@@ -29,5 +29,8 @@ logfile
 uploads/*
 !uploads/.gitkeep
 
-# Documentazione interna progetto
-Progetto/
+# Documentazione interna progetto (esclusa tranne file deploy)
+Progetto/*
+!Progetto/DEPLOY_VM_GIAMS.md
+!Progetto/setup_vm.sh
+!Progetto/giams_db.dump

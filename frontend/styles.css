@@ -1477,6 +1477,58 @@ a:hover { color: var(--accent-hover); }
 
 .modal-confirm-box .btn { min-width: 100px; }
 
+/* ---- Modal dark theme globale ---- */
+.modal-dark {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: #e0e0e0;
+}
+.modal-dark .modal-header {
+  border-bottom: 1px solid var(--border-color);
+}
+.modal-dark .modal-footer {
+  border-top: 1px solid var(--border-color);
+}
+.modal-dark .form-control,
+.modal-dark .form-select {
+  background: var(--bg-main);
+  border-color: var(--border-color);
+  color: #e0e0e0;
+}
+.modal-dark .form-control::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+.modal-dark .form-control:focus,
+.modal-dark .form-select:focus {
+  background: var(--bg-main);
+  border-color: var(--accent);
+  color: #e0e0e0;
+  box-shadow: 0 0 0 2px rgba(101, 163, 13, 0.2);
+}
+.modal-dark .text-accent { color: var(--accent) !important; }
+.modal-backdrop { --bs-backdrop-opacity: 0.7; }
+
+/* ---- Righe tipi documento nel modal ---- */
+.tipo-doc-row {
+  border-bottom: 1px solid rgba(77, 124, 15, 0.15);
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.tipo-doc-row:hover {
+  background: rgba(77, 124, 15, 0.08);
+}
+.tipo-doc-row:last-child {
+  border-bottom: none;
+}
+.modal-dark .form-check-input {
+  background-color: var(--bg-main);
+  border-color: var(--border-color);
+}
+.modal-dark .form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
 
 /* =============================================
    Listino Prezzi - Righe alternate
@@ -1882,4 +1934,21 @@ th.sortable.active-sort i {
 .mappa-marker-azienda {
   background: none !important;
   border: none !important;
+}
+
+/* ═══ Riscontro Bancario ═══ */
+.riscontro-dropzone {
+  border: 2px dashed rgba(77, 124, 15, 0.4);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.riscontro-dropzone:hover,
+.riscontro-dropzone.dragover {
+  border-color: var(--accent);
+  background: rgba(77, 124, 15, 0.08);
+}
+.riscontro-dropzone.dragover {
+  transform: scale(1.01);
 }
