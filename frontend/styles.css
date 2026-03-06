@@ -666,6 +666,32 @@ a:hover { color: var(--accent-hover); }
   text-align: center;
 }
 
+/* Variante 3D */
+.stat-card.stat-card-3d {
+  background: linear-gradient(160deg, #1e3320 0%, #0c140c 100%);
+  border: 1px solid rgba(77, 124, 15, 0.35);
+  border-top: 2px solid rgba(134, 239, 172, 0.25);
+  border-left: 1px solid rgba(134, 239, 172, 0.12);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.6);
+  border-right: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow:
+    6px 6px 18px rgba(0, 0, 0, 0.8),
+    -2px -2px 8px rgba(77, 124, 15, 0.07),
+    inset 0 2px 3px rgba(134, 239, 172, 0.12),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  padding: 0.75rem 0.5rem;
+}
+.stat-card.stat-card-3d:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    10px 10px 25px rgba(0, 0, 0, 0.9),
+    -3px -3px 12px rgba(77, 124, 15, 0.1),
+    inset 0 2px 3px rgba(134, 239, 172, 0.2),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.4);
+  border-top-color: rgba(134, 239, 172, 0.4);
+}
+
 .stat-value {
   font-size: 1.8rem;
   font-weight: 700;
@@ -673,7 +699,7 @@ a:hover { color: var(--accent-hover); }
 }
 
 .stat-value.stat-value-sm {
-  font-size: 1.15rem;
+  font-size: 1.1rem;
 }
 
 .costo-doc-viewer {
@@ -759,12 +785,24 @@ a:hover { color: var(--accent-hover); }
 }
 
 /* ---- Tables ---- */
+.table-responsive {
+  border: 1px solid rgba(77, 124, 15, 0.3);
+  border-top: 2px solid rgba(134, 239, 172, 0.2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  box-shadow:
+    6px 6px 18px rgba(0, 0, 0, 0.7),
+    -2px -2px 8px rgba(77, 124, 15, 0.05);
+  overflow: hidden;
+}
+
 .table-dark {
   --bs-table-bg: transparent;
   --bs-table-color: var(--text-primary);
   --bs-table-border-color: var(--border-light);
   --bs-table-hover-bg: rgba(77, 124, 15, 0.08);
   --bs-table-hover-color: var(--text-primary);
+  margin-bottom: 0;
 }
 
 .table-dark thead th {
@@ -784,11 +822,11 @@ a:hover { color: var(--accent-hover); }
 }
 
 .table-dark tbody tr:nth-child(odd) {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .table-dark tbody tr:nth-child(even) {
-  background: rgba(77, 124, 15, 0.03);
+  background: rgba(77, 124, 15, 0.08);
 }
 
 .table-dark tbody tr:hover {

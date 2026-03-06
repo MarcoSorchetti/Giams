@@ -2623,60 +2623,69 @@
     </div>
 
     <!-- Stat cards -->
-    <div class="row g-3 mb-4" id="vendite-stats-row">
+    <div class="row g-2 mb-3" id="vendite-stats-row">
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value" id="stat-vendite-totale">0</div><div class="stat-label">Vendite</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-vendite-totale">0</div><div class="stat-label">Vendite</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value" id="stat-vendite-imponibile">€ 0</div><div class="stat-label">Imponibile</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-vendite-imponibile">€ 0</div><div class="stat-label">Imponibile</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-warning" id="stat-vendite-iva">€ 0</div><div class="stat-label">IVA</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-warning" id="stat-vendite-iva">€ 0</div><div class="stat-label">IVA</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-success" id="stat-vendite-fatturato">€ 0</div><div class="stat-label">Totale</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-success" id="stat-vendite-fatturato">€ 0</div><div class="stat-label">Totale</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-warning" id="stat-vendite-bozze">0</div><div class="stat-label">Bozze</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-warning" id="stat-vendite-bozze">0</div><div class="stat-label">Bozze</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-info" id="stat-vendite-da-incassare">€ 0</div><div class="stat-label">Da Incassare</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-info" id="stat-vendite-da-incassare">€ 0</div><div class="stat-label">Da Incassare</div></div>
       </div>
       <div class="col-sm-6 col-md">
-        <div class="stat-card text-center p-3"><div class="stat-value text-accent" id="stat-vendite-incassato">€ 0</div><div class="stat-label">Incassato</div></div>
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-accent" id="stat-vendite-incassato">€ 0</div><div class="stat-label">Incassato</div></div>
       </div>
     </div>
 
-    <!-- Filtri -->
+    <!-- Filtri + Cerca -->
     <div class="card bg-glass mb-3">
-      <div class="card-body py-2">
+      <div class="card-body py-2 px-3">
         <div class="row g-2 align-items-end">
-          <div class="col-auto">
+          <div class="col-sm-auto col-6">
             <label class="form-label form-label-sm mb-0">Anno</label>
-            <select id="filtro-vendite-anno" class="form-select form-select-sm" style="width:120px;"></select>
+            <select id="filtro-vendite-anno" class="form-select form-select-sm"></select>
           </div>
-          <div class="col-auto">
+          <div class="col-sm-auto col-6">
             <label class="form-label form-label-sm mb-0">Stato</label>
-            <select id="filtro-vendite-stato" class="form-select form-select-sm" style="width:150px;">
-              <option value="">Tutti</option>
+            <select id="filtro-vendite-stato" class="form-select form-select-sm">
+              <option value="">Tutti gli stati</option>
               <option value="bozza">Bozza</option>
               <option value="confermata">Confermata</option>
               <option value="spedita">Spedita</option>
               <option value="pagata">Pagata</option>
             </select>
           </div>
-          <div class="col-auto">
+          <div class="col-sm col-12">
             <label class="form-label form-label-sm mb-0">Cliente</label>
-            <select id="filtro-vendite-cliente" class="form-select form-select-sm" style="width:200px;">
-              <option value="">Tutti</option>
+            <select id="filtro-vendite-cliente" class="form-select form-select-sm">
+              <option value="">Tutti i clienti</option>
             </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-vendite" placeholder="Codice, fattura, DDT..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-vendite" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- Cerca -->
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-vendite" placeholder="Cerca..." style="max-width:300px;" />
 
     <!-- Tabella -->
     <div class="table-responsive">
@@ -2688,6 +2697,8 @@
             <th class="sortable" data-sort="cliente_denominazione" style="cursor:pointer">Cliente <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
             <th class="sortable" data-sort="stato" style="cursor:pointer">Stato <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
             <th class="sortable" data-sort="numero_fattura" style="cursor:pointer">Fattura <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
+            <th class="text-end">Imponibile</th>
+            <th class="text-end">IVA</th>
             <th class="sortable text-end" data-sort="importo_totale" style="cursor:pointer">Totale <i class="fa-solid fa-sort ms-1 text-secondary"></i></th>
             <th class="text-center">Azioni</th>
           </tr>

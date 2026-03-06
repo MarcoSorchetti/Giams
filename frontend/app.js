@@ -5618,6 +5618,21 @@ async function renderVendite() {
   document.getElementById("filtro-vendite-stato")?.addEventListener("change", () => caricaVendite());
   document.getElementById("filtro-vendite-cliente")?.addEventListener("change", () => caricaVendite());
   document.getElementById("search-vendite")?.addEventListener("input", debounceSearch(() => caricaVendite()));
+
+  // Reset filtri
+  document.getElementById("btn-reset-filtri-vendite")?.addEventListener("click", () => {
+    const annoSel = document.getElementById("filtro-vendite-anno");
+    if (annoSel) annoSel.selectedIndex = 0;
+    const statoSel = document.getElementById("filtro-vendite-stato");
+    if (statoSel) statoSel.value = "";
+    const clienteSel = document.getElementById("filtro-vendite-cliente");
+    if (clienteSel) clienteSel.value = "";
+    const searchInput = document.getElementById("search-vendite");
+    if (searchInput) searchInput.value = "";
+    caricaVenditeStats();
+    caricaVendite();
+  });
+
   document.getElementById("btn-export-vendite-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
     const anno = document.getElementById("filtro-vendite-anno")?.value;
@@ -5680,7 +5695,7 @@ function renderTabellaVendite() {
   const tbody = document.getElementById("vendite-tbody");
   if (!tbody) return;
   if (!venditeLista.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nessuna vendita trovata.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nessuna vendita trovata.</td></tr>';
     return;
   }
   tbody.innerHTML = venditeLista.map(v => `
@@ -5690,6 +5705,8 @@ function renderTabellaVendite() {
       <td>${v.cliente_denominazione || "—"}</td>
       <td>${statoBadge(v.stato)}</td>
       <td>${v.numero_fattura || "—"}</td>
+      <td class="text-end">${fmtEuro(v.imponibile)}</td>
+      <td class="text-end">${fmtEuro(v.importo_iva)}</td>
       <td class="text-end">${fmtEuro(v.importo_totale)}</td>
       <td class="text-center text-nowrap">
         ${v.stato === "bozza"
