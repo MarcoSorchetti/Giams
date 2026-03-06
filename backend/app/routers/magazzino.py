@@ -19,6 +19,7 @@ from app.models.pagination import paginate, paginated_response
 from app.models.causale_movimento_sql import CausaleMovimento
 from app.core.security import get_current_user
 from app.services.audit import log_audit
+from app.utils.codice import next_codice_anno
 
 
 router = APIRouter(prefix="/magazzino", tags=["magazzino"])
@@ -39,22 +40,7 @@ def _get_causali_valide(db: Session, include_vendita: bool = False):
 # ---------------------------------------------------------------------------
 
 def _next_codice_movimento(anno: int, db: Session) -> str:
-    """Genera il prossimo codice: MV/001/2025, MV/002/2025, ..."""
-    last = (
-        db.query(MovimentoMagazzino)
-        .filter(MovimentoMagazzino.codice.like(f"MV/%/{anno}"))
-        .order_by(MovimentoMagazzino.codice.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.codice.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"MV/{num:03d}/{anno}"
+    return next_codice_anno("MV", MovimentoMagazzino, MovimentoMagazzino.codice, anno, db)
 
 
 def _cliente_denominazione(c):

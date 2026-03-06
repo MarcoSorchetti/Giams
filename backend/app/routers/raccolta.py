@@ -14,30 +14,14 @@ from app.models.raccolta import (
 from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
+from app.utils.codice import next_codice_anno
 
 
 router = APIRouter(prefix="/raccolte", tags=["raccolte"])
 
 
 def _next_codice_raccolta(anno: int, db: Session) -> str:
-    """Genera il prossimo codice raccolta: R/001/2025, R/002/2025, ..."""
-    prefix = f"R/"
-    suffix = f"/{anno}"
-    last = (
-        db.query(Raccolta)
-        .filter(Raccolta.codice.like(f"R/%/{anno}"))
-        .order_by(Raccolta.codice.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.codice.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"{prefix}{num:03d}{suffix}"
+    return next_codice_anno("R", Raccolta, Raccolta.codice, anno, db)
 
 
 def _build_raccolta_out(raccolta, db):

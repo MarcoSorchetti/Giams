@@ -35,6 +35,32 @@ function debounceSearch(fn, delay = 400) {
   return () => { clearTimeout(timer); timer = setTimeout(fn, delay); };
 }
 
+// Validazione campo numerico — restituisce true se valido, mostra toast e focus se non valido
+function validaCampoNumerico(elementId, min, label) {
+  const el = document.getElementById(elementId);
+  if (!el) return true;
+  const val = parseFloat(el.value);
+  if (isNaN(val) || val < min) {
+    showToast(`${label} deve essere ${min === 0 ? ">= 0" : "> 0"}.`, "warning");
+    el.focus();
+    return false;
+  }
+  return true;
+}
+
+// Validazione campo obbligatorio (select/text) — restituisce true se ha un valore
+function validaCampoObbligatorio(elementId, label) {
+  const el = document.getElementById(elementId);
+  if (!el) return true;
+  const val = el.value?.trim();
+  if (!val) {
+    showToast(`${label} è obbligatorio.`, "warning");
+    el.focus();
+    return false;
+  }
+  return true;
+}
+
 // ---- Paginazione & CSV ----
 function renderPaginazione(containerId, infoId, pagina, totalePages, totale, callback) {
   const container = document.getElementById(containerId);
@@ -1883,6 +1909,11 @@ async function popolaFormRaccolta(id) {
 }
 
 async function salvaRaccolta() {
+  // Validazione campi obbligatori e numerici
+  if (!validaCampoObbligatorio("r-data", "Data raccolta")) return;
+  if (!validaCampoObbligatorio("r-anno", "Anno campagna")) return;
+  if (!validaCampoNumerico("r-kg-totali", 0.01, "Kg olive totali")) return;
+
   const parcelle = [];
   document.querySelectorAll(".raccolta-parcella-row").forEach(row => {
     const check = row.querySelector("input[type=checkbox]");
@@ -4191,6 +4222,13 @@ async function popolaFormCosto(c) {
 async function salvaCosto(e) {
   e.preventDefault();
 
+  // Validazione campi obbligatori e numerici
+  if (!validaCampoObbligatorio("costo-categoria", "Categoria")) return;
+  if (!validaCampoObbligatorio("costo-descrizione", "Descrizione")) return;
+  if (!validaCampoObbligatorio("costo-data-fattura", "Data fattura")) return;
+  if (!validaCampoNumerico("costo-imponibile", 0.01, "Imponibile")) return;
+  if (!validaCampoNumerico("costo-iva", 0, "IVA %")) return;
+
   const id = document.getElementById("costo-id")?.value;
   const tipo = document.querySelector('input[name="costo-tipo"]:checked')?.value;
 
@@ -5501,7 +5539,7 @@ function statoBadge(stato) {
   return map[stato] || `<span class="badge bg-secondary">${stato}</span>`;
 }
 
-let _venditeSortCol = "codice";
+let _venditeSortCol = "data_vendita";
 let _venditeSortDir = "desc";
 
 function initVenditeSort() {
@@ -5538,18 +5576,8 @@ function aggiornaIconeSort() {
 }
 
 function ordinaVendite() {
-  if (!venditeLista || !venditeLista.length) return;
-  const col = _venditeSortCol;
-  const dir = _venditeSortDir === "asc" ? 1 : -1;
-  venditeLista.sort((a, b) => {
-    let va = a[col], vb = b[col];
-    if (va == null) va = "";
-    if (vb == null) vb = "";
-    if (col === "importo_totale") return (parseFloat(va) - parseFloat(vb)) * dir;
-    if (typeof va === "string") return va.localeCompare(vb, "it") * dir;
-    return (va - vb) * dir;
-  });
-  renderTabellaVendite();
+  // Sorting server-side: ricarica dal backend con parametri sort
+  caricaVendite();
 }
 
 // ---- LISTA VENDITE ----
@@ -5633,6 +5661,8 @@ async function caricaVendite(page = 1) {
   if (stato) params.set("stato", stato);
   if (clienteId) params.set("cliente_id", clienteId);
   if (search) params.set("search", search);
+  params.set("sort_by", _venditeSortCol);
+  params.set("sort_dir", _venditeSortDir);
   params.set("page", page);
   params.set("per_page", 10);
 
@@ -5640,7 +5670,7 @@ async function caricaVendite(page = 1) {
     const res = await apiFetch(`${API_URL}/vendite/?${params}`);
     const data = await res.json();
     venditeLista = data.items;
-    ordinaVendite();
+    renderTabellaVendite();
     aggiornaIconeSort();
     renderPaginazione("vendite-pagination", "vendite-page-info", data.page, data.pages, data.total, caricaVendite);
   } catch (e) { console.error(e); }
@@ -5894,6 +5924,11 @@ function ricalcolaTotaliVendita() {
 
 async function salvaVendita(e) {
   e.preventDefault();
+
+  // Validazione campi obbligatori
+  if (!validaCampoObbligatorio("vf-cliente", "Cliente")) return;
+  if (!validaCampoObbligatorio("vf-data", "Data vendita")) return;
+  if (!validaCampoObbligatorio("vf-anno", "Anno campagna")) return;
 
   // Raccogli righe
   const righe = [];

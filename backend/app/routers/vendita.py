@@ -22,6 +22,7 @@ from app.routers.magazzino import _calcola_giacenza, _next_codice_movimento
 from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
+from app.utils.codice import next_codice_anno
 
 
 router = APIRouter(prefix="/vendite", tags=["vendite"])
@@ -34,57 +35,15 @@ STATI_VALIDI = {"bozza", "confermata", "spedita", "pagata"}
 # ---------------------------------------------------------------------------
 
 def _next_codice_vendita(anno: int, db: Session) -> str:
-    last = (
-        db.query(Vendita)
-        .filter(Vendita.codice.like(f"V/%/{anno}"))
-        .order_by(Vendita.codice.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.codice.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"V/{num:03d}/{anno}"
+    return next_codice_anno("V", Vendita, Vendita.codice, anno, db)
 
 
 def _next_numero_fattura(anno: int, db: Session) -> str:
-    last = (
-        db.query(Vendita)
-        .filter(Vendita.numero_fattura.like(f"FI/%/{anno}"))
-        .order_by(Vendita.numero_fattura.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.numero_fattura.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"FI/{num:03d}/{anno}"
+    return next_codice_anno("FI", Vendita, Vendita.numero_fattura, anno, db)
 
 
 def _next_numero_ddt(anno: int, db: Session) -> str:
-    last = (
-        db.query(Vendita)
-        .filter(Vendita.numero_ddt.like(f"DDT/%/{anno}"))
-        .order_by(Vendita.numero_ddt.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.numero_ddt.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"DDT/{num:03d}/{anno}"
+    return next_codice_anno("DDT", Vendita, Vendita.numero_ddt, anno, db)
 
 
 def _cliente_denominazione(c):
@@ -342,12 +301,23 @@ def export_vendite_csv(
 # CRUD
 # ---------------------------------------------------------------------------
 
+_VENDITE_SORT_COLS = {
+    "codice": Vendita.codice,
+    "data_vendita": Vendita.data_vendita,
+    "stato": Vendita.stato,
+    "importo_totale": Vendita.importo_totale,
+    "numero_fattura": Vendita.numero_fattura,
+}
+
+
 @router.get("/")
 def list_vendite(
     anno: Optional[int] = Query(None),
     stato: Optional[str] = Query(None),
     cliente_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -369,7 +339,9 @@ def list_vendite(
     if cliente_id:
         query = query.filter(Vendita.cliente_id == cliente_id)
 
-    query = query.order_by(Vendita.data_vendita.desc())
+    # Sorting server-side con fallback a data_vendita desc
+    col = _VENDITE_SORT_COLS.get(sort_by, Vendita.data_vendita)
+    query = query.order_by(col.asc() if sort_dir == "asc" else col.desc())
     vendite, total, pg, pp, pages_count = paginate(query, page, per_page)
     if not vendite:
         return paginated_response([], total, pg, pp, pages_count)

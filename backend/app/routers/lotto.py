@@ -11,28 +11,14 @@ from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
 from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
+from app.utils.codice import next_codice_anno
 
 
 router = APIRouter(prefix="/lotti", tags=["lotti"])
 
 
 def _next_codice_lotto(anno: int, db: Session) -> str:
-    """Genera il prossimo codice lotto: O/001/2025, O/002/2025, ..."""
-    last = (
-        db.query(LottoOlio)
-        .filter(LottoOlio.codice_lotto.like(f"O/%/{anno}"))
-        .order_by(LottoOlio.codice_lotto.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.codice_lotto.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"O/{num:03d}/{anno}"
+    return next_codice_anno("O", LottoOlio, LottoOlio.codice_lotto, anno, db)
 
 
 def _build_lotto_out(lotto, db):

@@ -24,28 +24,14 @@ from app.models.costo import CostoCreate, CostoUpdate, CostoOut
 from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
+from app.utils.codice import next_codice_anno
 
 
 router = APIRouter(prefix="/costi", tags=["costi"])
 
 
 def _next_codice_costo(anno: int, db: Session) -> str:
-    """Genera il prossimo codice costo: C/001/2025, C/002/2025, ..."""
-    last = (
-        db.query(Costo)
-        .filter(Costo.codice.like(f"C/%/{anno}"))
-        .order_by(Costo.codice.desc())
-        .with_for_update()
-        .first()
-    )
-    if last:
-        try:
-            num = int(last.codice.split("/")[1]) + 1
-        except (IndexError, ValueError):
-            num = 1
-    else:
-        num = 1
-    return f"C/{num:03d}/{anno}"
+    return next_codice_anno("C", Costo, Costo.codice, anno, db)
 
 
 def _fornitore_denominazione(f):
