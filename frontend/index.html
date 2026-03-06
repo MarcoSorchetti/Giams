@@ -26,7 +26,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.5.0</div>
+        <div class="app-version">v2.6.0</div>
       </div>
 
       <nav class="nav flex-column sidebar-nav">
@@ -176,90 +176,83 @@
     </div>
 
     <!-- Statistiche rapide -->
-    <div class="row g-3 mb-4" id="parcelle-stats-row">
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-parcelle">0</div>
-          <div class="stat-label">Parcelle</div>
-        </div>
+    <div class="row g-2 mb-3" id="parcelle-stats-row">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-parcelle">0</div><div class="stat-label">Parcelle</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-ettari">0</div>
-          <div class="stat-label">Ettari</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-ettari">0</div><div class="stat-label">Ettari</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-piante">0</div>
-          <div class="stat-label">Piante</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-piante">0</div><div class="stat-label">Piante</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-produttive">0</div>
-          <div class="stat-label">Produttive</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-produttive">0</div><div class="stat-label">Produttive</div></div>
       </div>
     </div>
 
-    <!-- Filtri -->
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-          <input type="text" class="form-control form-control-sm" id="filtro-q" placeholder="Cerca nome o codice..." />
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-varieta">
-            <option value="">Tutte le varieta'</option>
-            <option value="Canino">Canino</option>
-            <option value="Leccino">Leccino</option>
-            <option value="Frantoio">Frantoio</option>
-            <option value="Moraiolo">Moraiolo</option>
-            <option value="Pendolino">Pendolino</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-stato">
-            <option value="">Tutti gli stati</option>
-            <option value="produttivo">Produttivo</option>
-            <option value="giovane">Giovane</option>
-            <option value="riposo">In riposo</option>
-            <option value="dismesso">Dismesso</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-parcelle">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
+    <!-- Filtri + Cerca -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Varieta'</label>
+            <select class="form-select form-select-sm" id="filtro-varieta">
+              <option value="">Tutte le varieta'</option>
+              <option value="Canino">Canino</option>
+              <option value="Leccino">Leccino</option>
+              <option value="Frantoio">Frantoio</option>
+              <option value="Moraiolo">Moraiolo</option>
+              <option value="Pendolino">Pendolino</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Stato</label>
+            <select class="form-select form-select-sm" id="filtro-stato">
+              <option value="">Tutti gli stati</option>
+              <option value="produttivo">Produttivo</option>
+              <option value="giovane">Giovane</option>
+              <option value="riposo">In riposo</option>
+              <option value="dismesso">Dismesso</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="filtro-q" placeholder="Nome, codice..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-parcelle" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
-
 
     <!-- Tabella -->
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Nome</th>
-              <th>Ettari</th>
-              <th>Varieta'</th>
-              <th>Piante</th>
-              <th>Anno</th>
-              <th>Stato</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="parcelle-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="parcelle-page-info"></span>
-        <div class="pagination-controls" id="parcelle-pagination"></div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Nome</th>
+            <th>Ettari</th>
+            <th>Varieta'</th>
+            <th>Piante</th>
+            <th>Anno</th>
+            <th>Stato</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="parcelle-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="parcelle-page-info"></span>
+      <div class="pagination-controls" id="parcelle-pagination"></div>
     </div>
   </template>
 
@@ -401,21 +394,19 @@
 
     <div class="row g-4">
       <div class="col-lg-8">
-        <div class="card p-0">
-          <div class="table-responsive">
-            <table class="table table-dark table-hover mb-0">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Username</th>
-                  <th>Ruolo</th>
-                  <th>Stato</th>
-                  <th>Azioni</th>
-                </tr>
-              </thead>
-              <tbody id="utenti-tbody"></tbody>
-            </table>
-          </div>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Ruolo</th>
+                <th>Stato</th>
+                <th>Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="utenti-tbody"></tbody>
+          </table>
         </div>
       </div>
       <div class="col-lg-4">
@@ -485,81 +476,74 @@
       </button>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-raccolte">0</div>
-          <div class="stat-label">Raccolte</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-raccolte">0</div><div class="stat-label">Raccolte</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-kg-olive">0</div>
-          <div class="stat-label">Kg Olive</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-kg-olive">0</div><div class="stat-label">Kg Olive</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-media-kg">0</div>
-          <div class="stat-label">Media Kg</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-media-kg">0</div><div class="stat-label">Media Kg</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-costo-raccolte">0</div>
-          <div class="stat-label">Costo Totale</div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costo-raccolte">0</div><div class="stat-label">Costo Totale</div></div>
+      </div>
+    </div>
+
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Anno Campagna</label>
+            <select class="form-select form-select-sm" id="filtro-raccolte-anno">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Parcella</label>
+            <select class="form-select form-select-sm" id="filtro-raccolte-parcella">
+              <option value="">Tutte</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-raccolte" placeholder="Codice, parcella..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-raccolte" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-          <label class="form-label small">Anno Campagna</label>
-          <select class="form-select form-select-sm" id="filtro-raccolte-anno">
-            <option value="">Tutti</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label small">Parcella</label>
-          <select class="form-select form-select-sm" id="filtro-raccolte-parcella">
-            <option value="">Tutte</option>
-          </select>
-        </div>
-        <div class="col-md-4">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-raccolte">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
-        </div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Data</th>
+            <th>Parcelle</th>
+            <th>Kg Olive</th>
+            <th>Metodo</th>
+            <th>Maturazione</th>
+            <th>Costo</th>
+            <th>Lotto</th>
+            <th>Resa</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="raccolte-tbody"></tbody>
+      </table>
     </div>
-
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-raccolte" placeholder="Cerca..." style="max-width:300px;" />
-
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Data</th>
-              <th>Parcelle</th>
-              <th>Kg Olive</th>
-              <th>Metodo</th>
-              <th>Maturazione</th>
-              <th>Costo</th>
-              <th>Lotto</th>
-              <th>Resa</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="raccolte-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="raccolte-page-info"></span>
-        <div class="pagination-controls" id="raccolte-pagination"></div>
-      </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="raccolte-page-info"></span>
+      <div class="pagination-controls" id="raccolte-pagination"></div>
     </div>
   </template>
 
@@ -674,105 +658,92 @@
       </button>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-lotti">0</div>
-          <div class="stat-label">Lotti</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-lotti">0</div><div class="stat-label">Lotti</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-kg-olive-lotti">0</div>
-          <div class="stat-label">Kg Olive</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-kg-olive-lotti">0</div><div class="stat-label">Kg Olive</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-litri">0</div>
-          <div class="stat-label">Litri Olio</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-litri">0</div><div class="stat-label">Litri Olio</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-kg-olio">0</div>
-          <div class="stat-label">Kg Olio</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-kg-olio">0</div><div class="stat-label">Kg Olio</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-resa">0%</div>
-          <div class="stat-label">Resa Media</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-resa">0%</div><div class="stat-label">Resa Media</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-costo-lotti">0</div>
-          <div class="stat-label">Costo Molitura</div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costo-lotti">0</div><div class="stat-label">Costo Molitura</div></div>
+      </div>
+    </div>
+
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Anno</label>
+            <select class="form-select form-select-sm" id="filtro-lotti-anno">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Tipo Olio</label>
+            <select class="form-select form-select-sm" id="filtro-lotti-tipo">
+              <option value="">Tutti</option>
+              <option value="evo">EVO</option>
+              <option value="vergine">Vergine</option>
+              <option value="lampante">Lampante</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Stato</label>
+            <select class="form-select form-select-sm" id="filtro-lotti-stato">
+              <option value="">Tutti</option>
+              <option value="disponibile">Disponibile</option>
+              <option value="in_vendita">In vendita</option>
+              <option value="esaurito">Esaurito</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-lotti" placeholder="Codice, lotto..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-lotti" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label small">Anno</label>
-          <select class="form-select form-select-sm" id="filtro-lotti-anno">
-            <option value="">Tutti</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small">Tipo Olio</label>
-          <select class="form-select form-select-sm" id="filtro-lotti-tipo">
-            <option value="">Tutti</option>
-            <option value="evo">EVO</option>
-            <option value="vergine">Vergine</option>
-            <option value="lampante">Lampante</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small">Stato</label>
-          <select class="form-select form-select-sm" id="filtro-lotti-stato">
-            <option value="">Tutti</option>
-            <option value="disponibile">Disponibile</option>
-            <option value="in_vendita">In vendita</option>
-            <option value="esaurito">Esaurito</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-lotti">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
-        </div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice Lotto</th>
+            <th>Data Molitura</th>
+            <th>Raccolta</th>
+            <th>Kg Olive</th>
+            <th>Litri Olio</th>
+            <th>Kg Olio</th>
+            <th>Resa %</th>
+            <th>Tipo</th>
+            <th>Stato</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="lotti-tbody"></tbody>
+      </table>
     </div>
-
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-lotti" placeholder="Cerca..." style="max-width:300px;" />
-
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice Lotto</th>
-              <th>Data Molitura</th>
-              <th>Raccolta</th>
-              <th>Kg Olive</th>
-              <th>Litri Olio</th>
-              <th>Kg Olio</th>
-              <th>Resa %</th>
-              <th>Tipo</th>
-              <th>Stato</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="lotti-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="lotti-page-info"></span>
-        <div class="pagination-controls" id="lotti-pagination"></div>
-      </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="lotti-page-info"></span>
+      <div class="pagination-controls" id="lotti-pagination"></div>
     </div>
   </template>
 
@@ -923,89 +894,79 @@
       </button>
     </div>
 
-    <div class="row g-3 mb-3">
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-conf-totale">0</div>
-          <div class="stat-label">Confezionamenti</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-conf-totale">0</div><div class="stat-label">Confezionamenti</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-conf-unita">0</div>
-          <div class="stat-label">Unita' Prodotte</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-conf-unita">0</div><div class="stat-label">Unita' Prodotte</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-conf-litri">0</div>
-          <div class="stat-label">Litri Confezionati</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-conf-litri">0</div><div class="stat-label">Litri Confezionati</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-conf-val-prod">&euro; 0</div>
-          <div class="stat-label">Valore Produzione</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-conf-val-prod">&euro; 0</div><div class="stat-label">Valore Produzione</div></div>
       </div>
-      <div class="col">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-conf-val-giac">&euro; 0</div>
-          <div class="stat-label">Valore Giacenza</div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-conf-val-giac">&euro; 0</div><div class="stat-label">Valore Giacenza</div></div>
+      </div>
+    </div>
+
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Anno</label>
+            <select class="form-select form-select-sm" id="filtro-conf-anno">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Contenitore</label>
+            <select class="form-select form-select-sm" id="filtro-conf-formato">
+              <option value="">Tutti</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-confezionamenti" placeholder="Codice, formato..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-conf" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label small">Anno</label>
-          <select class="form-select form-select-sm" id="filtro-conf-anno">
-            <option value="">Tutti</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small">Contenitore</label>
-          <select class="form-select form-select-sm" id="filtro-conf-formato">
-            <option value="">Tutti</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-conf">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
-        </div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Data</th>
+            <th>Formato</th>
+            <th>Unita'</th>
+            <th>Litri Tot.</th>
+            <th>Lotti</th>
+            <th class="text-end">Listino Ivato</th>
+            <th class="text-end">Imponibile</th>
+            <th class="text-end">Val. Prod.</th>
+            <th class="text-end">Giacenza</th>
+            <th class="text-end">Val. Giacenza</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="conf-tbody"></tbody>
+      </table>
     </div>
-
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-confezionamenti" placeholder="Cerca..." style="max-width:300px;" />
-
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Data</th>
-              <th>Formato</th>
-              <th>Unita'</th>
-              <th>Litri Tot.</th>
-              <th>Lotti</th>
-              <th class="text-end">Listino Ivato</th>
-              <th class="text-end">Imponibile</th>
-              <th class="text-end">Val. Prod.</th>
-              <th class="text-end">Giacenza</th>
-              <th class="text-end">Val. Giacenza</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="conf-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="conf-page-info"></span>
-        <div class="pagination-controls" id="conf-pagination"></div>
-      </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="conf-page-info"></span>
+      <div class="pagination-controls" id="conf-pagination"></div>
     </div>
   </template>
 
@@ -1188,83 +1149,75 @@
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-clienti-totale">0</div>
-          <div class="stat-label">Totale Clienti</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-clienti-totale">0</div><div class="stat-label">Totale Clienti</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-clienti-attivi">0</div>
-          <div class="stat-label">Attivi</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-clienti-attivi">0</div><div class="stat-label">Attivi</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-clienti-privati">0</div>
-          <div class="stat-label">Privati</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-clienti-privati">0</div><div class="stat-label">Privati</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-clienti-aziende">0</div>
-          <div class="stat-label">Aziende</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-clienti-aziende">0</div><div class="stat-label">Aziende</div></div>
       </div>
     </div>
 
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-          <input type="text" class="form-control form-control-sm" id="filtro-clienti-q" placeholder="Cerca nome, codice, email, citta'..." />
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-clienti-tipo">
-            <option value="">Tutti i tipi</option>
-            <option value="privato">Privato</option>
-            <option value="azienda">Azienda</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="filtro-clienti-tutti" />
-            <label class="form-check-label small" for="filtro-clienti-tutti">Mostra inattivi</label>
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Tipo</label>
+            <select class="form-select form-select-sm" id="filtro-clienti-tipo">
+              <option value="">Tutti i tipi</option>
+              <option value="privato">Privato</option>
+              <option value="azienda">Azienda</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="filtro-clienti-tutti" />
+              <label class="form-check-label small" for="filtro-clienti-tutti">Mostra inattivi</label>
+            </div>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="filtro-clienti-q" placeholder="Nome, codice, email, citta'..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-clienti" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
           </div>
         </div>
-        <div class="col-md-3">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-clienti">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
-        </div>
       </div>
     </div>
 
-
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Tipo</th>
-              <th>Denominazione</th>
-              <th>Citta'</th>
-              <th>Telefono</th>
-              <th>Email</th>
-              <th>Sconto</th>
-              <th>Stato</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="clienti-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="clienti-page-info"></span>
-        <div class="pagination-controls" id="clienti-pagination"></div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Tipo</th>
+            <th>Denominazione</th>
+            <th>Citta'</th>
+            <th>Telefono</th>
+            <th>Email</th>
+            <th>Sconto</th>
+            <th>Stato</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="clienti-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="clienti-page-info"></span>
+      <div class="pagination-controls" id="clienti-pagination"></div>
     </div>
   </template>
 
@@ -1465,94 +1418,87 @@
       </div>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-fornitori-totale">0</div>
-          <div class="stat-label">Totale Fornitori</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-fornitori-totale">0</div><div class="stat-label">Totale Fornitori</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-fornitori-attivi">0</div>
-          <div class="stat-label">Attivi</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-fornitori-attivi">0</div><div class="stat-label">Attivi</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-fornitori-privati">0</div>
-          <div class="stat-label">Privati</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-fornitori-privati">0</div><div class="stat-label">Privati</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-fornitori-aziende">0</div>
-          <div class="stat-label">Aziende</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-fornitori-aziende">0</div><div class="stat-label">Aziende</div></div>
       </div>
     </div>
 
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-3">
-          <input type="text" class="form-control form-control-sm" id="filtro-fornitori-q" placeholder="Cerca nome, codice, email, citta'..." />
-        </div>
-        <div class="col-md-2">
-          <select class="form-select form-select-sm" id="filtro-fornitori-tipo">
-            <option value="">Tutti i tipi</option>
-            <option value="privato">Privato</option>
-            <option value="azienda">Azienda</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-fornitori-categoria">
-            <option value="">Tutte le categorie</option>
-            <option value="agricoltura">Agricoltura</option>
-            <option value="materiali">Materiali</option>
-            <option value="servizi">Servizi</option>
-            <option value="trasporti">Trasporti</option>
-            <option value="manutenzione">Manutenzione</option>
-            <option value="altro">Altro</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="filtro-fornitori-tutti" />
-            <label class="form-check-label small" for="filtro-fornitori-tutti">Mostra inattivi</label>
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Tipo</label>
+            <select class="form-select form-select-sm" id="filtro-fornitori-tipo">
+              <option value="">Tutti i tipi</option>
+              <option value="privato">Privato</option>
+              <option value="azienda">Azienda</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Categoria</label>
+            <select class="form-select form-select-sm" id="filtro-fornitori-categoria">
+              <option value="">Tutte le categorie</option>
+              <option value="agricoltura">Agricoltura</option>
+              <option value="materiali">Materiali</option>
+              <option value="servizi">Servizi</option>
+              <option value="trasporti">Trasporti</option>
+              <option value="manutenzione">Manutenzione</option>
+              <option value="altro">Altro</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <div class="form-check mt-4">
+              <input class="form-check-input" type="checkbox" id="filtro-fornitori-tutti" />
+              <label class="form-check-label small" for="filtro-fornitori-tutti">Mostra inattivi</label>
+            </div>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="filtro-fornitori-q" placeholder="Nome, codice, email, citta'..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-fornitori" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
           </div>
         </div>
-        <div class="col-md-2">
-          <button class="btn btn-outline-secondary btn-sm w-100" id="btn-filtra-fornitori">
-            <i class="fa-solid fa-filter me-1"></i> Filtra
-          </button>
-        </div>
       </div>
     </div>
 
-
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Tipo</th>
-              <th>Denominazione</th>
-              <th>P.IVA</th>
-              <th>Categoria</th>
-              <th>Citta'</th>
-              <th>Telefono</th>
-              <th>Stato</th>
-              <th>Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="fornitori-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="fornitori-page-info"></span>
-        <div class="pagination-controls" id="fornitori-pagination"></div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Tipo</th>
+            <th>Denominazione</th>
+            <th>P.IVA</th>
+            <th>Categoria</th>
+            <th>Citta'</th>
+            <th>Telefono</th>
+            <th>Stato</th>
+            <th>Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="fornitori-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="fornitori-page-info"></span>
+      <div class="pagination-controls" id="fornitori-pagination"></div>
     </div>
   </template>
 
@@ -1763,107 +1709,103 @@
     </div>
 
     <!-- Stats -->
-    <div class="row g-3 mb-4">
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-costi-count">0</div>
-          <div class="stat-label">N. Fatture</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costi-count">0</div><div class="stat-label">N. Fatture</div></div>
       </div>
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="stat-costi-totale">0</div>
-          <div class="stat-label">Importo Totale</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costi-totale">0</div><div class="stat-label">Importo Totale</div></div>
       </div>
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm text-success" id="stat-costi-pagati">0</div>
-          <div class="stat-label">Pagati</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-success" id="stat-costi-pagati">0</div><div class="stat-label">Pagati</div></div>
       </div>
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm text-danger" id="stat-costi-da-pagare">0</div>
-          <div class="stat-label">Da Pagare</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-danger" id="stat-costi-da-pagare">0</div><div class="stat-label">Da Pagare</div></div>
       </div>
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="stat-costi-campagna">0</div>
-          <div class="stat-label">Campagna</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costi-campagna">0</div><div class="stat-label">Campagna</div></div>
       </div>
-      <div class="col-md-2">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="stat-costi-strutturale">0</div>
-          <div class="stat-label">Strutturali</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-costi-strutturale">0</div><div class="stat-label">Strutturali</div></div>
       </div>
     </div>
 
-    <!-- Filtri -->
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-2">
-          <select class="form-select form-select-sm" id="filtro-costi-anno">
-            <option value="">Tutti gli anni</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <select class="form-select form-select-sm" id="filtro-costi-tipo">
-            <option value="">Tutti i tipi</option>
-            <option value="campagna">Campagna</option>
-            <option value="strutturale">Strutturale</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-costi-categoria">
-            <option value="">Tutte le categorie</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <select class="form-select form-select-sm" id="filtro-costi-stato">
-            <option value="">Tutti gli stati</option>
-            <option value="pagato">Pagato</option>
-            <option value="da_pagare">Da pagare</option>
-            <option value="parziale">Parziale</option>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" id="filtro-costi-fornitore">
-            <option value="">Tutti i fornitori</option>
-          </select>
+    <!-- Filtri + Cerca -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Anno</label>
+            <select class="form-select form-select-sm" id="filtro-costi-anno">
+              <option value="">Tutti gli anni</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Tipo</label>
+            <select class="form-select form-select-sm" id="filtro-costi-tipo">
+              <option value="">Tutti i tipi</option>
+              <option value="campagna">Campagna</option>
+              <option value="strutturale">Strutturale</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Categoria</label>
+            <select class="form-select form-select-sm" id="filtro-costi-categoria">
+              <option value="">Tutte le categorie</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Stato</label>
+            <select class="form-select form-select-sm" id="filtro-costi-stato">
+              <option value="">Tutti gli stati</option>
+              <option value="pagato">Pagato</option>
+              <option value="da_pagare">Da pagare</option>
+              <option value="parziale">Parziale</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Fornitore</label>
+            <select class="form-select form-select-sm" id="filtro-costi-fornitore">
+              <option value="">Tutti i fornitori</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-costi" placeholder="Codice, descrizione..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-costi" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- Cerca -->
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-costi" placeholder="Cerca..." style="max-width:300px;" />
 
     <!-- Tabella -->
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th class="sortable" data-sort="codice">Codice <i class="fa-solid fa-sort"></i></th>
-              <th class="sortable active-sort" data-sort="data_fattura">Data <i class="fa-solid fa-sort-down"></i></th>
-              <th>Categoria</th>
-              <th class="sortable" data-sort="descrizione">Descrizione <i class="fa-solid fa-sort"></i></th>
-              <th>Fornitore</th>
-              <th class="text-end sortable" data-sort="importo_totale">Totale <i class="fa-solid fa-sort"></i></th>
-              <th class="text-center sortable" data-sort="stato_pagamento">Stato <i class="fa-solid fa-sort"></i></th>
-              <th class="text-center">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="costi-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination-wrapper px-3 pb-2">
-        <span class="pagination-info" id="costi-page-info"></span>
-        <div class="pagination-controls" id="costi-pagination"></div>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th class="sortable" data-sort="codice">Codice <i class="fa-solid fa-sort"></i></th>
+            <th class="sortable active-sort" data-sort="data_fattura">Data <i class="fa-solid fa-sort-down"></i></th>
+            <th>Categoria</th>
+            <th class="sortable" data-sort="descrizione">Descrizione <i class="fa-solid fa-sort"></i></th>
+            <th>Fornitore</th>
+            <th class="text-end sortable" data-sort="importo_totale">Totale <i class="fa-solid fa-sort"></i></th>
+            <th class="text-center sortable" data-sort="stato_pagamento">Stato <i class="fa-solid fa-sort"></i></th>
+            <th class="text-center">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="costi-tbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-wrapper">
+      <span class="pagination-info" id="costi-page-info"></span>
+      <div class="pagination-controls" id="costi-pagination"></div>
     </div>
   </template>
 
@@ -2148,18 +2090,17 @@
     <div class="row g-4">
       <!-- SINISTRA: Elenco categorie -->
       <div class="col-lg-7">
-        <div class="card p-0">
-          <div class="table-responsive">
-            <table class="table table-dark table-hover mb-0">
-              <thead>
-                <tr>
-                  <th class="sortable-th" data-sort="codice">Codice <i class="fa-solid fa-sort sort-icon"></i></th>
-                  <th class="sortable-th" data-sort="nome">Nome <i class="fa-solid fa-sort sort-icon"></i></th>
-                  <th class="sortable-th" data-sort="tipo_costo">Tipo <i class="fa-solid fa-sort sort-icon"></i></th>
-                  <th class="sortable-th text-center" data-sort="attiva">Attiva <i class="fa-solid fa-sort sort-icon"></i></th>
-                  <th class="text-center">Azioni</th>
-                </tr>
-              </thead>
+        <div class="table-responsive">
+          <table class="table table-dark table-hover align-middle">
+            <thead>
+              <tr>
+                <th class="sortable-th" data-sort="codice">Codice <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-sort="nome">Nome <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-sort="tipo_costo">Tipo <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th text-center" data-sort="attiva">Attiva <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="text-center">Azioni</th>
+              </tr>
+            </thead>
               <tbody id="categorie-tbody"></tbody>
             </table>
           </div>
@@ -2244,114 +2185,107 @@
     </ul>
 
     <!-- Stats -->
-    <div class="row g-3 mb-4">
-      <div class="col-6 col-md">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-mag-movimenti">0</div>
-          <div class="stat-label">Movimenti</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-mag-movimenti">0</div><div class="stat-label">Movimenti</div></div>
       </div>
-      <div class="col-6 col-md">
-        <div class="stat-card">
-          <div class="stat-value text-success" id="stat-mag-carichi">0</div>
-          <div class="stat-label">Tot. Carichi</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-success" id="stat-mag-carichi">0</div><div class="stat-label">Tot. Carichi</div></div>
       </div>
-      <div class="col-6 col-md">
-        <div class="stat-card">
-          <div class="stat-value text-danger" id="stat-mag-scarichi">0</div>
-          <div class="stat-label">Tot. Scarichi</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-danger" id="stat-mag-scarichi">0</div><div class="stat-label">Tot. Scarichi</div></div>
       </div>
-      <div class="col-6 col-md">
-        <div class="stat-card">
-          <div class="stat-value text-info" id="stat-mag-giacenza">0</div>
-          <div class="stat-label">Giacenza (unita)</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-info" id="stat-mag-giacenza">0</div><div class="stat-label">Giacenza (unita)</div></div>
       </div>
-      <div class="col-6 col-md">
-        <div class="stat-card">
-          <div class="stat-value text-warning" id="stat-mag-giacenza-litri">0 L</div>
-          <div class="stat-label">Giacenza (litri)</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-warning" id="stat-mag-giacenza-litri">0 L</div><div class="stat-label">Giacenza (litri)</div></div>
       </div>
     </div>
 
-    <!-- Filtri -->
-    <div class="card p-3 mb-3">
-      <div class="row g-2 align-items-end">
-        <div class="col-md-3">
-          <label class="form-label small mb-1">Anno Campagna</label>
-          <select class="form-select form-select-sm" id="filtro-mag-anno">
-            <option value="">Tutti gli anni</option>
-          </select>
-        </div>
-        <div class="col-md-3" id="filtro-mag-tipo-wrap">
-          <label class="form-label small mb-1">Tipo Movimento</label>
-          <select class="form-select form-select-sm" id="filtro-mag-tipo">
-            <option value="">Tutti i tipi</option>
-            <option value="carico">Carichi</option>
-            <option value="scarico">Scarichi</option>
-          </select>
-        </div>
-        <div class="col-md-3" id="filtro-mag-causale-wrap">
-          <label class="form-label small mb-1">Causale</label>
-          <select class="form-select form-select-sm" id="filtro-mag-causale">
-            <option value="">Tutte le causali</option>
-          </select>
+    <!-- Filtri + Cerca -->
+    <div class="card bg-glass mb-3">
+      <div class="card-body py-2 px-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-sm-auto col-6">
+            <label class="form-label form-label-sm mb-0">Anno Campagna</label>
+            <select class="form-select form-select-sm" id="filtro-mag-anno">
+              <option value="">Tutti gli anni</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6" id="filtro-mag-tipo-wrap">
+            <label class="form-label form-label-sm mb-0">Tipo Movimento</label>
+            <select class="form-select form-select-sm" id="filtro-mag-tipo">
+              <option value="">Tutti i tipi</option>
+              <option value="carico">Carichi</option>
+              <option value="scarico">Scarichi</option>
+            </select>
+          </div>
+          <div class="col-sm-auto col-6" id="filtro-mag-causale-wrap">
+            <label class="form-label form-label-sm mb-0">Causale</label>
+            <select class="form-select form-select-sm" id="filtro-mag-causale">
+              <option value="">Tutte le causali</option>
+            </select>
+          </div>
+          <div class="col-sm col-12">
+            <label class="form-label form-label-sm mb-0">Cerca</label>
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="fa-solid fa-search"></i></span>
+              <input type="text" class="form-control form-control-sm" id="search-movimenti" placeholder="Codice, confezionamento..." />
+            </div>
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-reset-filtri-magazzino" title="Reset filtri">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
-
-    <input type="text" class="form-control form-control-sm search-table mb-3" id="search-movimenti" placeholder="Cerca..." style="max-width:300px;" />
 
     <!-- Tabella Giacenze -->
     <div id="mag-content-giacenze">
-      <div class="card p-0">
-        <div class="table-responsive">
-          <table class="table table-dark table-hover mb-0">
-            <thead>
-              <tr>
-                <th>Campagna</th>
-                <th>Confezionamento</th>
-                <th>Contenitore</th>
-                <th class="text-end">Capacita</th>
-                <th class="text-end">Carichi</th>
-                <th class="text-end">Scarichi</th>
-                <th class="text-end fw-bold">Giacenza</th>
-                <th class="text-end">Litri disp.</th>
-              </tr>
-            </thead>
-            <tbody id="giacenze-tbody"></tbody>
-          </table>
-        </div>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Campagna</th>
+              <th>Confezionamento</th>
+              <th>Contenitore</th>
+              <th class="text-end">Capacita</th>
+              <th class="text-end">Carichi</th>
+              <th class="text-end">Scarichi</th>
+              <th class="text-end fw-bold">Giacenza</th>
+              <th class="text-end">Litri disp.</th>
+            </tr>
+          </thead>
+          <tbody id="giacenze-tbody"></tbody>
+        </table>
       </div>
     </div>
 
     <!-- Tabella Movimenti -->
     <div id="mag-content-movimenti" style="display:none;">
-      <div class="card p-0">
-        <div class="table-responsive">
-          <table class="table table-dark table-hover mb-0">
-            <thead>
-              <tr>
-                <th>Codice</th>
-                <th>Data</th>
-                <th class="text-center">Tipo</th>
-                <th>Causale</th>
-                <th>Confezionamento</th>
-                <th class="text-end">Qta</th>
-                <th>Cliente / Note</th>
-                <th class="text-center">Azioni</th>
-              </tr>
-            </thead>
-            <tbody id="movimenti-tbody"></tbody>
-          </table>
-        </div>
-        <div class="pagination-wrapper px-3 pb-2">
-          <span class="pagination-info" id="movimenti-page-info"></span>
-          <div class="pagination-controls" id="movimenti-pagination"></div>
-        </div>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Codice</th>
+              <th>Data</th>
+              <th class="text-center">Tipo</th>
+              <th>Causale</th>
+              <th>Confezionamento</th>
+              <th class="text-end">Qta</th>
+              <th>Cliente / Note</th>
+              <th class="text-center">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="movimenti-tbody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-wrapper">
+        <span class="pagination-info" id="movimenti-page-info"></span>
+        <div class="pagination-controls" id="movimenti-pagination"></div>
       </div>
     </div>
   </template>
@@ -2464,22 +2398,20 @@
         </button>
       </div>
     </div>
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Codice</th>
-              <th>Descrizione</th>
-              <th class="text-center">Tipo Movimento</th>
-              <th class="text-center">Sistema</th>
-              <th class="text-center">Stato</th>
-              <th class="text-center">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="causali-tbody"></tbody>
-        </table>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Codice</th>
+            <th>Descrizione</th>
+            <th class="text-center">Tipo Movimento</th>
+            <th class="text-center">Sistema</th>
+            <th class="text-center">Stato</th>
+            <th class="text-center">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="causali-tbody"></tbody>
+      </table>
     </div>
   </template>
 
@@ -2529,45 +2461,34 @@
       </button>
     </div>
 
-    <div class="row g-3 mb-4">
-      <div class="col-md-4">
-        <div class="stat-card">
-          <div class="stat-value" id="stat-campagne-totale">0</div>
-          <div class="stat-label">Totale Campagne</div>
-        </div>
+    <div class="row g-2 mb-3">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="stat-campagne-totale">0</div><div class="stat-label">Totale Campagne</div></div>
       </div>
-      <div class="col-md-4">
-        <div class="stat-card">
-          <div class="stat-value text-success" id="stat-campagne-aperte">0</div>
-          <div class="stat-label">Aperte</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-success" id="stat-campagne-aperte">0</div><div class="stat-label">Aperte</div></div>
       </div>
-      <div class="col-md-4">
-        <div class="stat-card">
-          <div class="stat-value text-secondary" id="stat-campagne-chiuse">0</div>
-          <div class="stat-label">Chiuse</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm text-secondary" id="stat-campagne-chiuse">0</div><div class="stat-label">Chiuse</div></div>
       </div>
     </div>
 
-    <div class="card p-0">
-      <div class="table-responsive">
-        <table class="table table-dark table-hover mb-0">
-          <thead>
-            <tr>
-              <th>Anno</th>
-              <th>Stato</th>
-              <th>Data Inizio</th>
-              <th>Data Fine</th>
-              <th>Note</th>
-              <th class="text-center">Azioni</th>
-            </tr>
-          </thead>
-          <tbody id="campagne-tbody"></tbody>
-        </table>
-      </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover align-middle">
+        <thead>
+          <tr>
+            <th>Anno</th>
+            <th>Stato</th>
+            <th>Data Inizio</th>
+            <th>Data Fine</th>
+            <th>Note</th>
+            <th class="text-center">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="campagne-tbody"></tbody>
+      </table>
     </div>
-    <div class="d-flex justify-content-between align-items-center mt-3">
+    <div class="pagination-wrapper">
       <small class="text-secondary" id="campagne-page-info"></small>
       <div id="campagne-pagination"></div>
     </div>
@@ -2990,36 +2911,24 @@
     </div>
 
     <!-- Stats riassuntive -->
-    <div class="row g-3 mb-4" id="listino-stats">
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value" id="listino-stat-prodotti">0</div>
-          <div class="stat-label">Prodotti</div>
-        </div>
+    <div class="row g-2 mb-3" id="listino-stats">
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="listino-stat-prodotti">0</div><div class="stat-label">Prodotti</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="listino-stat-medio">-</div>
-          <div class="stat-label">Prezzo Medio</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="listino-stat-medio">-</div><div class="stat-label">Prezzo Medio</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="listino-stat-min">-</div>
-          <div class="stat-label">Prezzo Min</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="listino-stat-min">-</div><div class="stat-label">Prezzo Min</div></div>
       </div>
-      <div class="col-md-3">
-        <div class="stat-card">
-          <div class="stat-value stat-value-sm" id="listino-stat-max">-</div>
-          <div class="stat-label">Prezzo Max</div>
-        </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="listino-stat-max">-</div><div class="stat-label">Prezzo Max</div></div>
       </div>
     </div>
 
     <!-- Tabella listino -->
     <div class="table-responsive">
-      <table class="table table-dark table-hover mb-0">
+      <table class="table table-dark table-hover align-middle">
         <thead>
           <tr id="listino-thead-row">
             <th class="sortable" data-sort="codice" style="cursor:pointer">Codice <i class="fa-solid fa-sort-down ms-1"></i></th>
@@ -3149,24 +3058,15 @@
 
         <div class="dashboard-section mb-4">
           <h5><i class="fa-solid fa-chart-pie me-2"></i>Dettaglio Costi per Categoria <span class="text-muted small" id="dash-dettaglio-costi-anno"></span></h5>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <div class="stat-card">
-                <div class="stat-label">Costi Campagna</div>
-                <div class="stat-value" id="dash-det-costi-campagna">&euro; 0</div>
-              </div>
+          <div class="row g-2 mb-3">
+            <div class="col-sm-6 col-md">
+              <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="dash-det-costi-campagna">&euro; 0</div><div class="stat-label">Costi Campagna</div></div>
             </div>
-            <div class="col-md-4">
-              <div class="stat-card">
-                <div class="stat-label">Costi Strutturali (competenza)</div>
-                <div class="stat-value" id="dash-det-costi-strutturali">&euro; 0</div>
-              </div>
+            <div class="col-sm-6 col-md">
+              <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="dash-det-costi-strutturali">&euro; 0</div><div class="stat-label">Costi Strutturali</div></div>
             </div>
-            <div class="col-md-4">
-              <div class="stat-card">
-                <div class="stat-label">Totale Costi</div>
-                <div class="stat-value" id="dash-det-costi-totale">&euro; 0</div>
-              </div>
+            <div class="col-sm-6 col-md">
+              <div class="stat-card stat-card-3d text-center"><div class="stat-value stat-value-sm" id="dash-det-costi-totale">&euro; 0</div><div class="stat-label">Totale Costi</div></div>
             </div>
           </div>
           <div class="row">

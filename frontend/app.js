@@ -1193,7 +1193,6 @@ async function renderParcelle() {
 
 function initParcelleListUI() {
   document.getElementById("btn-nuova-parcella")?.addEventListener("click", () => renderParcellaForm());
-  document.getElementById("btn-filtra-parcelle")?.addEventListener("click", () => caricaParcelle());
 
   // Debounce ricerca testuale (300ms)
   let parcelleSearchTimer = null;
@@ -1208,6 +1207,17 @@ function initParcelleListUI() {
   // Filtro immediato al cambio select
   document.getElementById("filtro-varieta")?.addEventListener("change", () => caricaParcelle());
   document.getElementById("filtro-stato")?.addEventListener("change", () => caricaParcelle());
+
+  // Reset filtri
+  document.getElementById("btn-reset-filtri-parcelle")?.addEventListener("click", () => {
+    const varieta = document.getElementById("filtro-varieta");
+    if (varieta) varieta.value = "";
+    const stato = document.getElementById("filtro-stato");
+    if (stato) stato.value = "";
+    const search = document.getElementById("filtro-q");
+    if (search) search.value = "";
+    caricaParcelle();
+  });
 }
 
 async function caricaParcelleStats() {
@@ -1668,8 +1678,18 @@ async function popolaFiltroAnniRaccolte() {
 
 function initRaccolteListUI() {
   document.getElementById("btn-nuova-raccolta")?.addEventListener("click", () => renderRaccoltaForm());
-  document.getElementById("btn-filtra-raccolte")?.addEventListener("click", () => caricaRaccolte());
+  document.getElementById("filtro-raccolte-anno")?.addEventListener("change", () => caricaRaccolte());
+  document.getElementById("filtro-raccolte-parcella")?.addEventListener("change", () => caricaRaccolte());
   document.getElementById("search-raccolte")?.addEventListener("input", debounceSearch(() => caricaRaccolte()));
+  document.getElementById("btn-reset-filtri-raccolte")?.addEventListener("click", () => {
+    const anno = document.getElementById("filtro-raccolte-anno");
+    if (anno) anno.selectedIndex = 0;
+    const parcella = document.getElementById("filtro-raccolte-parcella");
+    if (parcella) parcella.selectedIndex = 0;
+    const search = document.getElementById("search-raccolte");
+    if (search) search.value = "";
+    caricaRaccolte();
+  });
 }
 
 async function popolaFiltroParcelle() {
@@ -2023,8 +2043,22 @@ async function popolaFiltroAnniLotti() {
 
 function initLottiListUI() {
   document.getElementById("btn-nuovo-lotto")?.addEventListener("click", () => renderLottoForm());
-  document.getElementById("btn-filtra-lotti")?.addEventListener("click", () => caricaLotti());
+  document.getElementById("filtro-lotti-anno")?.addEventListener("change", () => { caricaLottiStats(); caricaLotti(); });
+  document.getElementById("filtro-lotti-tipo")?.addEventListener("change", () => caricaLotti());
+  document.getElementById("filtro-lotti-stato")?.addEventListener("change", () => caricaLotti());
   document.getElementById("search-lotti")?.addEventListener("input", debounceSearch(() => caricaLotti()));
+  document.getElementById("btn-reset-filtri-lotti")?.addEventListener("click", () => {
+    const anno = document.getElementById("filtro-lotti-anno");
+    if (anno) anno.selectedIndex = 0;
+    const tipo = document.getElementById("filtro-lotti-tipo");
+    if (tipo) tipo.value = "";
+    const stato = document.getElementById("filtro-lotti-stato");
+    if (stato) stato.value = "";
+    const search = document.getElementById("search-lotti");
+    if (search) search.value = "";
+    caricaLottiStats();
+    caricaLotti();
+  });
 }
 
 async function caricaLottiStats() {
@@ -2430,11 +2464,19 @@ async function popolaFiltroAnniConf() {
 
 function initConfListUI() {
   document.getElementById("btn-nuovo-conf")?.addEventListener("click", () => renderConfezionamentoForm());
-  document.getElementById("btn-filtra-conf")?.addEventListener("click", () => {
+  document.getElementById("filtro-conf-anno")?.addEventListener("change", () => { caricaConfStats(); caricaConfezionamenti(); });
+  document.getElementById("filtro-conf-formato")?.addEventListener("change", () => caricaConfezionamenti());
+  document.getElementById("search-confezionamenti")?.addEventListener("input", debounceSearch(() => caricaConfezionamenti()));
+  document.getElementById("btn-reset-filtri-conf")?.addEventListener("click", () => {
+    const anno = document.getElementById("filtro-conf-anno");
+    if (anno) anno.selectedIndex = 0;
+    const formato = document.getElementById("filtro-conf-formato");
+    if (formato) formato.value = "";
+    const search = document.getElementById("search-confezionamenti");
+    if (search) search.value = "";
     caricaConfStats();
     caricaConfezionamenti();
   });
-  document.getElementById("search-confezionamenti")?.addEventListener("input", debounceSearch(() => caricaConfezionamenti()));
 }
 
 async function caricaConfStats() {
@@ -3032,13 +3074,21 @@ async function renderClienti() {
 
 function initClientiListUI() {
   document.getElementById("btn-nuovo-cliente")?.addEventListener("click", () => renderClienteForm());
-  document.getElementById("btn-filtra-clienti")?.addEventListener("click", () => {
-    caricaClientiStats();
-    caricaClienti();
-  });
+  document.getElementById("filtro-clienti-tipo")?.addEventListener("change", () => { caricaClientiStats(); caricaClienti(); });
+  document.getElementById("filtro-clienti-tutti")?.addEventListener("change", () => { caricaClientiStats(); caricaClienti(); });
   document.getElementById("filtro-clienti-q")?.addEventListener("input", debounceSearch(() => { caricaClientiStats(); caricaClienti(); }));
   document.getElementById("filtro-clienti-q")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); caricaClientiStats(); caricaClienti(); }
+  });
+  document.getElementById("btn-reset-filtri-clienti")?.addEventListener("click", () => {
+    const tipo = document.getElementById("filtro-clienti-tipo");
+    if (tipo) tipo.value = "";
+    const tutti = document.getElementById("filtro-clienti-tutti");
+    if (tutti) tutti.checked = false;
+    const q = document.getElementById("filtro-clienti-q");
+    if (q) q.value = "";
+    caricaClientiStats();
+    caricaClienti();
   });
   document.getElementById("btn-export-clienti-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
@@ -3363,11 +3413,23 @@ async function renderFornitori() {
     renderFornitoreForm();
   });
 
-  document.getElementById("btn-filtra-fornitori").addEventListener("click", () => caricaFornitori());
-
+  document.getElementById("filtro-fornitori-tipo")?.addEventListener("change", () => caricaFornitori());
+  document.getElementById("filtro-fornitori-categoria")?.addEventListener("change", () => caricaFornitori());
+  document.getElementById("filtro-fornitori-tutti")?.addEventListener("change", () => caricaFornitori());
   document.getElementById("filtro-fornitori-q")?.addEventListener("input", debounceSearch(() => caricaFornitori()));
   document.getElementById("filtro-fornitori-q")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); caricaFornitori(); }
+  });
+  document.getElementById("btn-reset-filtri-fornitori")?.addEventListener("click", () => {
+    const tipo = document.getElementById("filtro-fornitori-tipo");
+    if (tipo) tipo.value = "";
+    const cat = document.getElementById("filtro-fornitori-categoria");
+    if (cat) cat.value = "";
+    const tutti = document.getElementById("filtro-fornitori-tutti");
+    if (tutti) tutti.checked = false;
+    const q = document.getElementById("filtro-fornitori-q");
+    if (q) q.value = "";
+    caricaFornitori();
   });
 
   document.getElementById("btn-export-fornitori-csv")?.addEventListener("click", () => {
@@ -3740,6 +3802,22 @@ async function renderCosti() {
   document.getElementById("filtro-costi-stato")?.addEventListener("change", () => caricaCosti());
   document.getElementById("filtro-costi-fornitore")?.addEventListener("change", () => caricaCosti());
   document.getElementById("search-costi")?.addEventListener("input", debounceSearch(() => caricaCosti()));
+  document.getElementById("btn-reset-filtri-costi")?.addEventListener("click", () => {
+    const anno = document.getElementById("filtro-costi-anno");
+    if (anno) anno.selectedIndex = 0;
+    const tipo = document.getElementById("filtro-costi-tipo");
+    if (tipo) tipo.value = "";
+    const cat = document.getElementById("filtro-costi-categoria");
+    if (cat) cat.value = "";
+    const stato = document.getElementById("filtro-costi-stato");
+    if (stato) stato.value = "";
+    const forn = document.getElementById("filtro-costi-fornitore");
+    if (forn) forn.value = "";
+    const search = document.getElementById("search-costi");
+    if (search) search.value = "";
+    caricaCostiStats();
+    caricaCosti();
+  });
 
   await caricaCategorieCosto();
   await popolaFiltroCosti();
@@ -4578,6 +4656,19 @@ async function renderMagazzino() {
   document.getElementById("filtro-mag-tipo")?.addEventListener("change", () => caricaMovimenti());
   document.getElementById("filtro-mag-causale")?.addEventListener("change", () => caricaMovimenti());
   document.getElementById("search-movimenti")?.addEventListener("input", debounceSearch(() => caricaMovimenti()));
+  document.getElementById("btn-reset-filtri-magazzino")?.addEventListener("click", () => {
+    const anno = document.getElementById("filtro-mag-anno");
+    if (anno) anno.selectedIndex = 0;
+    const tipo = document.getElementById("filtro-mag-tipo");
+    if (tipo) tipo.value = "";
+    const causale = document.getElementById("filtro-mag-causale");
+    if (causale) causale.value = "";
+    const search = document.getElementById("search-movimenti");
+    if (search) search.value = "";
+    caricaMagStats();
+    if (magazzinoTabAttiva === "giacenze") caricaGiacenze();
+    else caricaMovimenti();
+  });
 
   // Bottoni
   document.getElementById("btn-nuovo-carico")?.addEventListener("click", () => renderMovimentoForm(null, "carico"));
