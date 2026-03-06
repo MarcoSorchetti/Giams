@@ -322,12 +322,55 @@ function setActiveMenu(id) {
   if (actionsEl) actionsEl.innerHTML = "";
   // Reset breadcrumb (i form lo re-impostano se necessario)
   setBreadcrumb([]);
+  // Aggiorna stato gruppi sidebar: apri il gruppo contenente la voce attiva
+  aggiornaGruppiSidebar(id);
   // Chiudi sidebar su mobile dopo click menu
   if (window.innerWidth < 768) {
     const shell = document.querySelector(".app-shell");
     shell?.classList.remove("sidebar-open");
     document.getElementById("sidebar-toggle")?.classList.remove("is-active");
   }
+}
+
+// Mappa menu-id -> gruppo di appartenenza nella sidebar
+const _menuGroupMap = {
+  "menu-parcelle": "produzione",
+  "menu-produzione": "produzione",
+  "menu-campagne": "produzione",
+  "menu-vendite": "commerciale",
+  "menu-listino": "commerciale",
+  "menu-magazzino": "commerciale",
+  "menu-costi": "commerciale",
+  "menu-clienti": "anagrafiche",
+  "menu-fornitori": "anagrafiche",
+  "menu-contenitori": "anagrafiche",
+  "menu-utenti": "amministrazione",
+  "menu-audit": "amministrazione",
+};
+
+// Aggiorna stato visuale dei gruppi accordion nella sidebar
+function aggiornaGruppiSidebar(activeId) {
+  const gruppoAttivo = _menuGroupMap[activeId] || null;
+  document.querySelectorAll(".sidebar-group").forEach(g => {
+    const nome = g.dataset.group;
+    // Indicatore gruppo con voce attiva
+    g.classList.toggle("has-active", nome === gruppoAttivo);
+    // Auto-apri il gruppo della voce selezionata
+    if (nome === gruppoAttivo) {
+      g.classList.add("open");
+    }
+  });
+}
+
+// Inizializza logica toggle dei gruppi sidebar
+function initSidebarGroups() {
+  document.querySelectorAll(".sidebar-group-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const group = btn.closest(".sidebar-group");
+      if (!group) return;
+      group.classList.toggle("open");
+    });
+  });
 }
 
 /** Aggiorna topbar per sotto-sezioni (es. Categorie Costo) */
@@ -6772,6 +6815,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Render home
   renderHome();
+
+  // Inizializza gruppi accordion sidebar
+  initSidebarGroups();
 
   // Sidebar navigation
   document.getElementById("menu-home")?.addEventListener("click", () => {

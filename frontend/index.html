@@ -25,65 +25,97 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.2.6</div>
+        <div class="app-version">v2.3.4</div>
       </div>
 
-      <nav class="nav flex-column gap-2">
-        <button id="menu-home" class="btn btn-dark text-start sidebar-link active" type="button">
+      <nav class="nav flex-column sidebar-nav">
+        <!-- Voci standalone -->
+        <button id="menu-home" class="text-start sidebar-link active" type="button">
           <i class="fa-solid fa-house me-2"></i> Home
         </button>
-
-        <button id="menu-dashboard" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-chart-pie me-2"></i> Dashboard
+        <button id="menu-dashboard" class="text-start sidebar-link" type="button">
+          <i class="fa-solid fa-gauge-high me-2"></i> Dashboard
         </button>
 
-        <button id="menu-parcelle" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-seedling me-2"></i> Gestione Parcelle
-        </button>
+        <!-- Gruppo: Produzione -->
+        <div class="sidebar-group" data-group="produzione">
+          <button class="sidebar-group-toggle" type="button">
+            <span class="sidebar-group-icon"><i class="fa-solid fa-leaf"></i></span>
+            <span class="sidebar-group-label">Produzione</span>
+            <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+          </button>
+          <div class="sidebar-group-items">
+            <button id="menu-parcelle" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-map-location-dot me-2"></i> Parcelle
+            </button>
+            <button id="menu-produzione" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-flask me-2"></i> Lotti e Spremitura
+            </button>
+            <button id="menu-campagne" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-calendar-days me-2"></i> Campagne
+            </button>
+          </div>
+        </div>
 
-        <button id="menu-produzione" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-oil-can me-2"></i> Produzione
-        </button>
+        <!-- Gruppo: Commerciale -->
+        <div class="sidebar-group" data-group="commerciale">
+          <button class="sidebar-group-toggle" type="button">
+            <span class="sidebar-group-icon"><i class="fa-solid fa-hand-holding-dollar"></i></span>
+            <span class="sidebar-group-label">Commerciale</span>
+            <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+          </button>
+          <div class="sidebar-group-items">
+            <button id="menu-vendite" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-file-invoice me-2"></i> Vendite
+            </button>
+            <button id="menu-listino" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-tags me-2"></i> Listino Prezzi
+            </button>
+            <button id="menu-magazzino" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-boxes-stacked me-2"></i> Magazzino
+            </button>
+            <button id="menu-costi" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-receipt me-2"></i> Costi
+            </button>
+          </div>
+        </div>
 
-        <button id="menu-contenitori" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-bottle-water me-2"></i> Contenitori
-        </button>
+        <!-- Gruppo: Anagrafiche -->
+        <div class="sidebar-group" data-group="anagrafiche">
+          <button class="sidebar-group-toggle" type="button">
+            <span class="sidebar-group-icon"><i class="fa-solid fa-users"></i></span>
+            <span class="sidebar-group-label">Anagrafiche</span>
+            <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+          </button>
+          <div class="sidebar-group-items">
+            <button id="menu-clienti" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-user-tie me-2"></i> Clienti
+            </button>
+            <button id="menu-fornitori" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-truck-field me-2"></i> Fornitori
+            </button>
+            <button id="menu-contenitori" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-wine-bottle me-2"></i> Contenitori
+            </button>
+          </div>
+        </div>
 
-        <button id="menu-clienti" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-address-book me-2"></i> Clienti
-        </button>
-
-        <button id="menu-fornitori" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-truck-field me-2"></i> Fornitori
-        </button>
-
-        <button id="menu-costi" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-file-invoice-dollar me-2"></i> Costi
-        </button>
-
-        <button id="menu-campagne" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-calendar-days me-2"></i> Campagne
-        </button>
-
-        <button id="menu-magazzino" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-warehouse me-2"></i> Magazzino
-        </button>
-
-        <button id="menu-vendite" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-cart-shopping me-2"></i> Vendite
-        </button>
-
-        <button id="menu-listino" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-tags me-2"></i> Listino Prezzi
-        </button>
-
-        <button id="menu-utenti" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-user-gear me-2"></i> Gestione Utenti
-        </button>
-
-        <button id="menu-audit" class="btn btn-dark text-start sidebar-link" type="button">
-          <i class="fa-solid fa-clock-rotate-left me-2"></i> Log Attivita'
-        </button>
+        <!-- Gruppo: Amministrazione -->
+        <div class="sidebar-group" data-group="amministrazione">
+          <button class="sidebar-group-toggle" type="button">
+            <span class="sidebar-group-icon"><i class="fa-solid fa-gear"></i></span>
+            <span class="sidebar-group-label">Amministrazione</span>
+            <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+          </button>
+          <div class="sidebar-group-items">
+            <button id="menu-utenti" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-user-shield me-2"></i> Gestione Utenti
+            </button>
+            <button id="menu-audit" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-clipboard-list me-2"></i> Log Attivita'
+            </button>
+          </div>
+        </div>
       </nav>
 
       <div class="mt-auto pt-3">

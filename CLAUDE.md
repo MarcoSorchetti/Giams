@@ -17,13 +17,22 @@ operatività aziendale: produzione, costi, fatturazione e gestione generale.
   - Reportistica aziendale
 
 ## 🛠 Stack Tecnologico
-- **Frontend**: HTML5 + CSS3 + JavaScript Vanilla
-  - `index.html` → dashboard principale
+- **Frontend**: HTML5 + CSS3 + JavaScript Vanilla + Bootstrap 5 (dark theme)
+  - `index.html` → dashboard principale (SPA)
   - `login.html` → autenticazione
-  - `app.js` → logica applicativa principale
-  - `styles.css` → stile globale
-- **Backend**: Python
-- **Deploy**: Render (`render.yaml`)
+  - `app.js` → logica applicativa principale (~7000 righe)
+  - `styles.css` → stile globale (variabili CSS, tema scuro verde)
+  - Servito come file statici da FastAPI (non ha un server separato)
+- **Backend**: FastAPI + SQLAlchemy + Alembic (Python 3.12)
+  - Auth: JWT (python-jose) con `apiFetch()` lato frontend
+  - PDF: fpdf2 (Helvetica, no Unicode — evitare em-dash e caratteri speciali)
+  - Porta: **8003**
+- **Database**: PostgreSQL 15 (Homebrew) — LOCALE
+  - DB: `giams_db` | User: `giams_user` | Password: `password_sicura`
+  - Connection string default in `backend/app/database.py`
+- **Ambiente**: Sviluppo locale (NO Render, NO cloud per ora)
+  - Virtualenv: `.venv/` (Python 3.12 via Homebrew)
+  - Il frontend e' servito da FastAPI come StaticFiles sulla stessa porta 8003
 - **Cartella upload**: `uploads/` per documenti e allegati
 - **Documentazione progetto**: `Progetto/`
 
@@ -79,16 +88,49 @@ Usa sempre questa terminologia nei nomi di variabili, funzioni e commenti:
 - `frantoio` → impianto di lavorazione
 - `cultivar` → varietà di olivo (es. Leccino, Frantoio, Moraiolo)
 
-## 🔧 Comandi Utili
+## 🔧 Ambiente Locale — Avvio Completo
+
+### Prerequisiti
+- **PostgreSQL 15** (Homebrew): `brew services start postgresql@15`
+- **Python 3.12** (Homebrew): `/opt/homebrew/bin/python3.12`
+- **Virtualenv**: `.venv/` nella root del progetto
+
+### 1. Avviare PostgreSQL (se non attivo)
 ```bash
-# Avviare il backend Python
-cd backend && python app.py
+brew services start postgresql@15
+# Verifica: pg_isready  →  deve rispondere "accepting connections"
+```
 
-# Installare dipendenze
-pip install -r requirements.txt
+### 2. Attivare il virtualenv e avviare il backend
+```bash
+source /Users/marcos.orchetti/giams/.venv/bin/activate
+cd /Users/marcos.orchetti/giams/backend
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+```
 
-# Deploy su Render
-git push origin main   # il deploy è automatico via render.yaml
+### 3. Aprire l'applicazione
+- **Frontend + Backend**: http://localhost:8003
+- **API docs (Swagger)**: http://localhost:8003/docs
+
+### Installare/aggiornare dipendenze
+```bash
+source /Users/marcos.orchetti/giams/.venv/bin/activate
+pip install -r /Users/marcos.orchetti/giams/requirements.txt
+```
+
+### Comandi utili
+```bash
+# Stato PostgreSQL
+brew services list | grep postgres
+
+# Verificare che il server sia attivo
+curl -s http://localhost:8003/health
+
+# Migrazioni Alembic
+cd backend && alembic upgrade head
+
+# Push su GitHub
+git push origin main
 ```
 
 ## ⚠️ Regole Importanti

@@ -169,7 +169,21 @@
       "Bash(kill 46566 46568)",
       "Bash(curl -s http://localhost:8003/api/confezionamenti/listino?anno=2025)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" 'http://localhost:8003/docs')",
-      "Bash(curl -s -w \"\\\\nHTTP_CODE: %{http_code}\" 'http://localhost:8003/api/confezionamenti/listino/pdf?anno=2025' -H \"Authorization: Bearer test\")"
+      "Bash(curl -s -w \"\\\\nHTTP_CODE: %{http_code}\" 'http://localhost:8003/api/confezionamenti/listino/pdf?anno=2025' -H \"Authorization: Bearer test\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8003/docs)",
+      "Bash(/opt/homebrew/bin/pip3 list)",
+      "Bash(pip3 install uvicorn fastapi sqlalchemy psycopg2-binary python-jose passlib python-multipart fpdf2 flatpickr)",
+      "Bash(source /Users/marcos.orchetti/giams/.venv/bin/activate)",
+      "Bash(pip install -r /Users/marcos.orchetti/giams/requirements.txt)",
+      "Bash(/opt/homebrew/bin/python3 --version)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(/opt/homebrew/bin/python3.12 -m venv /Users/marcos.orchetti/giams/.venv)",
+      "Bash(pip install --upgrade pip)",
+      "Bash(pip install python-jose fpdf2)",
+      "Bash(pg_isready)",
+      "Bash(psql --version)",
+      "Bash(brew services list)",
+      "Bash(git add frontend/version.json frontend/index.html frontend/styles.css frontend/app.js backend/app/main.py CLAUDE.md .claude/settings.json .gitignore)"
     ]
   }
 }

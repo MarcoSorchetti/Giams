@@ -12,6 +12,7 @@ __pycache__/
 # Ambiente
 .env
 *.env.local
+.venv/
 
 # IDE
 .vscode/
