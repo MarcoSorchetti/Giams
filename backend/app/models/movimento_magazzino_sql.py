@@ -11,7 +11,7 @@ class MovimentoMagazzino(Base):
     codice = Column(String(20), unique=True, nullable=False, index=True)
 
     # Riferimento al confezionamento (prodotto confezionato)
-    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id"), nullable=False, index=True)
+    confezionamento_id = Column(Integer, ForeignKey("confezionamenti.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     # Tipo: carico | scarico
     tipo_movimento = Column(String(10), nullable=False)
@@ -26,7 +26,7 @@ class MovimentoMagazzino(Base):
     anno_campagna = Column(Integer, nullable=False, index=True)
 
     # Cliente (opzionale, per omaggi o scarichi legati a un cliente)
-    cliente_id = Column(Integer, ForeignKey("clienti.id"), nullable=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clienti.id", ondelete="RESTRICT"), nullable=True, index=True)
 
     # Riferimento documento esterno (fattura, DDT, ecc. — per collegamento futuro con Vendite)
     riferimento_documento = Column(String(100), nullable=True)

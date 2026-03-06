@@ -215,7 +215,7 @@ function _loadProtectedImages(container) {
         const placeholder = img.nextElementSibling;
         if (placeholder?.classList.contains("ct-card-loading")) placeholder.remove();
       }
-    } catch { /* fallback: resta il placeholder */ }
+    } catch (e) { console.warn("Errore caricamento immagine card:", e); }
   });
 }
 
@@ -276,7 +276,7 @@ async function getAppVersion() {
     const res = await fetch("version.json");
     const data = await res.json();
     return data.version || "1.0.0";
-  } catch { return "1.0.0"; }
+  } catch (e) { console.warn("Errore lettura version.json:", e); return "1.0.0"; }
 }
 
 // =============================================
@@ -307,8 +307,8 @@ function setActiveMenu(id) {
   // Cleanup grafici dashboard quando si naviga via
   dashboardCharts.forEach(c => c.destroy());
   dashboardCharts = [];
-  // Cleanup Flatpickr datepicker per evitare memory leak
-  document.querySelectorAll(".flatpickr-date, #vf-data, #modal-nuova-data, #modal-sped-data, #modal-pag-data").forEach(el => {
+  // Cleanup Flatpickr datepicker per evitare memory leak (selettore generico — copre tutti i campi)
+  document.querySelectorAll(".flatpickr-input").forEach(el => {
     if (el._flatpickr) { el._flatpickr.destroy(); }
   });
   // Aggiorna titolo + sottotitolo topbar
@@ -709,7 +709,7 @@ async function renderDashboard() {
         const res = await apiFetch(url);
         const data = await res.json();
         return Array.isArray(data) ? data : [];
-      } catch { return []; }
+      } catch (e) { console.warn("Errore fetch anni dashboard:", e); return []; }
     };
     const [anniLotti, anniVendite, anniCosti] = await Promise.all([
       safeFetchAnni(`${API_URL}/lotti/anni`),
@@ -740,7 +740,7 @@ async function renderDashboard() {
 
 async function loadDashboardData(anni) {
   // Fetch dati per TUTTI gli anni in parallelo
-  const safeJson = async (res) => { try { return await res.json(); } catch { return {}; } };
+  const safeJson = async (res) => { try { return await res.json(); } catch (e) { console.warn("Errore parsing JSON dashboard:", e); return {}; } };
   const promises = anni.map(async (anno) => {
     const [lottiRes, costiCampRes, venditeRes, costiRes] = await Promise.all([
       apiFetch(`${API_URL}/lotti/stats?anno=${anno}`),
@@ -2899,7 +2899,7 @@ async function popolaFormContenitore(id) {
           const blobUrl = URL.createObjectURL(blob);
           document.getElementById("ct-foto-preview").innerHTML = `<img src="${blobUrl}" class="ct-foto-preview-img" />`;
         }
-      } catch { /* nessuna preview foto */ }
+      } catch (e) { console.warn("Errore preview foto contenitore:", e); }
     }
   } catch (err) {
     console.error("Errore caricamento contenitore:", err);
@@ -3005,8 +3005,9 @@ function initClientiListUI() {
     caricaClientiStats();
     caricaClienti();
   });
-  document.getElementById("filtro-clienti-q")?.addEventListener("keyup", (e) => {
-    if (e.key === "Enter") { caricaClientiStats(); caricaClienti(); }
+  document.getElementById("filtro-clienti-q")?.addEventListener("input", debounceSearch(() => { caricaClientiStats(); caricaClienti(); }));
+  document.getElementById("filtro-clienti-q")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); caricaClientiStats(); caricaClienti(); }
   });
   document.getElementById("btn-export-clienti-csv")?.addEventListener("click", () => {
     const params = new URLSearchParams();
@@ -3333,7 +3334,8 @@ async function renderFornitori() {
 
   document.getElementById("btn-filtra-fornitori").addEventListener("click", () => caricaFornitori());
 
-  document.getElementById("filtro-fornitori-q").addEventListener("keydown", (e) => {
+  document.getElementById("filtro-fornitori-q")?.addEventListener("input", debounceSearch(() => caricaFornitori()));
+  document.getElementById("filtro-fornitori-q")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); caricaFornitori(); }
   });
 
@@ -3899,7 +3901,7 @@ async function _mostraCostoDocPreview(tipo, url, filename) {
       const blob = await res.blob();
       blobUrl = URL.createObjectURL(blob);
     }
-  } catch { /* fallback all'url diretto */ }
+  } catch (e) { console.warn("Errore preview documento costo:", e); }
 
   const iframe = document.getElementById("costo-doc-iframe");
   const img = document.getElementById("costo-doc-img");
