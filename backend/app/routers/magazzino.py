@@ -20,6 +20,7 @@ from app.models.causale_movimento_sql import CausaleMovimento
 from app.core.security import get_current_user
 from app.services.audit import log_audit
 from app.utils.codice import next_codice_anno
+from app.utils.denominazione import cliente_denominazione as _cliente_denominazione
 
 
 router = APIRouter(prefix="/magazzino", tags=["magazzino"])
@@ -41,15 +42,6 @@ def _get_causali_valide(db: Session, include_vendita: bool = False):
 
 def _next_codice_movimento(anno: int, db: Session) -> str:
     return next_codice_anno("MV", MovimentoMagazzino, MovimentoMagazzino.codice, anno, db)
-
-
-def _cliente_denominazione(c):
-    if not c:
-        return None
-    if c.tipo_cliente == "azienda":
-        return c.ragione_sociale or ""
-    parti = [c.nome or "", c.cognome or ""]
-    return " ".join(p for p in parti if p)
 
 
 def _build_movimento_out(mov, db=None, conf_map=None, cont_map=None, cli_map=None):

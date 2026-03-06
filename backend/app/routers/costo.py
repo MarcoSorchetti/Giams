@@ -26,6 +26,7 @@ from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
 from app.utils.codice import next_codice_anno
+from app.utils.denominazione import fornitore_denominazione as _fornitore_denominazione
 
 
 router = APIRouter(prefix="/costi", tags=["costi"])
@@ -33,15 +34,6 @@ router = APIRouter(prefix="/costi", tags=["costi"])
 
 def _next_codice_costo(anno: int, db: Session) -> str:
     return next_codice_anno("C", Costo, Costo.codice, anno, db)
-
-
-def _fornitore_denominazione(f):
-    if not f:
-        return None
-    if f.tipo_fornitore == "azienda":
-        return f.ragione_sociale or ""
-    parti = [f.nome or "", f.cognome or ""]
-    return " ".join(p for p in parti if p)
 
 
 def _build_costo_out(costo, db):

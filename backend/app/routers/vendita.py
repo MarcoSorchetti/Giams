@@ -23,6 +23,7 @@ from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
 from app.services.audit import log_audit
 from app.utils.codice import next_codice_anno
+from app.utils.denominazione import cliente_denominazione as _cliente_denominazione
 
 
 router = APIRouter(prefix="/vendite", tags=["vendite"])
@@ -44,15 +45,6 @@ def _next_numero_fattura(anno: int, db: Session) -> str:
 
 def _next_numero_ddt(anno: int, db: Session) -> str:
     return next_codice_anno("DDT", Vendita, Vendita.numero_ddt, anno, db)
-
-
-def _cliente_denominazione(c):
-    if not c:
-        return None
-    if c.tipo_cliente == "azienda":
-        return c.ragione_sociale or ""
-    parti = [c.nome or "", c.cognome or ""]
-    return " ".join(p for p in parti if p)
 
 
 def _build_vendita_out(v, db) -> VenditaOut:
@@ -591,7 +583,7 @@ def delete_vendita(vendita_id: int, db: Session = Depends(get_db), current_user=
 # ---------------------------------------------------------------------------
 
 @router.patch("/{vendita_id}", response_model=VenditaOut)
-def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = Depends(get_db)):
+def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     v = db.query(Vendita).filter(Vendita.id == vendita_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Vendita non trovata.")
@@ -603,6 +595,9 @@ def patch_vendita_info(vendita_id: int, data: VenditaPatchInfo, db: Session = De
     for key, value in update_data.items():
         setattr(v, key, value)
 
+    log_audit(db, user_id=current_user.id, username=current_user.username,
+              azione="modificato_info", entita="vendita", entita_id=v.id, codice_entita=v.codice,
+              dettagli=f"Campi aggiornati: {', '.join(update_data.keys())}")
     db.commit()
     db.refresh(v)
     return _build_vendita_out(v, db)
