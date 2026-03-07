@@ -4,42 +4,84 @@ Generazione PDF per fattura interna e DDT - GIAMS Vendite
 import io
 import os
 from fpdf import FPDF
+from sqlalchemy.orm import Session
 
 
 # ---------------------------------------------------------------------------
-# Dati azienda (intestazione documenti)
+# Dati azienda (intestazione documenti) — fallback se DB vuoto
 # ---------------------------------------------------------------------------
-AZIENDA = {
+_AZIENDA_DEFAULT = {
     "nome": "Gia.Mar Green Farm Srl",
-    "indirizzo": "Via delle Olive, 1",
-    "cap": "00100",
-    "citta": "Roma",
-    "provincia": "RM",
-    "partita_iva": "IT12345678901",
-    "telefono": "+39 06 1234567",
-    "email": "info@giamarsrl.it",
+    "indirizzo": "",
+    "cap": "",
+    "citta": "",
+    "provincia": "",
+    "partita_iva": "",
+    "telefono": "",
+    "email": "",
 }
 
 LOGO_PATH = os.path.join(os.path.dirname(__file__), "../../../frontend/assets/LogoGiaMarHome.png")
 
 
+def get_azienda_data(db: Session) -> dict:
+    """Legge i dati aziendali dal DB. Fallback a valori default se vuoto."""
+    from app.models.azienda_sql import Azienda
+    az = db.query(Azienda).first()
+    if not az:
+        return _AZIENDA_DEFAULT.copy()
+    forma = f" {az.forma_giuridica}" if az.forma_giuridica else ""
+    return {
+        "nome": f"{az.ragione_sociale or ''}{forma}",
+        "indirizzo": az.sede_legale_indirizzo or "",
+        "cap": az.sede_legale_cap or "",
+        "citta": az.sede_legale_citta or "",
+        "provincia": az.sede_legale_provincia or "",
+        "partita_iva": az.partita_iva or "",
+        "telefono": az.telefono or "",
+        "email": az.pec or az.email or "",
+    }
+
+
 class DocumentoPDF(FPDF):
     """PDF base con intestazione aziendale e piede pagina."""
 
-    def __init__(self, titolo_doc: str = ""):
+    def __init__(self, titolo_doc: str = "", azienda: dict = None):
         super().__init__()
         self.titolo_doc = titolo_doc
+        self.azienda = azienda or _AZIENDA_DEFAULT
 
     def header(self):
+        az = self.azienda
         # Logo
         if os.path.isfile(LOGO_PATH):
             self.image(LOGO_PATH, 10, 8, 30)
         self.set_font("Helvetica", "B", 14)
-        self.cell(0, 8, AZIENDA["nome"], new_x="LMARGIN", new_y="NEXT", align="C")
+        self.cell(0, 8, az["nome"], new_x="LMARGIN", new_y="NEXT", align="C")
         self.set_font("Helvetica", "", 8)
-        indirizzo = f"{AZIENDA['indirizzo']} - {AZIENDA['cap']} {AZIENDA['citta']} ({AZIENDA['provincia']})"
-        self.cell(0, 4, indirizzo, new_x="LMARGIN", new_y="NEXT", align="C")
-        self.cell(0, 4, f"P.IVA: {AZIENDA['partita_iva']}  |  Tel: {AZIENDA['telefono']}  |  {AZIENDA['email']}", new_x="LMARGIN", new_y="NEXT", align="C")
+        # Indirizzo (mostra solo se compilato)
+        parti_ind = []
+        if az["indirizzo"]:
+            parti_ind.append(az["indirizzo"])
+        loc = ""
+        if az["cap"] or az["citta"]:
+            loc = f"{az['cap']} {az['citta']}".strip()
+            if az["provincia"]:
+                loc += f" ({az['provincia']})"
+        if loc:
+            parti_ind.append(loc)
+        if parti_ind:
+            self.cell(0, 4, " - ".join(parti_ind), new_x="LMARGIN", new_y="NEXT", align="C")
+        # P.IVA, Tel, Email (mostra solo campi compilati)
+        dettagli = []
+        if az["partita_iva"]:
+            dettagli.append(f"P.IVA: {az['partita_iva']}")
+        if az["telefono"]:
+            dettagli.append(f"Tel: {az['telefono']}")
+        if az["email"]:
+            dettagli.append(az["email"])
+        if dettagli:
+            self.cell(0, 4, "  |  ".join(dettagli), new_x="LMARGIN", new_y="NEXT", align="C")
         self.ln(2)
         # Titolo documento
         if self.titolo_doc:
@@ -48,13 +90,14 @@ class DocumentoPDF(FPDF):
         self.ln(2)
         # Linea separatrice
         self.set_draw_color(100, 100, 100)
-        self.line(10, self.get_y(), 200, self.get_y())
+        page_w = self.w - self.r_margin
+        self.line(10, self.get_y(), page_w, self.get_y())
         self.ln(4)
 
     def footer(self):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 7)
-        self.cell(0, 5, f"Documento generato da GIAMS - {AZIENDA['nome']}", align="C")
+        self.cell(0, 5, f"Documento generato da GIAMS - {self.azienda['nome']}", align="C")
         self.set_y(-10)
         self.cell(0, 5, f"Pagina {self.page_no()}/{{nb}}", align="C")
 
@@ -97,10 +140,11 @@ def _fmt(val, decimali=2):
 # Fattura interna
 # ---------------------------------------------------------------------------
 
-def genera_fattura_pdf(vendita, cliente, righe_info: list) -> bytes:
+def genera_fattura_pdf(vendita, cliente, righe_info: list, db: Session = None) -> bytes:
     """Genera PDF fattura interna. Restituisce bytes del PDF."""
+    az = get_azienda_data(db) if db else _AZIENDA_DEFAULT
     titolo = f"FATTURA INTERNA N. {vendita.numero_fattura or vendita.codice}"
-    pdf = DocumentoPDF(titolo_doc=titolo)
+    pdf = DocumentoPDF(titolo_doc=titolo, azienda=az)
     pdf.alias_nb_pages()
     pdf.add_page()
 
@@ -200,10 +244,11 @@ def genera_fattura_pdf(vendita, cliente, righe_info: list) -> bytes:
 # DDT - Documento di Trasporto
 # ---------------------------------------------------------------------------
 
-def genera_ddt_pdf(vendita, cliente, righe_info: list) -> bytes:
+def genera_ddt_pdf(vendita, cliente, righe_info: list, db: Session = None) -> bytes:
     """Genera PDF DDT. Restituisce bytes del PDF."""
+    az = get_azienda_data(db) if db else _AZIENDA_DEFAULT
     titolo = f"DOCUMENTO DI TRASPORTO N. {vendita.numero_ddt or vendita.codice}"
-    pdf = DocumentoPDF(titolo_doc=titolo)
+    pdf = DocumentoPDF(titolo_doc=titolo, azienda=az)
     pdf.alias_nb_pages()
     pdf.add_page()
 

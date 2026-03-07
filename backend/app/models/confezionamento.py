@@ -20,6 +20,7 @@ class ConfezionamentoBase(BaseModel):
     data_confezionamento: date
     anno_campagna: int
     contenitore_id: int
+    frantoio_id: Optional[int] = None
     formato: str = Field(..., max_length=30)
     capacita_litri: float
     num_unita: int
@@ -40,6 +41,7 @@ class ConfezionamentoUpdate(BaseModel):
     data_confezionamento: Optional[date] = None
     anno_campagna: Optional[int] = None
     contenitore_id: Optional[int] = None
+    frantoio_id: Optional[int] = None
     formato: Optional[str] = Field(None, max_length=30)
     capacita_litri: Optional[float] = None
     num_unita: Optional[int] = None
@@ -56,6 +58,7 @@ class ConfezionamentoOut(ConfezionamentoBase):
     id: int
     contenitore_descrizione: Optional[str] = None
     contenitore_foto: Optional[str] = None
+    frantoio_denominazione: Optional[str] = None
     giacenza_unita: Optional[int] = None
     lotti: List[ConfezionamentoLottoOut] = []
     created_at: Optional[datetime] = None

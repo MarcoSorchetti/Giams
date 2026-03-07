@@ -325,6 +325,9 @@ const _menuInfo = {
   "menu-listino":     { title: "Listino Prezzi", subtitle: "Prezzi per campagna · Esportazione PDF per i clienti" },
   "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma" },
   "menu-audit":       { title: "Log Attivita'", subtitle: "Registro operazioni utenti sulla piattaforma" },
+  "menu-frantoi":     { title: "Gestione Frantoi", subtitle: "Anagrafica frantoi e imbottigliatori" },
+  "menu-banche":      { title: "Gestione Banche", subtitle: "Conti correnti e coordinate bancarie" },
+  "menu-azienda":     { title: "Dati Aziendali", subtitle: "Informazioni societarie e sedi" },
 };
 
 function setActiveMenu(id) {
@@ -371,8 +374,11 @@ const _menuGroupMap = {
   "menu-clienti": "anagrafiche",
   "menu-fornitori": "anagrafiche",
   "menu-contenitori": "anagrafiche",
+  "menu-frantoi": "anagrafiche",
+  "menu-banche": "anagrafiche",
   "menu-utenti": "amministrazione",
   "menu-audit": "amministrazione",
+  "menu-azienda": "amministrazione",
 };
 
 // Aggiorna stato visuale dei gruppi accordion nella sidebar
@@ -2160,6 +2166,7 @@ async function renderLottoForm(id) {
   ]);
 
   await popolaSelectRaccolte();
+  await popolaSelectFrantoi("l-frantoio-id");
 
   initLottoFormUI();
   initFlatpickr();
@@ -2197,6 +2204,7 @@ async function renderLottoFormDaRaccolta(raccoltaId) {
   ]);
 
   await popolaSelectRaccolte();
+  await popolaSelectFrantoi("l-frantoio-id");
 
   initLottoFormUI();
   initFlatpickr();
@@ -2255,6 +2263,25 @@ async function popolaSelectRaccolte() {
   }
 }
 
+async function popolaSelectFrantoi(selectId, selectedId) {
+  try {
+    const res = await apiFetch(`${API_URL}/frantoi/?per_page=100`);
+    const frantoi = (await res.json()).items;
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Seleziona frantoio...</option>';
+    frantoi.forEach(f => {
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = f.denominazione;
+      sel.appendChild(opt);
+    });
+    if (selectedId) sel.value = selectedId;
+  } catch (err) {
+    console.error("Errore caricamento frantoi per select:", err);
+  }
+}
+
 function initLottoFormUI() {
   document.getElementById("btn-torna-lotti")?.addEventListener("click", () => {
     setActiveMenu("menu-produzione");
@@ -2299,6 +2326,9 @@ async function popolaFormLotto(id) {
     const lDataEl = document.getElementById("l-data");
     if (lDataEl._flatpickr) lDataEl._flatpickr.setDate(l.data_molitura);
     else lDataEl.value = l.data_molitura || "";
+    if (l.frantoio_id) {
+      document.getElementById("l-frantoio-id").value = l.frantoio_id;
+    }
     document.getElementById("l-frantoio").value = l.frantoio || "";
     document.getElementById("l-kg").value = l.kg_olive || "";
     document.getElementById("l-litri").value = l.litri_olio || "";
@@ -2324,7 +2354,8 @@ async function salvaLotto() {
     raccolta_id: parseInt(document.getElementById("l-raccolta").value),
     anno_campagna: parseInt(document.getElementById("l-anno").value),
     data_molitura: document.getElementById("l-data").value,
-    frantoio: document.getElementById("l-frantoio").value.trim(),
+    frantoio_id: parseInt(document.getElementById("l-frantoio-id").value) || null,
+    frantoio: (document.getElementById("l-frantoio-id").value ? document.getElementById("l-frantoio-id").selectedOptions[0]?.textContent : "") || document.getElementById("l-frantoio").value.trim(),
     kg_olive: parseFloat(document.getElementById("l-kg").value) || 0,
     litri_olio: parseFloat(document.getElementById("l-litri").value) || 0,
     kg_olio: parseFloat(document.getElementById("l-kg-olio").value) || null,
@@ -2583,6 +2614,7 @@ async function renderConfezionamentoForm(id) {
 
   await caricaContenitoriCache();
   popolaContenitoriSelect();
+  await popolaSelectFrantoi("cf-frantoio-id");
   await renderLottiSelezione();
   initConfFormCalcolo();
   initConfFormUI();
@@ -2701,6 +2733,9 @@ async function popolaFormConf(id) {
     if (cfDataEl._flatpickr) cfDataEl._flatpickr.setDate(c.data_confezionamento);
     else cfDataEl.value = c.data_confezionamento || "";
     await popolaSelectCampagne("cf-anno", c.anno_campagna);
+    if (c.frantoio_id) {
+      document.getElementById("cf-frantoio-id").value = c.frantoio_id;
+    }
     document.getElementById("cf-formato").value = c.contenitore_id || "";
     document.getElementById("cf-num-unita").value = c.num_unita || "";
     document.getElementById("cf-litri-totali").value = c.litri_totali || "";
@@ -2747,6 +2782,7 @@ async function salvaConfezionamento() {
     data_confezionamento: document.getElementById("cf-data").value,
     anno_campagna: parseInt(document.getElementById("cf-anno").value),
     contenitore_id: contenitoreId,
+    frantoio_id: parseInt(document.getElementById("cf-frantoio-id").value) || null,
     formato: codice_cont,
     capacita_litri: cap,
     num_unita: numUnita,
@@ -7967,5 +8003,323 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAuditLog();
   });
 
+  document.getElementById("menu-frantoi")?.addEventListener("click", () => {
+    setActiveMenu("menu-frantoi");
+    renderFrantoi();
+  });
+
+  document.getElementById("menu-banche")?.addEventListener("click", () => {
+    setActiveMenu("menu-banche");
+    renderBanche();
+  });
+
+  document.getElementById("menu-azienda")?.addEventListener("click", () => {
+    setActiveMenu("menu-azienda");
+    renderAzienda();
+  });
+
   document.getElementById("menu-logout")?.addEventListener("click", logout);
 });
+
+
+// ---------------------------------------------------------------------------
+// FRANTOI — CRUD completo
+// ---------------------------------------------------------------------------
+
+async function renderFrantoi(page = 1) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-frantoi");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  const search = document.getElementById("frantoi-search");
+  const mostraTutti = document.getElementById("frantoi-mostra-tutti");
+
+  async function carica() {
+    const params = new URLSearchParams({ page, per_page: 10 });
+    if (search.value.trim()) params.set("search", search.value.trim());
+    if (mostraTutti.checked) params.set("tutti", "true");
+    const res = await apiFetch(`/api/frantoi/?${params}`);
+    const data = await res.json();
+    const tbody = document.getElementById("frantoi-tbody");
+    tbody.innerHTML = data.items.map(f => `
+      <tr class="${!f.attivo ? 'text-muted' : ''}">
+        <td>${f.codice}</td><td>${f.denominazione}</td><td>${f.citta || ''}</td>
+        <td>${f.servizi}</td><td>${f.telefono || ''}</td>
+        <td>${f.attivo ? '<span class="badge bg-success">Si</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+        <td>
+          <button class="btn btn-outline-warning btn-sm btn-edit-frantoio" data-id="${f.id}"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-outline-danger btn-sm btn-del-frantoio" data-id="${f.id}"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`).join("") || '<tr><td colspan="7" class="text-center text-muted">Nessun frantoio</td></tr>';
+    renderPaginazione(document.getElementById("frantoi-paginazione"), data, (p) => { page = p; carica(); });
+    tbody.querySelectorAll(".btn-edit-frantoio").forEach(b => b.addEventListener("click", () => renderFrantoioForm(+b.dataset.id)));
+    tbody.querySelectorAll(".btn-del-frantoio").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Eliminare questo frantoio?")) return;
+      await apiFetch(`/api/frantoi/${b.dataset.id}`, { method: "DELETE" });
+      carica();
+    }));
+  }
+
+  search.addEventListener("input", debounceSearch(() => { page = 1; carica(); }, 300));
+  mostraTutti.addEventListener("change", () => { page = 1; carica(); });
+  document.getElementById("btn-nuovo-frantoio").addEventListener("click", () => renderFrantoioForm());
+  carica();
+}
+
+async function renderFrantoioForm(id = null) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-frantoio-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  const titolo = document.getElementById("form-frantoio-titolo");
+  if (id) {
+    titolo.textContent = "Modifica Frantoio";
+    const res = await apiFetch(`/api/frantoi/${id}`);
+    const f = await res.json();
+    document.getElementById("fr-codice").value = f.codice;
+    document.getElementById("fr-denominazione").value = f.denominazione;
+    document.getElementById("fr-piva").value = f.partita_iva || "";
+    document.getElementById("fr-servizi").value = f.servizi;
+    document.getElementById("fr-referente").value = f.referente || "";
+    document.getElementById("fr-telefono").value = f.telefono || "";
+    document.getElementById("fr-email").value = f.email || "";
+    document.getElementById("fr-indirizzo").value = f.indirizzo || "";
+    document.getElementById("fr-cap").value = f.cap || "";
+    document.getElementById("fr-citta").value = f.citta || "";
+    document.getElementById("fr-provincia").value = f.provincia || "";
+    document.getElementById("fr-note").value = f.note || "";
+    document.getElementById("fr-attivo").checked = f.attivo;
+  } else {
+    // Auto-genera codice sequenziale per nuovo frantoio
+    const ncRes = await apiFetch("/api/frantoi/next-codice");
+    if (ncRes.ok) {
+      const nc = await ncRes.json();
+      document.getElementById("fr-codice").value = nc.codice;
+    }
+  }
+
+  document.getElementById("btn-torna-frantoi").addEventListener("click", () => renderFrantoi());
+  document.getElementById("btn-annulla-frantoio").addEventListener("click", () => renderFrantoi());
+  document.getElementById("frantoio-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      codice: document.getElementById("fr-codice").value.trim(),
+      denominazione: document.getElementById("fr-denominazione").value.trim(),
+      partita_iva: document.getElementById("fr-piva").value.trim() || null,
+      servizi: document.getElementById("fr-servizi").value,
+      referente: document.getElementById("fr-referente").value.trim() || null,
+      telefono: document.getElementById("fr-telefono").value.trim() || null,
+      email: document.getElementById("fr-email").value.trim() || null,
+      indirizzo: document.getElementById("fr-indirizzo").value.trim() || null,
+      cap: document.getElementById("fr-cap").value.trim() || null,
+      citta: document.getElementById("fr-citta").value.trim() || null,
+      provincia: document.getElementById("fr-provincia").value.trim() || null,
+      note: document.getElementById("fr-note").value.trim() || null,
+      attivo: document.getElementById("fr-attivo").checked,
+    };
+    const url = id ? `/api/frantoi/${id}` : "/api/frantoi/";
+    const method = id ? "PUT" : "POST";
+    try {
+      const res = await apiFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore durante il salvataggio.", "error");
+        return;
+      }
+      showToast("Frantoio salvato.", "success");
+      renderFrantoi();
+    } catch (err) {
+      console.error("Errore salvataggio frantoio:", err);
+      showToast("Errore di connessione.", "error");
+    }
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// BANCHE — CRUD completo
+// ---------------------------------------------------------------------------
+
+async function renderBanche(page = 1) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-banche");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  const search = document.getElementById("banche-search");
+  const mostraTutti = document.getElementById("banche-mostra-tutti");
+
+  async function carica() {
+    const params = new URLSearchParams({ page, per_page: 10 });
+    if (search.value.trim()) params.set("search", search.value.trim());
+    if (mostraTutti.checked) params.set("tutti", "true");
+    const res = await apiFetch(`/api/banche/?${params}`);
+    const data = await res.json();
+    const tbody = document.getElementById("banche-tbody");
+    tbody.innerHTML = data.items.map(b => `
+      <tr class="${!b.attivo ? 'text-muted' : ''}">
+        <td>${b.codice}</td><td>${b.denominazione}</td><td class="small">${b.iban || ''}</td>
+        <td>${b.filiale || ''}</td><td>${b.tipo_conto}</td>
+        <td>${b.attivo ? '<span class="badge bg-success">Si</span>' : '<span class="badge bg-secondary">No</span>'}</td>
+        <td>
+          <button class="btn btn-outline-warning btn-sm btn-edit-banca" data-id="${b.id}"><i class="fa-solid fa-pen"></i></button>
+          <button class="btn btn-outline-danger btn-sm btn-del-banca" data-id="${b.id}"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      </tr>`).join("") || '<tr><td colspan="7" class="text-center text-muted">Nessuna banca</td></tr>';
+    renderPaginazione(document.getElementById("banche-paginazione"), data, (p) => { page = p; carica(); });
+    tbody.querySelectorAll(".btn-edit-banca").forEach(b => b.addEventListener("click", () => renderBancaForm(+b.dataset.id)));
+    tbody.querySelectorAll(".btn-del-banca").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm("Eliminare questa banca?")) return;
+      await apiFetch(`/api/banche/${b.dataset.id}`, { method: "DELETE" });
+      carica();
+    }));
+  }
+
+  search.addEventListener("input", debounceSearch(() => { page = 1; carica(); }, 300));
+  mostraTutti.addEventListener("change", () => { page = 1; carica(); });
+  document.getElementById("btn-nuova-banca").addEventListener("click", () => renderBancaForm());
+  carica();
+}
+
+async function renderBancaForm(id = null) {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-banca-form");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  const titolo = document.getElementById("form-banca-titolo");
+  if (id) {
+    titolo.textContent = "Modifica Banca";
+    const res = await apiFetch(`/api/banche/${id}`);
+    const b = await res.json();
+    document.getElementById("bk-codice").value = b.codice;
+    document.getElementById("bk-denominazione").value = b.denominazione;
+    document.getElementById("bk-iban").value = b.iban || "";
+    document.getElementById("bk-abi").value = b.abi || "";
+    document.getElementById("bk-cab").value = b.cab || "";
+    document.getElementById("bk-swift").value = b.bic_swift || "";
+    document.getElementById("bk-nconto").value = b.numero_conto || "";
+    document.getElementById("bk-tipo").value = b.tipo_conto;
+    document.getElementById("bk-filiale").value = b.filiale || "";
+    document.getElementById("bk-intestatario").value = b.intestatario || "";
+    document.getElementById("bk-attivo").checked = b.attivo;
+    document.getElementById("bk-note").value = b.note || "";
+  } else {
+    // Auto-genera codice sequenziale per nuova banca
+    const ncRes = await apiFetch("/api/banche/next-codice");
+    if (ncRes.ok) {
+      const nc = await ncRes.json();
+      document.getElementById("bk-codice").value = nc.codice;
+    }
+  }
+
+  document.getElementById("btn-torna-banche").addEventListener("click", () => renderBanche());
+  document.getElementById("btn-annulla-banca").addEventListener("click", () => renderBanche());
+  document.getElementById("banca-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      codice: document.getElementById("bk-codice").value.trim(),
+      denominazione: document.getElementById("bk-denominazione").value.trim(),
+      iban: document.getElementById("bk-iban").value.trim() || null,
+      abi: document.getElementById("bk-abi").value.trim() || null,
+      cab: document.getElementById("bk-cab").value.trim() || null,
+      bic_swift: document.getElementById("bk-swift").value.trim() || null,
+      numero_conto: document.getElementById("bk-nconto").value.trim() || null,
+      tipo_conto: document.getElementById("bk-tipo").value,
+      filiale: document.getElementById("bk-filiale").value.trim() || null,
+      intestatario: document.getElementById("bk-intestatario").value.trim() || null,
+      attivo: document.getElementById("bk-attivo").checked,
+      note: document.getElementById("bk-note").value.trim() || null,
+    };
+    const url = id ? `/api/banche/${id}` : "/api/banche/";
+    const method = id ? "PUT" : "POST";
+    try {
+      const res = await apiFetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.detail || "Errore durante il salvataggio.", "error");
+        return;
+      }
+      showToast("Banca salvata.", "success");
+      renderBanche();
+    } catch (err) {
+      console.error("Errore salvataggio banca:", err);
+      showToast("Errore di connessione.", "error");
+    }
+  });
+}
+
+
+// ---------------------------------------------------------------------------
+// AZIENDA — Dati Aziendali (singolo record)
+// ---------------------------------------------------------------------------
+
+async function renderAzienda() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-azienda");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  // Carica dati esistenti
+  const res = await apiFetch("/api/azienda/");
+  if (res.ok) {
+    const a = await res.json();
+    document.getElementById("az-ragione").value = a.ragione_sociale || "";
+    document.getElementById("az-forma").value = a.forma_giuridica || "";
+    document.getElementById("az-piva").value = a.partita_iva || "";
+    document.getElementById("az-cf").value = a.codice_fiscale || "";
+    document.getElementById("az-rea").value = a.rea || "";
+    document.getElementById("az-ateco").value = a.codice_ateco || "";
+    document.getElementById("az-sdi").value = a.codice_sdi || "";
+    document.getElementById("az-pec").value = a.pec || "";
+    document.getElementById("az-rappresentante").value = a.rappresentante_legale || "";
+    document.getElementById("az-capitale").value = a.capitale_sociale || "";
+    document.getElementById("az-sl-indirizzo").value = a.sede_legale_indirizzo || "";
+    document.getElementById("az-sl-cap").value = a.sede_legale_cap || "";
+    document.getElementById("az-sl-citta").value = a.sede_legale_citta || "";
+    document.getElementById("az-sl-provincia").value = a.sede_legale_provincia || "";
+    document.getElementById("az-so-indirizzo").value = a.sede_operativa_indirizzo || "";
+    document.getElementById("az-so-cap").value = a.sede_operativa_cap || "";
+    document.getElementById("az-so-citta").value = a.sede_operativa_citta || "";
+    document.getElementById("az-so-provincia").value = a.sede_operativa_provincia || "";
+    document.getElementById("az-telefono").value = a.telefono || "";
+    document.getElementById("az-cellulare").value = a.cellulare || "";
+    document.getElementById("az-email").value = a.email || "";
+    document.getElementById("az-sito").value = a.sito_web || "";
+    document.getElementById("az-note").value = a.note || "";
+  }
+
+  document.getElementById("azienda-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const payload = {
+      ragione_sociale: document.getElementById("az-ragione").value.trim(),
+      forma_giuridica: document.getElementById("az-forma").value.trim() || null,
+      partita_iva: document.getElementById("az-piva").value.trim() || null,
+      codice_fiscale: document.getElementById("az-cf").value.trim() || null,
+      rea: document.getElementById("az-rea").value.trim() || null,
+      codice_ateco: document.getElementById("az-ateco").value.trim() || null,
+      codice_sdi: document.getElementById("az-sdi").value.trim() || null,
+      pec: document.getElementById("az-pec").value.trim() || null,
+      rappresentante_legale: document.getElementById("az-rappresentante").value.trim() || null,
+      capitale_sociale: parseFloat(document.getElementById("az-capitale").value) || null,
+      sede_legale_indirizzo: document.getElementById("az-sl-indirizzo").value.trim() || null,
+      sede_legale_cap: document.getElementById("az-sl-cap").value.trim() || null,
+      sede_legale_citta: document.getElementById("az-sl-citta").value.trim() || null,
+      sede_legale_provincia: document.getElementById("az-sl-provincia").value.trim() || null,
+      sede_operativa_indirizzo: document.getElementById("az-so-indirizzo").value.trim() || null,
+      sede_operativa_cap: document.getElementById("az-so-cap").value.trim() || null,
+      sede_operativa_citta: document.getElementById("az-so-citta").value.trim() || null,
+      sede_operativa_provincia: document.getElementById("az-so-provincia").value.trim() || null,
+      telefono: document.getElementById("az-telefono").value.trim() || null,
+      cellulare: document.getElementById("az-cellulare").value.trim() || null,
+      email: document.getElementById("az-email").value.trim() || null,
+      sito_web: document.getElementById("az-sito").value.trim() || null,
+      note: document.getElementById("az-note").value.trim() || null,
+    };
+    const res = await apiFetch("/api/azienda/", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (res.ok) alert("Dati aziendali salvati con successo!");
+    else { const err = await res.json(); alert(err.detail || "Errore nel salvataggio"); }
+  });
+}

@@ -9,6 +9,7 @@ class LottoBase(BaseModel):
     anno_campagna: int
     data_molitura: date
     frantoio: str = Field(..., max_length=100)
+    frantoio_id: Optional[int] = None
     kg_olive: float
     litri_olio: float
     kg_olio: Optional[float] = None
@@ -34,6 +35,7 @@ class LottoUpdate(BaseModel):
     anno_campagna: Optional[int] = None
     data_molitura: Optional[date] = None
     frantoio: Optional[str] = Field(None, max_length=100)
+    frantoio_id: Optional[int] = None
     kg_olive: Optional[float] = None
     litri_olio: Optional[float] = None
     kg_olio: Optional[float] = None
@@ -53,6 +55,7 @@ class LottoUpdate(BaseModel):
 class LottoOut(LottoBase):
     id: int
     raccolta_codice: Optional[str] = None
+    frantoio_denominazione: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

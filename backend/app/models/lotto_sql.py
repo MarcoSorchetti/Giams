@@ -11,6 +11,7 @@ class LottoOlio(Base):
     anno_campagna = Column(Integer, nullable=False, index=True)
     data_molitura = Column(Date, nullable=False)
     frantoio = Column(String(100), nullable=False)
+    frantoio_id = Column(Integer, ForeignKey("frantoi.id"), nullable=True)
     kg_olive = Column(Numeric(8, 2), nullable=False)
     litri_olio = Column(Numeric(8, 2), nullable=False)
     kg_olio = Column(Numeric(8, 2), nullable=True)

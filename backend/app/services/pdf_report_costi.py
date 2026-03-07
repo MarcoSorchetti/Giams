@@ -4,15 +4,16 @@ Generazione PDF Report Costi per riscontro bancario — GIAMS
 import io
 from datetime import date
 from fpdf import FPDF
+from sqlalchemy.orm import Session
 
-from app.services.pdf_vendita import AZIENDA, LOGO_PATH, DocumentoPDF, _fmt
+from app.services.pdf_vendita import LOGO_PATH, DocumentoPDF, _fmt, get_azienda_data, _AZIENDA_DEFAULT
 
 
-def genera_report_costi_pdf(costi_data: list, data_da: date = None, data_a: date = None, label_periodo: str = "") -> bytes:
+def genera_report_costi_pdf(costi_data: list, data_da: date = None, data_a: date = None, label_periodo: str = "", db: Session = None) -> bytes:
     """Genera PDF del report costi ordinato per data pagamento."""
-
+    az = get_azienda_data(db) if db else _AZIENDA_DEFAULT
     titolo = "REPORT COSTI - RISCONTRO BANCARIO"
-    pdf = DocumentoPDF(titolo_doc=titolo)
+    pdf = DocumentoPDF(titolo_doc=titolo, azienda=az)
     pdf.alias_nb_pages()
     pdf.add_page("L")  # Landscape per avere piu' spazio
 

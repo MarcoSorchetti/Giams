@@ -30,7 +30,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.11.2</div>
+        <div class="app-version">v2.12.1</div>
       </div>
 
       <nav class="nav flex-column sidebar-nav">
@@ -105,6 +105,12 @@
             <button id="menu-contenitori" class="text-start sidebar-link sidebar-subitem" type="button">
               <i class="fa-solid fa-wine-bottle me-2"></i> Contenitori
             </button>
+            <button id="menu-frantoi" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-industry me-2"></i> Frantoi
+            </button>
+            <button id="menu-banche" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-building-columns me-2"></i> Banche
+            </button>
           </div>
         </div>
 
@@ -121,6 +127,9 @@
             </button>
             <button id="menu-audit" class="text-start sidebar-link sidebar-subitem" type="button">
               <i class="fa-solid fa-clipboard-list me-2"></i> Log Attivita'
+            </button>
+            <button id="menu-azienda" class="text-start sidebar-link sidebar-subitem" type="button">
+              <i class="fa-solid fa-building me-2"></i> Dati Aziendali
             </button>
           </div>
         </div>
@@ -790,7 +799,10 @@
               </div>
               <div class="col-12">
                 <label class="form-label">Frantoio *</label>
-                <input type="text" class="form-control form-control-sm" id="l-frantoio" required />
+                <select class="form-select form-select-sm" id="l-frantoio-id" required>
+                  <option value="">Seleziona frantoio...</option>
+                </select>
+                <input type="hidden" id="l-frantoio" />
               </div>
               <div class="col-6">
                 <label class="form-label">Kg Olive *</label>
@@ -1004,6 +1016,12 @@
               <div class="col-6">
                 <label class="form-label">Anno Campagna *</label>
                 <select class="form-select form-select-sm" id="cf-anno" required><option value="">— Seleziona —</option></select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Imbottigliatore</label>
+                <select class="form-select form-select-sm" id="cf-frantoio-id">
+                  <option value="">Seleziona frantoio...</option>
+                </select>
               </div>
               <div class="col-6">
                 <label class="form-label">Contenitore *</label>
@@ -3506,6 +3524,196 @@
         </div>
       </div>
     </div>
+  </template>
+
+  <!-- TEMPLATE: FRANTOI LISTA -->
+  <template id="template-frantoi">
+    <div class="module-header mb-3">
+      <button class="btn btn-accent" id="btn-nuovo-frantoio"><i class="fa-solid fa-plus me-1"></i> Nuovo Frantoio</button>
+    </div>
+    <div class="d-flex gap-2 mb-3">
+      <input type="text" class="form-control form-control-sm" id="frantoi-search" placeholder="Cerca frantoio..." style="max-width:300px" />
+      <div class="form-check form-switch d-flex align-items-center ms-2">
+        <input class="form-check-input" type="checkbox" id="frantoi-mostra-tutti" />
+        <label class="form-check-label ms-1 small" for="frantoi-mostra-tutti">Mostra inattivi</label>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover table-bordered table-sm align-middle" id="frantoi-table">
+        <thead><tr><th>Codice</th><th>Denominazione</th><th>Citta'</th><th>Servizi</th><th>Telefono</th><th>Attivo</th><th style="width:90px">Azioni</th></tr></thead>
+        <tbody id="frantoi-tbody"></tbody>
+      </table>
+    </div>
+    <div id="frantoi-paginazione" class="mt-3"></div>
+  </template>
+
+  <!-- TEMPLATE: FRANTOIO FORM -->
+  <template id="template-frantoio-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-frantoi"><i class="fa-solid fa-arrow-left me-1"></i> Torna ai frantoi</button>
+    </div>
+    <h3 class="module-title mb-3" id="form-frantoio-titolo">Nuovo Frantoio</h3>
+    <form id="frantoio-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Frantoio</h5>
+            <div class="row g-3">
+              <div class="col-4"><label class="form-label">Codice</label><input type="text" class="form-control form-control-sm" id="fr-codice" readonly /></div>
+              <div class="col-8"><label class="form-label">Denominazione *</label><input type="text" class="form-control form-control-sm" id="fr-denominazione" required /></div>
+              <div class="col-6"><label class="form-label">P. IVA</label><input type="text" class="form-control form-control-sm" id="fr-piva" /></div>
+              <div class="col-6"><label class="form-label">Servizi *</label>
+                <select class="form-select form-select-sm" id="fr-servizi"><option value="molitura">Molitura</option><option value="confezionamento">Confezionamento</option><option value="entrambi">Entrambi</option></select>
+              </div>
+              <div class="col-6"><label class="form-label">Referente</label><input type="text" class="form-control form-control-sm" id="fr-referente" /></div>
+              <div class="col-3"><label class="form-label">Telefono</label><input type="text" class="form-control form-control-sm" id="fr-telefono" /></div>
+              <div class="col-3"><label class="form-label">Email</label><input type="text" class="form-control form-control-sm" id="fr-email" /></div>
+              <div class="col-6 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="fr-attivo" checked /><label class="form-check-label" for="fr-attivo">Attivo</label></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Indirizzo</h5>
+            <div class="row g-3">
+              <div class="col-8"><label class="form-label">Indirizzo</label><input type="text" class="form-control form-control-sm" id="fr-indirizzo" /></div>
+              <div class="col-4"><label class="form-label">CAP</label><input type="text" class="form-control form-control-sm" id="fr-cap" maxlength="5" /></div>
+              <div class="col-8"><label class="form-label">Citta'</label><input type="text" class="form-control form-control-sm" id="fr-citta" /></div>
+              <div class="col-4"><label class="form-label">Prov.</label><input type="text" class="form-control form-control-sm" id="fr-provincia" maxlength="2" /></div>
+              <div class="col-12"><label class="form-label">Note</label><textarea class="form-control form-control-sm" id="fr-note" rows="3"></textarea></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button type="submit" class="btn btn-accent"><i class="fa-solid fa-check me-1"></i> Salva</button>
+        <button type="button" class="btn btn-outline-secondary" id="btn-annulla-frantoio">Annulla</button>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: BANCHE LISTA -->
+  <template id="template-banche">
+    <div class="module-header mb-3">
+      <button class="btn btn-accent" id="btn-nuova-banca"><i class="fa-solid fa-plus me-1"></i> Nuova Banca</button>
+    </div>
+    <div class="d-flex gap-2 mb-3">
+      <input type="text" class="form-control form-control-sm" id="banche-search" placeholder="Cerca banca..." style="max-width:300px" />
+      <div class="form-check form-switch d-flex align-items-center ms-2">
+        <input class="form-check-input" type="checkbox" id="banche-mostra-tutti" />
+        <label class="form-check-label ms-1 small" for="banche-mostra-tutti">Mostra inattive</label>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-dark table-hover table-bordered table-sm align-middle" id="banche-table">
+        <thead><tr><th>Codice</th><th>Denominazione</th><th>IBAN</th><th>Filiale</th><th>Tipo</th><th>Attiva</th><th style="width:90px">Azioni</th></tr></thead>
+        <tbody id="banche-tbody"></tbody>
+      </table>
+    </div>
+    <div id="banche-paginazione" class="mt-3"></div>
+  </template>
+
+  <!-- TEMPLATE: BANCA FORM -->
+  <template id="template-banca-form">
+    <div class="mb-3">
+      <button class="btn btn-outline-secondary btn-sm" id="btn-torna-banche"><i class="fa-solid fa-arrow-left me-1"></i> Torna alle banche</button>
+    </div>
+    <h3 class="module-title mb-3" id="form-banca-titolo">Nuova Banca</h3>
+    <form id="banca-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Dati Banca</h5>
+            <div class="row g-3">
+              <div class="col-4"><label class="form-label">Codice</label><input type="text" class="form-control form-control-sm" id="bk-codice" readonly /></div>
+              <div class="col-8"><label class="form-label">Denominazione *</label><input type="text" class="form-control form-control-sm" id="bk-denominazione" required /></div>
+              <div class="col-12"><label class="form-label">IBAN</label><input type="text" class="form-control form-control-sm" id="bk-iban" maxlength="34" /></div>
+              <div class="col-4"><label class="form-label">ABI</label><input type="text" class="form-control form-control-sm" id="bk-abi" maxlength="5" /></div>
+              <div class="col-4"><label class="form-label">CAB</label><input type="text" class="form-control form-control-sm" id="bk-cab" maxlength="5" /></div>
+              <div class="col-4"><label class="form-label">BIC/SWIFT</label><input type="text" class="form-control form-control-sm" id="bk-swift" maxlength="11" /></div>
+              <div class="col-6"><label class="form-label">N. Conto</label><input type="text" class="form-control form-control-sm" id="bk-nconto" /></div>
+              <div class="col-6"><label class="form-label">Tipo Conto</label>
+                <select class="form-select form-select-sm" id="bk-tipo"><option value="corrente">Corrente</option><option value="deposito">Deposito</option><option value="carta">Carta</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Altro</h5>
+            <div class="row g-3">
+              <div class="col-12"><label class="form-label">Filiale</label><input type="text" class="form-control form-control-sm" id="bk-filiale" /></div>
+              <div class="col-12"><label class="form-label">Intestatario</label><input type="text" class="form-control form-control-sm" id="bk-intestatario" /></div>
+              <div class="col-6 d-flex align-items-end"><div class="form-check"><input class="form-check-input" type="checkbox" id="bk-attivo" checked /><label class="form-check-label" for="bk-attivo">Attiva</label></div></div>
+              <div class="col-12"><label class="form-label">Note</label><textarea class="form-control form-control-sm" id="bk-note" rows="3"></textarea></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button type="submit" class="btn btn-accent"><i class="fa-solid fa-check me-1"></i> Salva</button>
+        <button type="button" class="btn btn-outline-secondary" id="btn-annulla-banca">Annulla</button>
+      </div>
+    </form>
+  </template>
+
+  <!-- TEMPLATE: DATI AZIENDALI -->
+  <template id="template-azienda">
+    <h3 class="module-title mb-3"><i class="fa-solid fa-building me-2"></i>Dati Aziendali</h3>
+    <form id="azienda-form">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Identita' Aziendale</h5>
+            <div class="row g-3">
+              <div class="col-8"><label class="form-label">Ragione Sociale *</label><input type="text" class="form-control form-control-sm" id="az-ragione" required /></div>
+              <div class="col-4"><label class="form-label">Forma Giuridica</label><input type="text" class="form-control form-control-sm" id="az-forma" placeholder="S.r.l." /></div>
+              <div class="col-6"><label class="form-label">Partita IVA</label><input type="text" class="form-control form-control-sm" id="az-piva" maxlength="16" /></div>
+              <div class="col-6"><label class="form-label">Codice Fiscale</label><input type="text" class="form-control form-control-sm" id="az-cf" maxlength="16" /></div>
+              <div class="col-4"><label class="form-label">REA</label><input type="text" class="form-control form-control-sm" id="az-rea" /></div>
+              <div class="col-4"><label class="form-label">ATECO</label><input type="text" class="form-control form-control-sm" id="az-ateco" placeholder="01.26.00" /></div>
+              <div class="col-4"><label class="form-label">SDI</label><input type="text" class="form-control form-control-sm" id="az-sdi" maxlength="7" /></div>
+              <div class="col-6"><label class="form-label">PEC</label><input type="email" class="form-control form-control-sm" id="az-pec" /></div>
+              <div class="col-6"><label class="form-label">Rappresentante Legale</label><input type="text" class="form-control form-control-sm" id="az-rappresentante" /></div>
+              <div class="col-6"><label class="form-label">Capitale Sociale</label><input type="number" step="0.01" class="form-control form-control-sm" id="az-capitale" /></div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Sede Legale</h5>
+            <div class="row g-3">
+              <div class="col-8"><label class="form-label">Indirizzo</label><input type="text" class="form-control form-control-sm" id="az-sl-indirizzo" /></div>
+              <div class="col-4"><label class="form-label">CAP</label><input type="text" class="form-control form-control-sm" id="az-sl-cap" maxlength="5" /></div>
+              <div class="col-8"><label class="form-label">Citta'</label><input type="text" class="form-control form-control-sm" id="az-sl-citta" /></div>
+              <div class="col-4"><label class="form-label">Prov.</label><input type="text" class="form-control form-control-sm" id="az-sl-provincia" maxlength="2" /></div>
+            </div>
+          </div>
+          <div class="card p-3 mb-3">
+            <h5 class="card-section-title mb-3">Sede Operativa</h5>
+            <div class="row g-3">
+              <div class="col-8"><label class="form-label">Indirizzo</label><input type="text" class="form-control form-control-sm" id="az-so-indirizzo" /></div>
+              <div class="col-4"><label class="form-label">CAP</label><input type="text" class="form-control form-control-sm" id="az-so-cap" maxlength="5" /></div>
+              <div class="col-8"><label class="form-label">Citta'</label><input type="text" class="form-control form-control-sm" id="az-so-citta" /></div>
+              <div class="col-4"><label class="form-label">Prov.</label><input type="text" class="form-control form-control-sm" id="az-so-provincia" maxlength="2" /></div>
+            </div>
+          </div>
+          <div class="card p-3">
+            <h5 class="card-section-title mb-3">Contatti</h5>
+            <div class="row g-3">
+              <div class="col-4"><label class="form-label">Telefono</label><input type="text" class="form-control form-control-sm" id="az-telefono" /></div>
+              <div class="col-4"><label class="form-label">Cellulare</label><input type="text" class="form-control form-control-sm" id="az-cellulare" /></div>
+              <div class="col-4"><label class="form-label">Email</label><input type="email" class="form-control form-control-sm" id="az-email" /></div>
+              <div class="col-6"><label class="form-label">Sito Web</label><input type="url" class="form-control form-control-sm" id="az-sito" /></div>
+              <div class="col-12"><label class="form-label">Note</label><textarea class="form-control form-control-sm" id="az-note" rows="3"></textarea></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-accent"><i class="fa-solid fa-check me-1"></i> Salva Dati Aziendali</button>
+      </div>
+    </form>
   </template>
 
   <!-- Modale conferma duplicato P.IVA / Codice Fiscale -->

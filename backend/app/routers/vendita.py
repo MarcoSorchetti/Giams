@@ -813,7 +813,7 @@ def download_fattura_pdf(vendita_id: int, db: Session = Depends(get_db)):
             "importo_riga": float(r.importo_riga),
         })
 
-    pdf_bytes = genera_fattura_pdf(v, cli, righe_info)
+    pdf_bytes = genera_fattura_pdf(v, cli, righe_info, db=db)
     filename = f"Fattura_{v.numero_fattura or v.codice}.pdf".replace("/", "-")
 
     return StreamingResponse(
@@ -851,7 +851,7 @@ def download_ddt_pdf(vendita_id: int, db: Session = Depends(get_db)):
             "quantita": r.quantita,
         })
 
-    pdf_bytes = genera_ddt_pdf(v, cli, righe_info)
+    pdf_bytes = genera_ddt_pdf(v, cli, righe_info, db=db)
     filename = f"DDT_{v.numero_ddt or v.codice}.pdf".replace("/", "-")
 
     return StreamingResponse(

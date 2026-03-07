@@ -10,6 +10,7 @@ class Confezionamento(Base):
     data_confezionamento = Column(Date, nullable=False)
     anno_campagna = Column(Integer, nullable=False, index=True)
     contenitore_id = Column(Integer, ForeignKey("contenitori.id", ondelete="SET NULL"), nullable=True)
+    frantoio_id = Column(Integer, ForeignKey("frantoi.id"), nullable=True)
     formato = Column(String(30), nullable=False)
     capacita_litri = Column(Numeric(5, 2), nullable=False)
     num_unita = Column(Integer, nullable=False)

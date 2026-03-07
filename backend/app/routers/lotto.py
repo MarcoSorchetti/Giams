@@ -7,6 +7,7 @@ from sqlalchemy import func, or_
 from app.database import get_db
 from app.models.lotto_sql import LottoOlio
 from app.models.raccolta_sql import Raccolta
+from app.models.frantoio_sql import Frantoio
 from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
 from app.models.pagination import paginate, paginated_response
 from app.core.security import get_current_user
@@ -22,8 +23,13 @@ def _next_codice_lotto(anno: int, db: Session) -> str:
 
 
 def _build_lotto_out(lotto, db):
-    """Costruisce LottoOut con codice raccolta."""
+    """Costruisce LottoOut con codice raccolta e denominazione frantoio."""
     raccolta = db.query(Raccolta).filter(Raccolta.id == lotto.raccolta_id).first()
+    frantoio_den = None
+    if lotto.frantoio_id:
+        fr = db.query(Frantoio).filter(Frantoio.id == lotto.frantoio_id).first()
+        if fr:
+            frantoio_den = fr.denominazione
     return LottoOut(
         id=lotto.id,
         codice_lotto=lotto.codice_lotto,
@@ -32,6 +38,8 @@ def _build_lotto_out(lotto, db):
         anno_campagna=lotto.anno_campagna,
         data_molitura=lotto.data_molitura,
         frantoio=lotto.frantoio,
+        frantoio_id=lotto.frantoio_id,
+        frantoio_denominazione=frantoio_den,
         kg_olive=float(lotto.kg_olive),
         litri_olio=float(lotto.litri_olio),
         kg_olio=float(lotto.kg_olio) if lotto.kg_olio else None,
@@ -144,6 +152,13 @@ def list_lotti(
         for r in db.query(Raccolta).filter(Raccolta.id.in_(raccolta_ids)).all():
             raccolte_map[r.id] = r
 
+    # Pre-carica frantoi in batch
+    frantoio_ids = list({l.frantoio_id for l in lotti if l.frantoio_id})
+    frantoi_map = {}
+    if frantoio_ids:
+        for fr in db.query(Frantoio).filter(Frantoio.id.in_(frantoio_ids)).all():
+            frantoi_map[fr.id] = fr.denominazione
+
     result = []
     for lotto in lotti:
         raccolta = raccolte_map.get(lotto.raccolta_id)
@@ -152,7 +167,9 @@ def list_lotti(
             raccolta_id=lotto.raccolta_id,
             raccolta_codice=raccolta.codice if raccolta else None,
             anno_campagna=lotto.anno_campagna, data_molitura=lotto.data_molitura,
-            frantoio=lotto.frantoio, kg_olive=float(lotto.kg_olive),
+            frantoio=lotto.frantoio, frantoio_id=lotto.frantoio_id,
+            frantoio_denominazione=frantoi_map.get(lotto.frantoio_id) if lotto.frantoio_id else None,
+            kg_olive=float(lotto.kg_olive),
             litri_olio=float(lotto.litri_olio),
             kg_olio=float(lotto.kg_olio) if lotto.kg_olio else None,
             resa_percentuale=float(lotto.resa_percentuale) if lotto.resa_percentuale else None,

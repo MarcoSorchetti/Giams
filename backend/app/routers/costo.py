@@ -403,7 +403,7 @@ def report_pagamenti_pdf(
     costi = _query_report_costi(db, data_da, data_a).all()
     data = _build_report_data(costi, db)
 
-    pdf_bytes = genera_report_costi_pdf(data, data_da, data_a, label)
+    pdf_bytes = genera_report_costi_pdf(data, data_da, data_a, label, db=db)
 
     filename = f"Report_Costi_{date.today().strftime('%Y%m%d')}.pdf"
     return Response(

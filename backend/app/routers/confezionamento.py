@@ -8,6 +8,7 @@ from sqlalchemy import case, func, or_
 from app.database import get_db
 from app.models.confezionamento_sql import Confezionamento, ConfezionamentoLotto
 from app.models.contenitore_sql import Contenitore
+from app.models.frantoio_sql import Frantoio
 from app.models.lotto_sql import LottoOlio
 from app.models.movimento_magazzino_sql import MovimentoMagazzino
 from app.models.vendita_sql import VenditaRiga
@@ -50,14 +51,22 @@ def _build_conf_out(conf, db):
             contenitore_desc = cont.descrizione
             contenitore_foto = cont.foto
 
+    frantoio_den = None
+    if conf.frantoio_id:
+        fr = db.query(Frantoio).filter(Frantoio.id == conf.frantoio_id).first()
+        if fr:
+            frantoio_den = fr.denominazione
+
     return ConfezionamentoOut(
         id=conf.id,
         codice=conf.codice,
         data_confezionamento=conf.data_confezionamento,
         anno_campagna=conf.anno_campagna,
         contenitore_id=conf.contenitore_id or 0,
+        frantoio_id=conf.frantoio_id,
         contenitore_descrizione=contenitore_desc,
         contenitore_foto=contenitore_foto,
+        frantoio_denominazione=frantoio_den,
         formato=conf.formato,
         capacita_litri=float(conf.capacita_litri),
         num_unita=conf.num_unita,
@@ -366,6 +375,13 @@ def list_confezionamenti(
         for cont in db.query(Contenitore).filter(Contenitore.id.in_(cont_ids)).all():
             cont_map[cont.id] = cont
 
+    # Pre-carica frantoi
+    frantoio_ids = list({c.frantoio_id for c in confs if c.frantoio_id})
+    frantoi_map = {}
+    if frantoio_ids:
+        for fr in db.query(Frantoio).filter(Frantoio.id.in_(frantoio_ids)).all():
+            frantoi_map[fr.id] = fr.denominazione
+
     # Giacenza per confezionamento (carico - scarico)
     giacenza_map = {}
     if conf_ids:
@@ -396,8 +412,10 @@ def list_confezionamenti(
             data_confezionamento=conf.data_confezionamento,
             anno_campagna=conf.anno_campagna,
             contenitore_id=conf.contenitore_id or 0,
+            frantoio_id=conf.frantoio_id,
             contenitore_descrizione=cont.descrizione if cont else None,
             contenitore_foto=cont.foto if cont else None,
+            frantoio_denominazione=frantoi_map.get(conf.frantoio_id) if conf.frantoio_id else None,
             formato=conf.formato,
             capacita_litri=float(conf.capacita_litri),
             num_unita=conf.num_unita,
