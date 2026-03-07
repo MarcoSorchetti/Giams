@@ -36,6 +36,7 @@ from app.routers.tipo_documento import router as tipo_documento_router
 from app.routers.frantoio import router as frantoio_router
 from app.routers.banca import router as banca_router
 from app.routers.azienda import router as azienda_router
+from app.routers.tracciabilita import router as tracciabilita_router
 from app.api.v1.endpoints import users as users_router
 
 # Database
@@ -47,7 +48,7 @@ from app.database import Base, engine
 # ------------------------------------------------------------------------------
 app = FastAPI(
     title="GIAMS API",
-    version="2.12.2",
+    version="2.13.2",
     description="Green Integrated Agricultural Management System — Gia.Mar Green Farm"
 )
 
@@ -93,6 +94,7 @@ app.include_router(tipo_documento_router, prefix="/api", dependencies=_protected
 app.include_router(frantoio_router, prefix="/api", dependencies=_protected)
 app.include_router(banca_router, prefix="/api", dependencies=_protected)
 app.include_router(azienda_router, prefix="/api", dependencies=_protected)
+app.include_router(tracciabilita_router, prefix="/api", dependencies=_protected)
 
 
 # ------------------------------------------------------------------------------

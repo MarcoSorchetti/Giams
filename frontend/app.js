@@ -311,23 +311,24 @@ async function getAppVersion() {
 
 // Mappa menu-id → { title, subtitle } per la topbar
 const _menuInfo = {
-  "menu-home":        { title: "", subtitle: "" },
-  "menu-dashboard":   { title: "Dashboard", subtitle: "Analisi e statistiche aziendali" },
-  "menu-mappa":       { title: "Mappa Aziendale", subtitle: "Visualizzazione terreni e infrastrutture" },
-  "menu-parcelle":    { title: "Gestione Parcelle", subtitle: "Terreni e oliveti \u00b7 Ricerca avanzata" },
-  "menu-produzione":  { title: "Produzione Olio", subtitle: "Raccolte, lotti e confezionamento" },
-  "menu-contenitori": { title: "Gestione Contenitori", subtitle: "Tipologie di contenitori per il confezionamento" },
-  "menu-clienti":     { title: "Gestione Clienti", subtitle: "Anagrafica clienti per fatturazione e vendite" },
-  "menu-fornitori":   { title: "Gestione Fornitori", subtitle: "Anagrafica fornitori e dati bancari" },
-  "menu-costi":       { title: "Gestione Costi", subtitle: "Fatture, spese di campagna e costi strutturali" },
-  "menu-magazzino":   { title: "Magazzino", subtitle: "Giacenze, carichi e scarichi prodotti confezionati" },
-  "menu-vendite":     { title: "Vendite", subtitle: "Gestione fatture, DDT, pagamenti" },
-  "menu-listino":     { title: "Listino Prezzi", subtitle: "Prezzi per campagna · Esportazione PDF per i clienti" },
-  "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma" },
-  "menu-audit":       { title: "Log Attivita'", subtitle: "Registro operazioni utenti sulla piattaforma" },
-  "menu-frantoi":     { title: "Gestione Frantoi", subtitle: "Anagrafica frantoi e imbottigliatori" },
-  "menu-banche":      { title: "Gestione Banche", subtitle: "Conti correnti e coordinate bancarie" },
-  "menu-azienda":     { title: "Dati Aziendali", subtitle: "Informazioni societarie e sedi" },
+  "menu-home":        { title: "", subtitle: "", icon: "" },
+  "menu-dashboard":   { title: "Dashboard", subtitle: "Analisi e statistiche aziendali", icon: "fa-chart-line" },
+  "menu-mappa":       { title: "Mappa Aziendale", subtitle: "Visualizzazione terreni e infrastrutture", icon: "fa-map" },
+  "menu-parcelle":    { title: "Gestione Parcelle", subtitle: "Terreni e oliveti \u00b7 Ricerca avanzata", icon: "fa-seedling" },
+  "menu-produzione":  { title: "Produzione Olio", subtitle: "Raccolte, lotti e confezionamento", icon: "fa-industry" },
+  "menu-contenitori": { title: "Gestione Contenitori", subtitle: "Tipologie di contenitori per il confezionamento", icon: "fa-bottle-water" },
+  "menu-clienti":     { title: "Gestione Clienti", subtitle: "Anagrafica clienti per fatturazione e vendite", icon: "fa-user-group" },
+  "menu-fornitori":   { title: "Gestione Fornitori", subtitle: "Anagrafica fornitori e dati bancari", icon: "fa-truck-field" },
+  "menu-costi":       { title: "Gestione Costi", subtitle: "Fatture, spese di campagna e costi strutturali", icon: "fa-file-invoice-dollar" },
+  "menu-magazzino":   { title: "Magazzino", subtitle: "Giacenze, carichi e scarichi prodotti confezionati", icon: "fa-warehouse" },
+  "menu-vendite":     { title: "Vendite", subtitle: "Gestione fatture, DDT, pagamenti", icon: "fa-cart-shopping" },
+  "menu-listino":     { title: "Listino Prezzi", subtitle: "Prezzi per campagna · Esportazione PDF per i clienti", icon: "fa-tags" },
+  "menu-utenti":      { title: "Gestione Utenti", subtitle: "Amministrazione accessi piattaforma", icon: "fa-users-gear" },
+  "menu-audit":       { title: "Log Attivita'", subtitle: "Registro operazioni utenti sulla piattaforma", icon: "fa-clock-rotate-left" },
+  "menu-frantoi":     { title: "Gestione Frantoi", subtitle: "Anagrafica frantoi e imbottigliatori", icon: "fa-gears" },
+  "menu-banche":      { title: "Gestione Banche", subtitle: "Conti correnti e coordinate bancarie", icon: "fa-building-columns" },
+  "menu-azienda":     { title: "Dati Aziendali", subtitle: "Informazioni societarie e sedi", icon: "fa-building" },
+  "menu-tracciabilita": { title: "Tracciabilita'", subtitle: "Catena completa dal campo alla vendita", icon: "fa-route" },
 };
 
 function setActiveMenu(id) {
@@ -342,10 +343,10 @@ function setActiveMenu(id) {
     if (el._flatpickr) { el._flatpickr.destroy(); }
   });
   // Aggiorna titolo + sottotitolo topbar
-  const info = _menuInfo[id] || { title: "", subtitle: "" };
+  const info = _menuInfo[id] || { title: "", subtitle: "", icon: "" };
   const titleEl = document.getElementById("topbar-title");
   const subtitleEl = document.getElementById("topbar-subtitle");
-  if (titleEl) titleEl.textContent = info.title;
+  if (titleEl) titleEl.innerHTML = (info.icon ? `<i class="fa-solid ${info.icon} me-2"></i>` : "") + escapeHtml(info.title);
   if (subtitleEl) subtitleEl.textContent = info.subtitle;
   // Svuota azioni topbar (verranno ripopolate dal render)
   const actionsEl = document.getElementById("topbar-actions");
@@ -6573,6 +6574,355 @@ function ordinaVendite() {
   caricaVendite();
 }
 
+// =============================================
+// TRACCIABILITA' FILIERA
+// =============================================
+
+async function renderTracciabilita() {
+  const main = document.getElementById("main-content");
+  const tpl = document.getElementById("template-tracciabilita");
+  main.innerHTML = "";
+  main.appendChild(tpl.content.cloneNode(true));
+
+  promoteActionsToTopbar();
+
+  // Carica anni campagna
+  try {
+    const res = await apiFetch(`${API_URL}/lotti/anni`);
+    const anni = await res.json();
+    const selAnno = document.getElementById("tracc-anno");
+    anni.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a;
+      opt.textContent = `${a}/${a + 1}`;
+      selAnno.appendChild(opt);
+    });
+    // Seleziona anno piu' recente
+    if (anni.length > 0) {
+      selAnno.value = anni[0];
+    }
+  } catch (err) {
+    console.error("Errore caricamento anni:", err);
+  }
+
+  // Carica lista lotti
+  await _traccCaricaLotti();
+
+  // Event listeners
+  document.getElementById("tracc-anno")?.addEventListener("change", _traccCaricaLotti);
+  document.getElementById("btn-tracc-visualizza")?.addEventListener("click", _traccVisualizzaLotto);
+  document.getElementById("btn-tracc-pdf")?.addEventListener("click", _traccScaricaPdf);
+
+  // Sorting colonne tabella
+  document.querySelectorAll("#tracc-lotti-table th.sortable").forEach(th => {
+    th.addEventListener("click", () => {
+      const field = th.dataset.sort;
+      if (_traccSortField === field) {
+        _traccSortDir = _traccSortDir === "asc" ? "desc" : "asc";
+      } else {
+        _traccSortField = field;
+        _traccSortDir = "asc";
+      }
+      _traccRenderLottiTabella();
+      // Aggiorna icone sort
+      document.querySelectorAll("#tracc-lotti-table th.sortable i").forEach(i => {
+        i.className = "fa-solid fa-sort ms-1 text-secondary";
+      });
+      th.querySelector("i").className = `fa-solid fa-sort-${_traccSortDir === "asc" ? "up" : "down"} ms-1`;
+    });
+  });
+}
+
+// Variabili sorting tracciabilita'
+let _traccSortField = "codice_lotto";
+let _traccSortDir = "asc";
+let _traccLottiData = [];
+
+// Carica la lista lotti con indicatori di tracciabilita'
+async function _traccCaricaLotti() {
+  const anno = document.getElementById("tracc-anno")?.value;
+  const selLotto = document.getElementById("tracc-lotto-select");
+
+  try {
+    let url = `${API_URL}/tracciabilita/lotti`;
+    if (anno) url += `?anno=${anno}`;
+    const res = await apiFetch(url);
+    _traccLottiData = await res.json();
+
+    // Popola dropdown lotto
+    selLotto.innerHTML = '<option value="">Seleziona lotto</option>';
+    _traccLottiData.forEach(l => {
+      const opt = document.createElement("option");
+      opt.value = l.id;
+      opt.textContent = `${l.codice_lotto} - ${l.tipo_olio} (${l.litri_olio}L)`;
+      selLotto.appendChild(opt);
+    });
+
+    _traccRenderLottiTabella();
+  } catch (err) {
+    console.error("Errore caricamento lotti tracciabilita':", err);
+    document.getElementById("tracc-lotti-tbody").innerHTML = '<tr><td colspan="6" class="text-danger text-center">Errore nel caricamento dei lotti.</td></tr>';
+  }
+}
+
+// Renderizza il tbody della tabella lotti con sorting
+function _traccRenderLottiTabella() {
+  const tbody = document.getElementById("tracc-lotti-tbody");
+  if (!_traccLottiData.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center">Nessun lotto trovato per questa campagna.</td></tr>';
+    return;
+  }
+
+  // Ordina
+  const sorted = [..._traccLottiData].sort((a, b) => {
+    let va = a[_traccSortField], vb = b[_traccSortField];
+    if (typeof va === "string") va = va.toLowerCase();
+    if (typeof vb === "string") vb = vb.toLowerCase();
+    if (va < vb) return _traccSortDir === "asc" ? -1 : 1;
+    if (va > vb) return _traccSortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  tbody.innerHTML = sorted.map(l => {
+    const perc = l.percentuale_confezionato;
+    const barColor = perc >= 100 ? "bg-success" : perc > 0 ? "bg-warning" : "bg-secondary";
+    return `<tr>
+      <td><strong>${l.codice_lotto}</strong></td>
+      <td>${l.tipo_olio}</td>
+      <td class="text-end">${l.litri_olio.toFixed(1)} L</td>
+      <td style="min-width:160px">
+        <div class="d-flex align-items-center gap-2">
+          <div class="progress flex-grow-1" style="height:8px">
+            <div class="progress-bar ${barColor}" style="width:${Math.min(perc, 100)}%"></div>
+          </div>
+          <span class="small">${perc.toFixed(0)}%</span>
+        </div>
+      </td>
+      <td><span class="badge-stato-${l.stato}">${l.stato}</span></td>
+      <td>
+        <button class="btn btn-outline-accent btn-sm" onclick="document.getElementById('tracc-lotto-select').value='${l.id}'; _traccVisualizzaLotto();" title="Visualizza catena">
+          <i class="fa-solid fa-diagram-project"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+// Visualizza la catena di tracciabilita' per il lotto selezionato
+async function _traccVisualizzaLotto() {
+  const lottoId = document.getElementById("tracc-lotto-select")?.value;
+  if (!lottoId) {
+    showToast("Seleziona un lotto.", "warning");
+    return;
+  }
+
+  const statsRow = document.getElementById("tracc-stats-row");
+  const catena = document.getElementById("tracc-catena");
+  const btnPdf = document.getElementById("btn-tracc-pdf");
+
+  try {
+    const res = await apiFetch(`${API_URL}/tracciabilita/lotto/${lottoId}`);
+    if (!res.ok) {
+      showToast("Errore nel caricamento della tracciabilita'.", "error");
+      return;
+    }
+    const data = await res.json();
+
+    btnPdf.style.display = "inline-block";
+    btnPdf.dataset.lottoId = lottoId;
+    catena.style.display = "block";
+
+    // Stat cards (pattern identico a vendite/parcelle)
+    const r = data.riepilogo;
+    const percConf = r.litri_olio_totali > 0 ? ((r.litri_confezionati / r.litri_olio_totali) * 100).toFixed(0) : 0;
+    const litriDisp = (r.litri_olio_totali - r.litri_confezionati).toFixed(1);
+    statsRow.innerHTML = `
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm">${r.litri_olio_totali.toFixed(1)} L</div><div class="stat-sub">${litriDisp} L disponibili</div><div class="stat-label">Litri Prodotti</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm">${r.litri_confezionati.toFixed(1)} L</div><div class="stat-sub">${percConf}% confezionato</div><div class="stat-label">Confezionati</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm">${r.num_confezionamenti}</div><div class="stat-sub">${r.num_vendite} vendite</div><div class="stat-label">Confezionamenti</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm">${r.unita_vendute}</div><div class="stat-sub">unita' vendute</div><div class="stat-label">Vendite</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm">${r.giacenza_unita || 0}</div><div class="stat-sub">${(r.giacenza_litri || 0).toFixed(1)} L in stock</div><div class="stat-label">Giacenza</div></div>
+      </div>
+      <div class="col-sm-6 col-md">
+        <div class="stat-card stat-card-3d text-center h-100"><div class="stat-value stat-value-sm text-success">&euro; ${r.fatturato.toFixed(2)}</div><div class="stat-sub">fatturato totale</div><div class="stat-label">Ricavi</div></div>
+      </div>
+    `;
+
+    // Catena visiva
+    catena.innerHTML = _traccRenderCatena(data);
+
+  } catch (err) {
+    console.error("Errore visualizzazione tracciabilita':", err);
+    showToast("Errore di connessione.", "error");
+  }
+}
+
+// Render catena tracciabilita' — layout timeline verticale con sezioni collassabili
+function _traccRenderCatena(data) {
+  const l = data.lotto;
+  const racc = data.raccolta;
+
+  // Helper: riga di dettaglio
+  const dr = (label, val) => `<div class="tracc-dr"><span class="tracc-dr-label">${label}</span> <span class="tracc-dr-value">${val}</span></div>`;
+
+  // 1. ORIGINE — parcelle + raccolta in una sezione
+  const parcRows = data.parcelle.map(p =>
+    `<tr><td><strong>${p.codice}</strong></td><td>${p.nome}</td><td>${p.varieta}</td><td class="text-end">${p.superficie_ettari} ha</td><td class="text-end"><strong>${p.kg_olive.toFixed(0)} kg</strong></td></tr>`
+  ).join("");
+
+  const origineContent = `
+    ${racc ? `<div class="row g-3 mb-2">
+      <div class="col-sm-6 col-lg-3">${dr("Codice Raccolta", racc.codice)}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Data Raccolta", _formatDate(racc.data_raccolta))}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Metodo", racc.metodo_raccolta)}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Maturazione", racc.maturazione)}</div>
+    </div>` : ""}
+    ${data.parcelle.length ? `<div class="table-responsive mt-2">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th>Codice</th><th>Parcella</th><th>Varieta'</th><th class="text-end">Superficie</th><th class="text-end">Kg Olive</th></tr></thead>
+        <tbody>${parcRows}</tbody>
+      </table>
+    </div>` : ""}
+  `;
+
+  // 2. MOLITURA — dati lotto
+  const frantoioText = l.frantoio ? l.frantoio.denominazione + (l.frantoio.citta ? ` (${l.frantoio.citta})` : "") : "-";
+  const resa = l.resa_percentuale ? l.resa_percentuale.toFixed(1) + "%" : "n/d";
+  const molituraContent = `
+    <div class="row g-3">
+      <div class="col-sm-6 col-lg-3">${dr("Codice Lotto", l.codice_lotto)}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Data Molitura", _formatDate(l.data_molitura))}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Tipo Olio", l.tipo_olio + (l.certificazione ? " - " + l.certificazione : ""))}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Frantoio", frantoioText)}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Kg Olive", l.kg_olive.toFixed(0) + " kg")}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Litri Olio", "<strong>" + l.litri_olio.toFixed(1) + " L</strong>")}</div>
+      <div class="col-sm-6 col-lg-3">${dr("Resa", resa)}</div>
+    </div>
+  `;
+
+  // 3. CONFEZIONAMENTI — tabella
+  const confRows = data.confezionamenti.map(c => {
+    const listino = c.prezzo_listino ? `&euro; ${c.prezzo_listino.toFixed(2)}` : "-";
+    return `<tr>
+      <td><strong>${c.codice}</strong></td>
+      <td>${c.contenitore}</td>
+      <td class="text-end">${c.num_unita}</td>
+      <td class="text-end">${c.capacita_litri} L</td>
+      <td class="text-end"><strong>${c.litri_da_lotto.toFixed(1)} L</strong></td>
+      <td class="text-end">${listino}</td>
+      <td class="text-center">${_formatDate(c.data_confezionamento)}</td>
+    </tr>`;
+  }).join("");
+
+  const confContent = data.confezionamenti.length > 0 ? `
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th>Codice</th><th>Contenitore</th><th class="text-end">Unita'</th><th class="text-end">Capacita'</th><th class="text-end">Da Lotto</th><th class="text-end">Listino</th><th class="text-center">Data</th></tr></thead>
+        <tbody>${confRows}</tbody>
+      </table>
+    </div>
+  ` : '<p class="text-muted small mb-0">Nessun confezionamento associato</p>';
+
+  // 4. VENDITE — tabella
+  const vendRows = data.vendite.map(v => {
+    const badgeClass = v.stato === "pagata" ? "badge-stato-disponibile" : v.stato === "spedita" ? "badge-stato-in_vendita" : "badge-stato-riposo";
+    return `<tr>
+      <td><strong>${v.vendita_codice}</strong></td>
+      <td>${_formatDate(v.data_vendita)}</td>
+      <td>${v.cliente_denominazione}${v.cliente_citta ? ` <span class="text-muted small">(${v.cliente_citta})</span>` : ""}</td>
+      <td class="text-end">${v.quantita}</td>
+      <td class="text-end">&euro; ${v.importo_riga.toFixed(2)}</td>
+      <td class="text-center"><span class="${badgeClass}">${v.stato}</span></td>
+    </tr>`;
+  }).join("");
+
+  const vendContent = data.vendite.length > 0 ? `
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th>Vendita</th><th>Data</th><th>Cliente</th><th class="text-end">Unita'</th><th class="text-end">Importo</th><th class="text-center">Stato</th></tr></thead>
+        <tbody>${vendRows}</tbody>
+      </table>
+    </div>
+  ` : '<p class="text-muted small mb-0">Nessuna vendita associata</p>';
+
+  // 5. MAGAZZINO — giacenze per confezionamento
+  const magConf = data.confezionamenti.filter(c => c.mag_carichi > 0 || c.mag_scarichi > 0);
+  const magRows = magConf.map(c => {
+    const giacClass = c.mag_giacenza > 0 ? "text-success" : c.mag_giacenza === 0 ? "text-muted" : "text-danger";
+    return `<tr>
+      <td><strong>${c.codice}</strong></td>
+      <td>${c.contenitore}</td>
+      <td class="text-end">${c.capacita_litri} L</td>
+      <td class="text-end">${c.mag_carichi}</td>
+      <td class="text-end">${c.mag_scarichi}</td>
+      <td class="text-end"><strong class="${giacClass}">${c.mag_giacenza}</strong></td>
+      <td class="text-end">${(c.mag_giacenza * c.capacita_litri).toFixed(1)} L</td>
+    </tr>`;
+  }).join("");
+
+  const totGiacUnita = data.riepilogo.giacenza_unita || 0;
+  const totGiacLitri = (data.riepilogo.giacenza_litri || 0).toFixed(1);
+  const magContent = magConf.length > 0 ? `
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0">
+        <thead><tr><th>Codice</th><th>Contenitore</th><th class="text-end">Capacita'</th><th class="text-end">Carichi</th><th class="text-end">Scarichi</th><th class="text-end">Giacenza</th><th class="text-end">Litri Stock</th></tr></thead>
+        <tbody>${magRows}</tbody>
+        <tfoot><tr class="fw-bold"><td colspan="5" class="text-end">Totale</td><td class="text-end">${totGiacUnita}</td><td class="text-end">${totGiacLitri} L</td></tr></tfoot>
+      </table>
+    </div>
+  ` : '<p class="text-muted small mb-0">Nessun movimento magazzino registrato</p>';
+
+  // Assemblaggio timeline
+  return `
+    <div class="tracc-timeline">
+      ${_traccSezione("fa-tree", "#22c55e", "Origine - Raccolta e Parcelle", `${racc ? racc.kg_olive_totali.toFixed(0) + " kg olive" : ""}`, origineContent)}
+      ${_traccSezione("fa-flask", "#3b82f6", "Molitura e Lotto", `${l.litri_olio.toFixed(1)} L prodotti (resa ${resa})`, molituraContent)}
+      ${_traccSezione("fa-bottle-water", "#8b5cf6", `Confezionamenti (${data.confezionamenti.length})`, `${data.riepilogo.litri_confezionati.toFixed(1)} L confezionati`, confContent)}
+      ${_traccSezione("fa-warehouse", "#f59e0b", `Magazzino`, `${totGiacUnita} unita' in giacenza (${totGiacLitri} L)`, magContent)}
+      ${_traccSezione("fa-receipt", "#ef4444", `Vendite (${data.vendite.length})`, `${data.riepilogo.unita_vendute} unita' - &euro; ${data.riepilogo.fatturato.toFixed(2)}`, vendContent)}
+    </div>
+  `;
+}
+
+// Genera una sezione della timeline tracciabilita'
+function _traccSezione(icon, color, title, subtitle, content) {
+  return `
+    <div class="tracc-section" style="--tracc-color: ${color}">
+      <div class="tracc-section-header">
+        <div class="tracc-section-dot"><i class="fa-solid ${icon}"></i></div>
+        <div class="tracc-section-title">
+          <strong>${title}</strong>
+          ${subtitle ? `<span class="tracc-section-sub">${subtitle}</span>` : ""}
+        </div>
+      </div>
+      <div class="tracc-section-body">${content}</div>
+    </div>
+  `;
+}
+
+// Formatta data ISO in formato italiano
+function _formatDate(isoDate) {
+  if (!isoDate) return "—";
+  const parts = isoDate.split("-");
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return isoDate;
+}
+
+// Scarica PDF tracciabilita'
+async function _traccScaricaPdf() {
+  const lottoId = document.getElementById("btn-tracc-pdf")?.dataset.lottoId;
+  if (!lottoId) return;
+  mostraPdfViewer(`${API_URL}/tracciabilita/lotto/${lottoId}/pdf`, "Scheda Tracciabilita'", `Tracciabilita_Lotto_${lottoId}.pdf`);
+}
 // ---- LISTA VENDITE ----
 
 async function renderVendite() {
@@ -8142,6 +8492,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("menu-campagne")?.addEventListener("click", () => {
     setActiveMenu("menu-campagne");
     renderCampagne();
+  });
+
+  document.getElementById("menu-tracciabilita")?.addEventListener("click", () => {
+    setActiveMenu("menu-tracciabilita");
+    renderTracciabilita();
   });
 
   document.getElementById("menu-magazzino")?.addEventListener("click", () => {

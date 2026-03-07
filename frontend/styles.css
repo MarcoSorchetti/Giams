@@ -1958,3 +1958,89 @@ th.sortable.active-sort i {
 .riscontro-errore-row:hover {
   background: rgba(220, 38, 38, 0.25) !important;
 }
+
+/* ========================================
+   TRACCIABILITA' — Timeline Layout
+   ======================================== */
+.tracc-timeline {
+  position: relative;
+  padding-left: 2.5rem;
+}
+.tracc-timeline::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 15px;
+  bottom: 15px;
+  width: 2px;
+  background: linear-gradient(180deg, #22c55e, #3b82f6, #8b5cf6, #ef4444);
+  opacity: 0.4;
+}
+.tracc-section {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+.tracc-section:last-child { margin-bottom: 0; }
+.tracc-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+.tracc-section-dot {
+  position: absolute;
+  left: -2.5rem;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-main);
+  border: 2px solid var(--tracc-color, var(--accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.tracc-section-dot i {
+  font-size: 0.7rem;
+  color: var(--tracc-color, var(--accent));
+}
+.tracc-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.tracc-section-title strong {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.tracc-section-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.tracc-section-body {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--tracc-color, var(--accent));
+  border-radius: 12px;
+  padding: 1rem;
+}
+.tracc-dr { margin-bottom: 0.2rem; }
+.tracc-dr-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  display: block;
+  line-height: 1.2;
+}
+.tracc-dr-value {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+@media (max-width: 575px) {
+  .tracc-timeline { padding-left: 2rem; }
+  .tracc-section-dot { left: -2rem; width: 26px; height: 26px; }
+}
