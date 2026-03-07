@@ -30,7 +30,7 @@
       <div class="sidebar-header text-center mb-4">
         <img src="assets/GiaMarVerticaleSideBar.png" alt="Gia.Mar" class="sidebar-logo-img" />
         <div class="sidebar-app-name">GIAMS</div>
-        <div class="app-version">v2.12.1</div>
+        <div class="app-version">v2.12.2</div>
       </div>
 
       <nav class="nav flex-column sidebar-nav">
@@ -1059,8 +1059,20 @@
 
         <div class="col-lg-6">
           <div class="card p-3 mb-3">
-            <h5 class="card-section-title mb-3">Lotti Olio Utilizzati</h5>
-            <div id="conf-lotti-container"></div>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="card-section-title mb-0">Composizione Lotti</h5>
+              <button type="button" class="btn btn-outline-accent btn-sm" id="btn-distribuisci-lotti" title="Distribuisci litri proporzionalmente">
+                <i class="fa-solid fa-scale-balanced me-1"></i> Distribuisci
+              </button>
+            </div>
+            <div id="conf-lotti-container">
+              <p class="text-muted small">Seleziona un anno campagna per visualizzare i lotti disponibili.</p>
+            </div>
+            <div class="d-flex justify-content-between mt-2 small" id="conf-lotti-totali" style="display:none!important">
+              <span>Totale litri assegnati: <strong id="conf-lotti-assegnati">0.00</strong> L</span>
+              <span>Litri confezionamento: <strong id="conf-lotti-richiesti">0.00</strong> L</span>
+            </div>
+            <div id="conf-lotti-warning" class="text-warning small mt-1" style="display:none"></div>
           </div>
 
           <div class="d-flex gap-2">

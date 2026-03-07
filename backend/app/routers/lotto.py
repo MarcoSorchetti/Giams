@@ -6,6 +6,7 @@ from sqlalchemy import func, or_
 
 from app.database import get_db
 from app.models.lotto_sql import LottoOlio
+from app.models.confezionamento_sql import ConfezionamentoLotto
 from app.models.raccolta_sql import Raccolta
 from app.models.frantoio_sql import Frantoio
 from app.models.lotto import LottoCreate, LottoUpdate, LottoOut
@@ -112,6 +113,42 @@ def lotti_anni(db: Session = Depends(get_db)):
         .all()
     )
     return [a[0] for a in anni]
+
+
+@router.get("/disponibili")
+def lotti_disponibili(
+    anno: int = Query(...),
+    exclude_conf_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Restituisce i lotti di una campagna con i litri ancora disponibili per confezionamento."""
+    lotti = db.query(LottoOlio).filter(LottoOlio.anno_campagna == anno).order_by(LottoOlio.codice_lotto).all()
+
+    # Calcola litri gia' utilizzati per ogni lotto (escludendo eventualmente un confezionamento in modifica)
+    utilizzo_query = db.query(
+        ConfezionamentoLotto.lotto_id,
+        func.sum(ConfezionamentoLotto.litri_utilizzati).label("utilizzati"),
+    )
+    if exclude_conf_id:
+        utilizzo_query = utilizzo_query.filter(ConfezionamentoLotto.confezionamento_id != exclude_conf_id)
+    utilizzo_query = utilizzo_query.group_by(ConfezionamentoLotto.lotto_id)
+    utilizzo_map = {row.lotto_id: float(row.utilizzati) for row in utilizzo_query.all()}
+
+    result = []
+    for l in lotti:
+        litri_totali = float(l.litri_olio)
+        litri_usati = utilizzo_map.get(l.id, 0)
+        litri_disponibili = round(litri_totali - litri_usati, 2)
+        result.append({
+            "id": l.id,
+            "codice_lotto": l.codice_lotto,
+            "litri_olio": litri_totali,
+            "litri_utilizzati": litri_usati,
+            "litri_disponibili": litri_disponibili,
+            "tipo_olio": l.tipo_olio,
+            "stato": l.stato,
+        })
+    return result
 
 
 @router.get("/")

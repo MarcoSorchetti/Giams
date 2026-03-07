@@ -2615,7 +2615,6 @@ async function renderConfezionamentoForm(id) {
   await caricaContenitoriCache();
   popolaContenitoriSelect();
   await popolaSelectFrantoi("cf-frantoio-id");
-  await renderLottiSelezione();
   initConfFormCalcolo();
   initConfFormUI();
   initFlatpickr();
@@ -2625,6 +2624,9 @@ async function renderConfezionamentoForm(id) {
     await popolaFormConf(id);
   } else {
     await popolaSelectCampagne("cf-anno");
+    // Carica lotti se anno gia' selezionato
+    const anno = parseInt(document.getElementById("cf-anno")?.value);
+    if (anno) await renderLottiSelezione(anno, null);
   }
 }
 
@@ -2642,36 +2644,168 @@ function popolaContenitoriSelect() {
   });
 }
 
-async function renderLottiSelezione() {
+// Cache lotti disponibili per il form confezionamento
+let _confLottiDisponibili = [];
+
+async function renderLottiSelezione(anno, excludeConfId) {
   const container = document.getElementById("conf-lotti-container");
   if (!container) return;
 
+  if (!anno) {
+    container.innerHTML = '<p class="text-muted small">Seleziona un anno campagna per visualizzare i lotti disponibili.</p>';
+    _confLottiDisponibili = [];
+    _aggiornaLottiTotali();
+    return;
+  }
+
   try {
-    const res = await apiFetch(`${API_URL}/lotti/?per_page=100`);
-    const lotti = (await res.json()).items;
+    let url = `${API_URL}/lotti/disponibili?anno=${anno}`;
+    if (excludeConfId) url += `&exclude_conf_id=${excludeConfId}`;
+    const res = await apiFetch(url);
+    const lotti = await res.json();
+    _confLottiDisponibili = lotti;
 
-    container.innerHTML = lotti.map(l => `
-      <div class="d-flex align-items-center gap-2 mb-2 conf-lotto-row">
-        <input type="checkbox" class="form-check-input" id="cl-check-${l.id}" data-lotto-id="${l.id}" />
-        <label class="form-check-label flex-grow-1" for="cl-check-${l.id}">
-          <strong>${l.codice_lotto}</strong> — ${parseFloat(l.litri_olio).toFixed(1)}L
-        </label>
-        <input type="number" step="0.01" class="form-control form-control-sm" style="width:100px"
-               id="cl-litri-${l.id}" placeholder="Litri" disabled />
-      </div>
-    `).join("");
+    if (!lotti.length) {
+      container.innerHTML = '<p class="text-muted small">Nessun lotto disponibile per questa campagna.</p>';
+      return;
+    }
 
+    container.innerHTML = lotti.map(l => {
+      const percUsata = l.litri_olio > 0 ? Math.round((l.litri_olio - l.litri_disponibili) / l.litri_olio * 100) : 0;
+      const barColor = l.litri_disponibili <= 0 ? "bg-danger" : percUsata > 75 ? "bg-warning" : "bg-success";
+      return `
+      <div class="conf-lotto-row mb-3 p-2 rounded" data-lotto-id="${l.id}" data-disponibili="${l.litri_disponibili}" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)">
+        <div class="d-flex align-items-center gap-2">
+          <input type="checkbox" class="form-check-input" id="cl-check-${l.id}" data-lotto-id="${l.id}" ${l.litri_disponibili <= 0 ? "disabled" : ""} />
+          <div class="flex-grow-1">
+            <div><strong>${l.codice_lotto}</strong> <span class="text-muted">— ${l.tipo_olio}</span></div>
+            <div class="d-flex align-items-center gap-2 mt-1">
+              <div class="progress flex-grow-1" style="height:6px;max-width:120px">
+                <div class="progress-bar ${barColor}" style="width:${percUsata}%"></div>
+              </div>
+              <span class="small" style="white-space:nowrap"><strong>${l.litri_disponibili.toFixed(1)}</strong> / ${l.litri_olio.toFixed(1)} L disponibili</span>
+            </div>
+          </div>
+          <input type="number" step="0.01" min="0" max="${l.litri_disponibili}" class="form-control form-control-sm" style="width:110px"
+                 id="cl-litri-${l.id}" placeholder="Litri" disabled />
+        </div>
+      </div>`;
+    }).join("");
+
+    // Event listeners: checkbox abilita/disabilita input litri
     lotti.forEach(l => {
       const check = document.getElementById(`cl-check-${l.id}`);
       const litriInput = document.getElementById(`cl-litri-${l.id}`);
       check?.addEventListener("change", () => {
         litriInput.disabled = !check.checked;
-        if (!check.checked) litriInput.value = "";
+        if (!check.checked) { litriInput.value = ""; }
+        _aggiornaLottiTotali();
       });
+      litriInput?.addEventListener("input", () => _aggiornaLottiTotali());
     });
+
+    // Mostra totali
+    document.getElementById("conf-lotti-totali")?.style.setProperty("display", "flex", "important");
+    _aggiornaLottiTotali();
   } catch (err) {
-    console.error("Errore caricamento lotti per selezione:", err);
+    console.error("Errore caricamento lotti disponibili:", err);
+    container.innerHTML = '<p class="text-danger small">Errore nel caricamento dei lotti.</p>';
   }
+}
+
+// Aggiorna il riepilogo litri assegnati vs litri confezionamento
+function _aggiornaLottiTotali() {
+  let assegnati = 0;
+  document.querySelectorAll(".conf-lotto-row").forEach(row => {
+    const check = row.querySelector("input[type=checkbox]");
+    const litriInput = row.querySelector("input[type=number]");
+    if (check?.checked && litriInput?.value) {
+      assegnati += parseFloat(litriInput.value) || 0;
+    }
+  });
+  const richiesti = parseFloat(document.getElementById("cf-litri-totali")?.value) || 0;
+  const elAssegnati = document.getElementById("conf-lotti-assegnati");
+  const elRichiesti = document.getElementById("conf-lotti-richiesti");
+  const elWarning = document.getElementById("conf-lotti-warning");
+
+  if (elAssegnati) elAssegnati.textContent = assegnati.toFixed(2);
+  if (elRichiesti) elRichiesti.textContent = richiesti.toFixed(2);
+
+  if (elWarning) {
+    const diff = Math.abs(assegnati - richiesti);
+    if (assegnati > 0 && diff > 0.01) {
+      elWarning.style.display = "block";
+      elWarning.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i> Differenza: ${diff.toFixed(2)}L — i litri assegnati dovrebbero corrispondere ai litri totali del confezionamento.`;
+    } else {
+      elWarning.style.display = "none";
+    }
+  }
+}
+
+// Distribuisci litri proporzionalmente tra i lotti selezionati
+function _distribuisciLotti() {
+  const litriTotali = parseFloat(document.getElementById("cf-litri-totali")?.value) || 0;
+  if (litriTotali <= 0) {
+    showToast("Compila prima contenitore e numero unita'.", "warning");
+    return;
+  }
+
+  // Seleziona tutti i lotti con litri disponibili > 0
+  const rows = document.querySelectorAll(".conf-lotto-row");
+  const lottiConDisp = [];
+  rows.forEach(row => {
+    const disp = parseFloat(row.dataset.disponibili) || 0;
+    if (disp > 0) lottiConDisp.push(row);
+  });
+
+  if (!lottiConDisp.length) {
+    showToast("Nessun lotto con litri disponibili.", "warning");
+    return;
+  }
+
+  // Calcola disponibilita' totale
+  let totaleDisponibile = 0;
+  lottiConDisp.forEach(row => { totaleDisponibile += parseFloat(row.dataset.disponibili) || 0; });
+
+  if (totaleDisponibile < litriTotali - 0.01) {
+    showToast(`Litri disponibili (${totaleDisponibile.toFixed(2)}L) insufficienti per ${litriTotali.toFixed(2)}L.`, "warning");
+  }
+
+  // Distribuisci proporzionalmente
+  let assegnati = 0;
+  lottiConDisp.forEach((row, idx) => {
+    const lottoId = row.dataset.lottoId;
+    const disp = parseFloat(row.dataset.disponibili) || 0;
+    const check = document.getElementById(`cl-check-${lottoId}`);
+    const litriInput = document.getElementById(`cl-litri-${lottoId}`);
+
+    // Proporzione: litri_disponibili / totale_disponibile * litri_da_confezionare
+    let quota;
+    if (idx === lottiConDisp.length - 1) {
+      // Ultimo lotto: assegna il resto per evitare errori di arrotondamento
+      quota = Math.min(disp, +(litriTotali - assegnati).toFixed(2));
+    } else {
+      quota = Math.min(disp, +(disp / totaleDisponibile * litriTotali).toFixed(2));
+    }
+    if (quota <= 0) return;
+
+    if (check) check.checked = true;
+    if (litriInput) { litriInput.disabled = false; litriInput.value = quota.toFixed(2); }
+    assegnati += quota;
+  });
+
+  // Deseleziona lotti non usati
+  rows.forEach(row => {
+    const lottoId = row.dataset.lottoId;
+    if (!lottiConDisp.includes(row) || (parseFloat(row.dataset.disponibili) || 0) <= 0) {
+      const check = document.getElementById(`cl-check-${lottoId}`);
+      const litriInput = document.getElementById(`cl-litri-${lottoId}`);
+      if (check) check.checked = false;
+      if (litriInput) { litriInput.disabled = true; litriInput.value = ""; }
+    }
+  });
+
+  _aggiornaLottiTotali();
 }
 
 function initConfFormCalcolo() {
@@ -2686,8 +2820,8 @@ function initConfFormCalcolo() {
     if (litriOutput) litriOutput.value = (num * cap).toFixed(2);
   }
 
-  formatoSel?.addEventListener("change", ricalcola);
-  numInput?.addEventListener("input", ricalcola);
+  formatoSel?.addEventListener("change", () => { ricalcola(); _aggiornaLottiTotali(); });
+  numInput?.addEventListener("input", () => { ricalcola(); _aggiornaLottiTotali(); });
 
   // Auto-calcolo: da listino ivato → imponibile e IVA
   const listinoInput = document.getElementById("cf-prezzo-listino");
@@ -2721,6 +2855,13 @@ function initConfFormUI() {
     e.preventDefault();
     await withButtonLoading(e.target, () => salvaConfezionamento());
   });
+  // Distribuisci litri proporzionalmente
+  document.getElementById("btn-distribuisci-lotti")?.addEventListener("click", _distribuisciLotti);
+  // Ricarica lotti quando cambia anno campagna
+  document.getElementById("cf-anno")?.addEventListener("change", () => {
+    const anno = parseInt(document.getElementById("cf-anno").value);
+    renderLottiSelezione(anno, confezionamentoInModifica);
+  });
 }
 
 async function popolaFormConf(id) {
@@ -2744,6 +2885,12 @@ async function popolaFormConf(id) {
     document.getElementById("cf-prezzo-imponibile").value = c.prezzo_imponibile != null ? parseFloat(c.prezzo_imponibile).toFixed(2) : "";
     document.getElementById("cf-note").value = c.note || "";
 
+    // Carica lotti disponibili per la campagna (escludendo questo confezionamento)
+    if (c.anno_campagna) {
+      await renderLottiSelezione(c.anno_campagna, id);
+    }
+
+    // Seleziona i lotti gia' assegnati
     if (c.lotti) {
       c.lotti.forEach(l => {
         const check = document.getElementById(`cl-check-${l.lotto_id}`);
@@ -2751,6 +2898,7 @@ async function popolaFormConf(id) {
         if (check) { check.checked = true; }
         if (litriInput) { litriInput.disabled = false; litriInput.value = l.litri_utilizzati; }
       });
+      _aggiornaLottiTotali();
     }
   } catch (err) {
     console.error("Errore caricamento confezionamento:", err);
@@ -2792,6 +2940,24 @@ async function salvaConfezionamento() {
     note: document.getElementById("cf-note").value || null,
     lotti,
   };
+
+  // Validazione lotti: litri assegnati devono corrispondere ai litri totali
+  if (lotti.length > 0) {
+    const litriAssegnati = lotti.reduce((s, l) => s + l.litri_utilizzati, 0);
+    const litriTotali = data.litri_totali;
+    if (Math.abs(litriAssegnati - litriTotali) > 0.01) {
+      showToast(`Litri assegnati (${litriAssegnati.toFixed(2)}L) diversi dai litri totali (${litriTotali.toFixed(2)}L).`, "warning");
+      return;
+    }
+    // Verifica nessun lotto superi i disponibili
+    for (const l of lotti) {
+      const lottoInfo = _confLottiDisponibili.find(d => d.id === l.lotto_id);
+      if (lottoInfo && l.litri_utilizzati > lottoInfo.litri_disponibili + 0.01) {
+        showToast(`Lotto ${lottoInfo.codice_lotto}: assegnati ${l.litri_utilizzati.toFixed(2)}L ma disponibili solo ${lottoInfo.litri_disponibili.toFixed(2)}L.`, "error");
+        return;
+      }
+    }
+  }
 
   const method = confezionamentoInModifica ? "PUT" : "POST";
   const url = confezionamentoInModifica
